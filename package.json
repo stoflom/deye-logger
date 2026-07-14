@@ -1,0 +1,25 @@
+{
+  "name": "deye-logger",
+  "version": "1.0.0",
+  "description": "Fetches telemetry data from [DeyeCloud](https://deyecloud.com) and stores it in a local SQLite database. Supports realtime data capture, automatic gap detection/backfill, and bulk historical data import.",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild src/app.ts --bundle --outfile=public/app.js --format=esm --target=es2020",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stoflom/deye-logger.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/stoflom/deye-logger/issues"
+  },
+  "homepage": "https://github.com/stoflom/deye-logger#readme",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "sql.js": "^1.14.1"
+  }
+}

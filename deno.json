@@ -1,0 +1,7 @@
+{
+  "tasks": {
+    "dev": "deno run -A main.ts",
+    "build": "deno run -A npm:esbuild src/app.ts --outfile=public/app.js --format=esm --target=es2020"
+  },
+  "nodeModulesDir": "auto"
+}

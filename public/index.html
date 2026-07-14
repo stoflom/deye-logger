@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deye Logger Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #2d374e 0%, #1a365d 100%);
+      color: white;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .header h1 span {
+      color: #63b3ed;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .controls label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #a0aec0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .controls input[type="date"] {
+      padding: 8px 12px;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      background: #2d374e;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .controls input[type="date"]:hover {
+      border-color: #63b3ed;
+    }
+
+    .btn {
+      padding: 8px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: #3182ce;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #2b6cb0;
+    }
+
+    .btn-primary:disabled {
+      background: #4a5568;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .btn-secondary {
+      background: #4a5568;
+      color: #cbd5e0;
+      font-size: 11px;
+      padding: 5px 10px;
+    }
+
+    .btn-secondary:hover {
+      background: #718096;
+      color: white;
+    }
+
+    .columns-toggle {
+      padding: 8px 16px;
+      background: #4a5568;
+      color: #cbd5e0;
+      border: 1px solid #718096;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .columns-toggle:hover {
+      background: #718096;
+      color: white;
+    }
+
+    .columns-toggle.active {
+      background: #3182ce;
+      border-color: #63b3ed;
+      color: white;
+    }
+
+    .columns-panel {
+      display: none;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .columns-panel.visible {
+      display: block;
+    }
+
+    .columns-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #4a5568;
+    }
+
+    .columns-panel-header .actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 24px;
+      background: #edf2f7;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 12px;
+      color: #718096;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      font-size: 14px;
+      color: #718096;
+    }
+
+    .loading.visible {
+      display: block;
+    }
+
+    .loading .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #3182ce;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 8px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error {
+      display: none;
+      background: #fed7d7;
+      color: #c53030;
+      padding: 12px 24px;
+      font-size: 13px;
+      border-bottom: 1px solid #feb2b2;
+    }
+
+    .error.visible {
+      display: block;
+    }
+
+    .table-wrap {
+      display: none;
+      padding: 0;
+      overflow: auto;
+      max-height: calc(100vh - 160px);
+    }
+
+    .table-wrap.visible {
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      table-layout: fixed;
+    }
+
+    th, td {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @media (max-width: 768px) {
+      .header { padding: 14px 16px; }
+      .header h1 { font-size: 18px; }
+      .controls { gap: 8px; }
+      .columns-panel { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>☀️ <span>Deye</span> Logger Viewer</h1>
+    <div class="controls">
+      <label for="date-input">Date</label>
+      <input type="date" id="date-input">
+      <button class="btn btn-secondary" id="refresh-btn" title="Update database">↻ Refresh</button>
+      <button class="btn btn-primary" id="load-btn" disabled>Loading…</button>
+      <button class="columns-toggle" id="columns-toggle">☰ Columns</button>
+    </div>
+  </div>
+
+  <div class="columns-panel" id="columns-panel">
+    <div class="columns-panel-header">
+      <span>Select columns to display</span>
+      <div class="actions">
+        <button class="btn btn-secondary" id="select-all-btn">Select All</button>
+        <button class="btn btn-secondary" id="deselect-all-btn">Deselect All</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span id="row-count"></span>
+    <span>SQL.js running in browser — no server processing</span>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div>Querying database…</div>
+  </div>
+
+  <div class="error" id="error"></div>
+
+  <div class="table-wrap" id="table-wrap">
+    <table>
+      <thead id="table-head"></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <script src="/node_modules/sql.js/dist/sql-wasm.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
