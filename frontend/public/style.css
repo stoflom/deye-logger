@@ -1,0 +1,642 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: #f0f4f8;
+  color: #1a202c;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================
+   TITLE BAR — always visible
+   ============================================================ */
+.header {
+  background: linear-gradient(135deg, #2d374e 0%, #1a365d 100%);
+  color: white;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.header h1 span {
+  color: #63b3ed;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #a0aec0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.controls input[type="date"] {
+  padding: 8px 12px;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  background: #2d374e;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.controls input[type="date"]:hover {
+  border-color: #63b3ed;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn-view {
+  padding: 8px 16px;
+  background: #4a5568;
+  color: #cbd5e0;
+  border: 1px solid #718096;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-view:hover:not(:disabled) {
+  background: #718096;
+  color: white;
+}
+
+.btn-view:disabled {
+  background: #2d374e;
+  color: #4a5568;
+  border-color: #4a5568;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-view.active {
+  background: #3182ce;
+  border-color: #63b3ed;
+  color: white;
+}
+
+.columns-toggle {
+  padding: 8px 16px;
+  background: #4a5568;
+  color: #cbd5e0;
+  border: 1px solid #718096;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.columns-toggle:hover:not(:disabled) {
+  background: #718096;
+  color: white;
+}
+
+.columns-toggle:disabled {
+  background: #2d374e;
+  color: #4a5568;
+  border-color: #4a5568;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.columns-toggle.active {
+  background: #3182ce;
+  border-color: #63b3ed;
+  color: white;
+}
+
+.btn-export {
+  padding: 8px 16px;
+  background: #276749;
+  color: white;
+  border: 1px solid #38a169;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-export:hover:not(:disabled) {
+  background: #22543d;
+}
+
+.btn-export:disabled {
+  background: #4a5568;
+  border-color: #4a5568;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-secondary-sm {
+  background: #4a5568;
+  color: #cbd5e0;
+  font-size: 11px;
+  padding: 5px 10px;
+  border: 1px solid #718096;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary-sm:hover:not(:disabled) {
+  background: #718096;
+  color: white;
+}
+
+.btn-secondary-sm:disabled {
+  background: #2d374e;
+  color: #4a5568;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ============================================================
+   HISTOGRAM PANEL — between header and state bar
+   ============================================================ */
+.histogram-panel {
+  display: none;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  flex-shrink: 0;
+}
+
+.histogram-panel.visible {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.histogram-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.histogram-panel-header label {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #4a5568;
+  margin-right: 4px;
+}
+
+.histogram-panel-header select {
+  padding: 5px 10px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  background: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #2d374e;
+}
+
+.histogram-panel-header select:hover {
+  border-color: #3182ce;
+}
+
+/* ============================================================
+   STATE BAR — always visible
+   ============================================================ */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+  background: #edf2f7;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #718096;
+  flex-shrink: 0;
+}
+
+.status-separator {
+  margin: 0 10px;
+  color: #a0aec0;
+  user-select: none;
+}
+
+/* ============================================================
+   CONTENT PANELS — mutual exclusion
+   ============================================================ */
+.content-panel {
+  display: none;
+}
+
+.content-panel.visible {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================
+   WAITING VIEW
+   ============================================================ */
+#waiting-view {
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  background: white;
+}
+
+.waiting-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+}
+
+.waiting-content .spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3182ce;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+#waiting-text {
+  font-size: 14px;
+  color: #718096;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   ERROR VIEW — modal overlay
+   ============================================================ */
+#error-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.error-content {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.error-content h2 {
+  color: #c53030;
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+#error-message {
+  color: #4a5568;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+#error-close-btn {
+  align-self: flex-end;
+  padding: 8px 24px;
+  background: #3182ce;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+#error-close-btn:hover {
+  background: #2b6cb0;
+}
+
+/* ============================================================
+   COLUMNS VIEW
+   ============================================================ */
+#columns-view {
+  flex: 1;
+  min-height: 0;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+  overflow-y: auto;
+}
+
+#columns-view-inner {
+  padding: 24px;
+}
+
+.columns-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.columns-view-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2d374e;
+}
+
+.columns-view-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.columns-view-actions button {
+  padding: 4px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.columns-view-actions button:hover {
+  background: #edf2f7;
+}
+
+.columns-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px;
+}
+
+.columns-view-grid label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.columns-view-grid label:hover {
+  background: #e8edf2;
+}
+
+.columns-view-grid label.disabled-label {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.columns-view-grid input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* ============================================================
+   SUMMARY CARDS
+   ============================================================ */
+.summary-cards {
+  display: none;
+  padding: 12px 24px;
+  gap: 12px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.summary-cards.visible {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.summary-card {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  min-width: 0;
+}
+
+.summary-card .label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #718096;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-card .value {
+  font-size: clamp(20px, 3vw, 28px);
+  font-weight: 700;
+  color: #2d374e;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   RAW DATA CHART VIEW
+   ============================================================ */
+.raw-data-chart-view {
+  padding: 16px 24px;
+  background: white;
+}
+
+.raw-data-chart-view.visible {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+   RAW DATA GRID VIEW
+   ============================================================ */
+.raw-data-grid-view {
+  background: white;
+}
+
+.raw-data-grid-view.visible {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+   HISTOGRAM VIEW
+   ============================================================ */
+.histogram-view {
+  padding: 16px 24px;
+  background: white;
+}
+
+.histogram-view.visible {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+   HISTOGRAM GRID VIEW
+   ============================================================ */
+.histogram-grid-view {
+  background: white;
+}
+
+.histogram-grid-view.visible {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+   SPLIT HISTOGRAM VIEW
+   ============================================================ */
+.split-histogram-view {
+  padding: 16px 24px 24px;
+  background: white;
+}
+
+.split-histogram-view.visible {
+  flex: 1;
+  min-height: 0;
+}
+
+#split-histogram-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.split-histogram-item {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.split-histogram-item:last-child {
+  margin-bottom: 0;
+}
+
+.split-histogram-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a5568;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.split-histogram-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 250px;
+}
+
+.split-histogram-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================
+   CHART CANVAS WRAPPER (shared by chart views)
+   ============================================================ */
+.chart-canvas-wrap {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================
+   GRID CONTAINERS
+   ============================================================ */
+#grid-container,
+#histogram-grid-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Grid container: reduce height when histogram panel is visible */
+body.has-histogram-panel #grid-container,
+body.has-histogram-panel #histogram-grid-container {
+  height: calc(100vh - 260px);
+}
+
+/* Read-only grid: suppress all selection and focus */
+.ag-theme-quartz .ag-cell-focus:focus {
+  outline: none;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 768px) {
+  .header { padding: 14px 16px; }
+  .header h1 { font-size: 18px; }
+  .controls { gap: 8px; }
+  .summary-cards { padding: 10px 16px; gap: 8px; }
+  .summary-card { padding: 10px; }
+  .raw-data-chart-view, .histogram-view { padding: 8px 12px; }
+  .summary-cards.visible { grid-template-columns: repeat(2, 1fr); }
+  #columns-view-inner { padding: 16px; }
+}
+
+@media (max-width: 480px) {
+  .summary-cards.visible { grid-template-columns: 1fr; }
+  .raw-data-chart-view, .histogram-view { padding: 6px 8px; }
+  .error-content { padding: 24px; }
+}
