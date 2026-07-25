@@ -563,6 +563,16 @@ async function init(): Promise<void> {
     versionBadgeEl.textContent = `FE ${FRONTEND_VERSION} / BE ?`;
   }
 
+  // Load column metadata early (required for all UI operations)
+  try {
+    if (appState.columnMetadata.length === 0) {
+      const colRes = await fetchWithTimeout("/api/columns", 10_000);
+      appState.columnMetadata = await colRes.json();
+    }
+  } catch {
+    // Continue without column metadata (fallback available)
+  }
+
   // Load date bounds
   try {
     const datesRes = await fetchWithTimeout("/api/dates", 10_000);

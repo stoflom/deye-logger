@@ -1,0 +1,4 @@
+ fix the following bug in the frontend: when I open the app in the browser I do not see the columns which I last selected and which is supposed to be loaded from browser          
+ local-store, when I then click on "Select" I do see the columns which I last selected are ticked. Maybe the selected columsn is double defined and we have scope issues? The      
+ logic at init should be 1) load selection from local store 2) if empty load users default override from local store 3) if empty fall back to hard coded default. The columns      
+ initially ticked in columns view must always agree with what was displayed before. This seems to be correct after "Load Data" has been clicked but not initially.      
