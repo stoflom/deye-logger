@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** Draft v2.1 — info view added
+> **Status:** Draft v2.2 — early column metadata loading for UI consistency
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Versioning scheme:** Frontend version is `major.minor.sub-minor`.
