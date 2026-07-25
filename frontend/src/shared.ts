@@ -50,14 +50,25 @@ function parseColumnSet(raw: string | null): Set<string> | null {
 }
 
 export function getDefaultColumnNames(): Set<string> {
-  // custom default → session default → hardcoded default
+  // Returns the effective default column set.
+  // Priority: custom default → hardcoded default.
+  // Used by the "Default" button and as fallback when no selection is saved.
   const custom = parseColumnSet(localStorage.getItem(CUSTOM_DEFAULT_KEY));
   if (custom) return custom;
-  const session = parseColumnSet(localStorage.getItem(SELECTED_COLUMNS_KEY));
-  if (session) return session;
   const def = new Set(DEFAULT_COLUMN_NAMES);
   def.add("device_timestamp");
   return def;
+}
+
+/**
+ * Get the columns that should be displayed.
+ * Priority: saved selection → default columns (custom → hardcoded).
+ * Called once at startup to initialise appState.selectedColumnNames.
+ */
+export function getInitialSelectedColumns(): Set<string> {
+  const saved = parseColumnSet(localStorage.getItem(SELECTED_COLUMNS_KEY));
+  if (saved) return saved;
+  return getDefaultColumnNames();
 }
 
 export function saveSelectedColumnNames(columnNames: Set<string>): void {
@@ -85,7 +96,7 @@ export function resetCustomDefaultColumns(): void {
 // ------------------------------------------------------------------
 export const appState = {
   columnMetadata: [] as ColumnMeta[],
-  selectedColumnNames: getDefaultColumnNames(),
+  selectedColumnNames: getInitialSelectedColumns(),
   dateRangeFrom: "",
   dateRangeTo: "",
   minAvailableDate: "",
