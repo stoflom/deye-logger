@@ -130,6 +130,8 @@ export const waitingViewTextEl = getRequiredEl<HTMLElement>("waiting-text", "#wa
 export const errorViewPanel = getRequiredEl<HTMLElement>("error-view", "#error-view");
 export const errorViewMessageEl = getRequiredEl<HTMLElement>("error-message", "#error-message");
 export const errorViewCloseBtn = getRequiredEl<HTMLButtonElement>("error-close-btn", "#error-close-btn");
+export const infoViewPanel = getRequiredEl<HTMLElement>("info-view", "#info-view");
+export const infoViewMessageEl = getRequiredEl<HTMLElement>("info-message", "#info-message");
 export const columnsViewPanel = getRequiredEl<HTMLElement>("columns-view", "#columns-view");
 export const columnsViewInner = getRequiredEl<HTMLElement>("columns-view-inner", "#columns-view-inner");
 export const histogramPanel = getRequiredEl<HTMLElement>("histogram-panel", "#histogram-panel");
@@ -185,6 +187,19 @@ export const errorView = {
 };
 
 // ------------------------------------------------------------------
+// Info view API — non-modal, no close button
+// ------------------------------------------------------------------
+export const infoView = {
+  show(message: string): void {
+    infoViewMessageEl.innerHTML = message;
+    infoViewPanel.classList.add("visible");
+  },
+  hide(): void {
+    infoViewPanel.classList.remove("visible");
+  },
+};
+
+// ------------------------------------------------------------------
 // Panel visibility — mutual exclusion
 // Exactly one content panel is visible at a time.
 // Called by setView at step 2 and step 4.
@@ -192,6 +207,7 @@ export const errorView = {
 const ALL_PANELS = [
   waitingViewPanel,
   errorViewPanel,
+  infoViewPanel,
   columnsViewPanel,
   rawDataChartView,
   rawDataGridView,
@@ -203,6 +219,7 @@ const ALL_PANELS = [
 const PANEL_ID_MAP: Record<string, HTMLElement> = {
   waiting: waitingViewPanel,
   error: errorViewPanel,
+  info: infoViewPanel,
   columns: columnsViewPanel,
   "raw-data-chart": rawDataChartView,
   "raw-data-grid": rawDataGridView,
@@ -221,6 +238,7 @@ export function showPanel(panelId: string): void {
 /** Hide all data view panels (keep waiting/error visible if needed) */
 export function hideAllDataPanels(): void {
   [
+    infoViewPanel,
     columnsViewPanel,
     rawDataChartView,
     rawDataGridView,

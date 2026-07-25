@@ -5,7 +5,7 @@
 
 /// <reference lib="dom" />
 
-export const FRONTEND_VERSION = "1.0.0";
+export const FRONTEND_VERSION = "1.1.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -31,6 +31,7 @@ import {
   waitingView,
   errorView,
   errorViewCloseBtn,
+  infoView,
   columnsViewPanel,
   showPanel,
   hideAllDataPanels,
@@ -217,6 +218,9 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   if (isHistogramMode) {
     histogramToggleBtn.textContent = "\uD83D\uDCAB Raw Data";
     histogramToggleBtn.title = "Switch back to raw data view";
+  } else if (view === "grid") {
+    histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram Grid";
+    histogramToggleBtn.title = "Show binned average histogram grid";
   } else {
     histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram";
     histogramToggleBtn.title = "Show binned average histogram";
@@ -326,11 +330,32 @@ async function setView(
       }
     }
 
-    // No data warning for single-day non-range queries
-    if (view === "chart" || view === "grid") {
-      if (appState.rawDataRows.length === 0 && !isDateRange()) {
-        // Show info via waiting view text briefly, but still succeed
+    // Check for empty data — show info-view instead of data view
+    const isEmptyRawData = (view === "chart" || view === "grid") && appState.rawDataRows.length === 0;
+    const isEmptyHistogram = isHistogramMode && (histogramMaxAverageValues?.size ?? 0) === 0;
+
+    if (isEmptyRawData || isEmptyHistogram) {
+      // Build contextual no-data message
+      const range = isDateRange();
+      const from = appState.dateRangeFrom;
+      const to = appState.dateRangeTo;
+
+      let message: string;
+      if (isEmptyHistogram) {
+        message = "No histogram data available for the selected date range. Click <strong>Refresh</strong> to sync from the inverter, or select a different date.";
+      } else if (range) {
+        message = `No data found for <strong>${from}</strong> to <strong>${to}</strong>. The inverter may not have produced data in this period. Click <strong>Refresh</strong> to sync from the inverter, or select a different date range.`;
+      } else {
+        message = `No data found for <strong>${to}</strong>. The inverter may not have produced data on this day. Click <strong>Refresh</strong> to sync from the inverter, or select a different date.`;
       }
+
+      // STEP 4b: Empty data — show info-view (transient, no history push)
+      waitingView.hide();
+      infoView.show(message);
+      showPanel("info");
+      enableAllControls();
+      updateNavButtonStates();
+      return;
     }
 
     // STEP 4c: Normal data success

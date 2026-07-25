@@ -1,7 +1,12 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** Draft v2 — for review and amendment before code rework.
-> **Version:** FE 4.3.0 | Single-page application, vanilla TS + Chart.js + AG Grid
+> **Status:** Draft v2.1 — info view added
+> **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
+
+> **Versioning scheme:** Frontend version is `major.minor.sub-minor`.
+> - **major** — major new features, architectural changes
+> - **minor** — design changes to implement new features or fix design issues
+> - **sub-minor** — bug fixes requiring no design changes
 
 ---
 
@@ -21,6 +26,7 @@ The application is a single-page app with three vertical regions:
 │  — exactly one panel is visible at once  │
 │    • waiting-view (spinner + text)       │
 │    • error-view (modal with Close btn)   │
+│    • info-view (non-modal info message)  │
 │    • columns-view (selection panel)      │
 │    • data-view (chart/grid/histogram)    │
 └──────────────────────────────────────────┘
@@ -139,7 +145,7 @@ These actions produce a side effect but **do not change URL history state**. The
 | **Save as Default** | Button in columns-view | Persists current column set to `localStorage`. |
 | **Reset Default** | Button in columns-view | Clears custom default, restores hardcoded defaults. |
 | **Clear columns** | Button in columns-view | Clears all selections except `device_timestamp`. |
-| **Default columns** | Button in columns-view | Restores default column set. |
+| **Default columns** | Button in columns-view | Restores default column set.
 
 ---
 
@@ -151,6 +157,7 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 |-------|--------|-------------|-----------------|
 | **Waiting view** | `#waiting-view` | `setView()` step 2 — always shown first | No |
 | **Error view** | `#error-view` | Render failure — modal with Close button | Yes (`error: true`) |
+| **Info view** | `#info-view` | Data fetch returned zero rows, or general info message | No (transient) |
 | **Columns view** | `#columns-view` | `setView(view, { columns: true })` | No (transient) |
 | **Chart view** | `#chart-view` | `setView("chart")` | Yes |
 | **Grid view** | `#grid-view` | `setView("grid")` | Yes |
@@ -158,7 +165,7 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Histogram grid view** | `#histogram-grid-view` | `setView("histogram-grid")` | Yes |
 | **Split histogram view** | `#split-histogram-view` | `setView("histogram", { split: true })` | Yes (`split=1`) |
 
-**Invariant:** At any moment, exactly one of `{ waiting, error, columns, chart, grid, histogram, histogram-grid, split-histogram }` is visible. `setView` enforces this.
+**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, split-histogram }` is visible. `setView` enforces this.
 
 ---
 
@@ -257,6 +264,25 @@ setView(view, opts?)
   │     │     → setView(view)  // no refresh flag → falls to normal render
   │     │
   │     ├─ { ok: true } (normal data render)
+  │     │     → Check for empty data result:
+  │     │     │
+  │     │     │  ┌─ rawDataRows.length === 0 (chart/grid views)
+  │     │     │  ├─ → waitingView.hide()
+  │     │     │  ├─ → infoView.show(noDataMessage)
+  │     │     │  ├─ → showPanel("info")
+  │     │     │  ├─ → enableAllButtons()
+  │     │     │  ├─ → NO history push (transient)
+  │     │     │  └─ → return (await user action)
+  │     │     │
+  │     │     │  ┌─ histogram data empty (histogram/histogram-grid views)
+  │     │     │  ├─ → waitingView.hide()
+  │     │     │  ├─ → infoView.show(noDataMessage)
+  │     │     │  ├─ → showPanel("info")
+  │     │     │  ├─ → enableAllButtons()
+  │     │     │  ├─ → NO history push (transient)
+  │     │     │  └─ → return
+  │     │     │
+  │     │     → (data present — normal path)
   │     │     → waitingView.hide()
   │     │     → showPanel(view) — show appropriate data-view
   │     │     → show summary-cards
@@ -396,8 +422,6 @@ try {
 
 ## 8. State Variables — Naming Scheme
 
-All variables use descriptive, non-ambiguous names. Every variable is classified by its persistence scope.
-
 ### 8.1 Global State Object (`appState`)
 
 | Variable | Type | Persistence | Description |
@@ -434,6 +458,8 @@ All variables use descriptive, non-ambiguous names. Every variable is classified
 | `errorViewPanel` | `#error-view` | Error modal overlay container |
 | `errorViewMessageEl` | `#error-message` | Error message text element |
 | `errorViewCloseBtn` | `#error-close-btn` | Error modal close button |
+| `infoViewPanel` | `#info-view` | Info message panel container |
+| `infoViewMessageEl` | `#info-message` | Info message content element |
 | `columnsViewPanel` | `#columns-view` | Column selection panel |
 | `histogramPanel` | `#histogram-panel` | Histogram controls (bin-size, split) — always between header and content |
 | `rawDataChartView` | `#raw-data-chart-view` | Raw data line chart container |
@@ -519,7 +545,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | `appState.activeView` | Button Text | Button Title | Toggles To |
 |----------------------|------------|-------------|------------|
 | `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
-| `grid` | `📊 Histogram` | "Show binned average histogram" | `histogram-grid` |
+| `grid` | `📊 Histogram Grid` | "Show binned average histogram grid" | `histogram-grid` |
 | `histogram` | `📋 Raw Data` | "Switch back to raw data view" | `chart` |
 | `histogram-grid` | `📋 Raw Data` | "Switch back to raw data view" | `grid` |
 
@@ -636,6 +662,36 @@ User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView
   → enableAllButtons()
 ```
 
+### 10.5 Empty Data Flow (Info View)
+
+```
+setView("chart")
+  → disableAllButtons()
+  → showPanel("waiting") → waitingView.show()
+  → renderRawDataChartView(updateWaiting)
+      → updateWaiting("Fetching raw data…")
+      → GET /api/data → { rows: [] }
+      → appState.rawDataRows = []
+      → return { ok: true }
+  → setView detects rawDataRows.length === 0
+  → waitingView.hide()
+  → infoView.show("No data found for 2025-07-20. ...")
+  → showPanel("info")
+  → enableAllButtons()
+  → NO history push (transient)
+
+User clicks Refresh from info-view:
+  → setView("chart", { refresh: true })
+  → disableAllButtons()
+  → showPanel("waiting") → waitingView.show()
+  → renderRefreshView → POST /api/refresh → success
+  → recursive setView("chart")
+  → renderRawDataChartView → data now present
+  → showPanel("raw-data-chart")
+  → push URL history
+  → enableAllButtons()
+```
+
 ---
 
 ## 11. API Endpoints Used
@@ -710,9 +766,90 @@ waitingView.hide();
 
 ---
 
-## 14. Issues to Consider
+## 14. Info View — Non-Modal General-Purpose Message Panel
 
-### 14.1 cleanupSplitMode() DOM Manipulation
+The info view is a non-modal panel for displaying informational messages. It is currently used for "no data" scenarios but is designed as a general-purpose info display that can show any informational content (e.g. About dialog, usage tips, empty-state guidance).
+
+### 14.1 Behavior
+
+```
+setView("chart")
+  → waiting-view shown
+  → renderRawDataChartView()
+      → GET /api/data → { rows: [] }
+      → return { ok: true }  (no error — server responded correctly)
+  → setView detects rawDataRows.length === 0
+  → infoView.show("No data found for the selected date.")
+  → showPanel("info")
+  → enableAllButtons() — user can interact with all controls
+  → NO history push (info is transient)
+```
+
+**Key properties:**
+- **Non-modal:** Unlike error-view, the info-view does **not** block user interaction. All title-bar controls remain enabled.
+- **No Back button:** Unlike error-view, the info-view has **no** Close button. The user dismisses it implicitly by interacting with any control (date nav, refresh, view toggle, columns).
+- **No history push:** The info-view is transient — it is never pushed to URL history. It simply sits in the content area until the user does something.
+- **Not popped:** The info-view is never "closed" explicitly. It is replaced by the waiting-view on the next `setView()` call.
+
+### 14.2 Empty Data Messages
+
+When a data renderer succeeds but returns zero rows, the following messages are displayed:
+
+| View | Date context | Message |
+|------|-------------|---------|
+| chart/grid | single day | "No data found for **{date}**. The inverter may not have produced data on this day. Click **Refresh** to sync from the inverter, or select a different date." |
+| chart/grid | range | "No data found for **{from}** to **{to}**. The inverter may not have produced data in this period. Click **Refresh** to sync from the inverter, or select a different date range." |
+| histogram | any | "No histogram data available for the selected date range. Click **Refresh** to sync from the inverter, or select a different date." |
+| histogram-grid | any | Same as histogram |
+
+### 14.3 Future Use Cases
+
+The info-view is intentionally general-purpose. Planned future uses include:
+- **About dialog:** Application version, credits, usage info
+- **Welcome message:** First-time user guidance
+- **Feature announcements:** New feature descriptions
+- **Configuration info:** System status, connection details
+
+Any caller can invoke `infoView.show(message)` to display content. The panel is controlled via `setView()` using a sentinel view value or a dedicated `info` option.
+
+### 14.4 Integration with setView
+
+The info-view is shown by `setView` step 4 when data is empty. It can also be shown programmatically via:
+
+```typescript
+// From any caller:
+infoView.show(messageHtml: string);
+showPanel("info");
+```
+
+When the user interacts with any title-bar control while info-view is shown, `setView()` runs its normal lifecycle (waiting-view → render → result) and replaces the info-view.
+
+### 14.5 Initial Load with No Data
+
+If the URL points to a date with no data, `init()` → `setView()` follows the normal empty-data path:
+
+```
+init()
+  → parse URL → date with no data
+  → setView(view, { replace: true })
+      → waiting-view shown
+      → fetch data → 0 rows
+      → infoView.show(noDataMessage)
+      → showPanel("info")
+      → enableAllButtons()
+      → NO history push
+```
+
+The URL is **not** changed or pushed. The user sees the info message and can:
+1. Click **Refresh** to sync from inverter
+2. Change dates via nav buttons or date pickers
+3. Toggle view mode (useless but harmless — will re-fetch)
+
+---
+
+## 15. Issues to Consider
+
+### 15.1 cleanupSplitMode() DOM Manipulation
 
 **Current behavior:** `cleanupSplitMode()` calls `splitHistogramView.classList.remove("visible")` inside `histogram-chart.ts`.
 
@@ -722,7 +859,7 @@ waitingView.hide();
 
 **Recommendation:** Keep current behavior. The redundant class removal is harmless and acts as defensive cleanup. If future work removes the call from `setView`, `cleanupSplitMode()` already handles visibility correctly.
 
-### 14.2 Chart.js Instance Destruction Timing
+### 15.2 Chart.js Instance Destruction Timing
 
 **Current behavior:** `cleanupSplitMode()` destroys Chart.js instances (`histogramSplitChartInstances`) before `setView` hides the panel in step 2.
 
@@ -734,7 +871,7 @@ waitingView.hide();
 
 **Recommendation:** Keep current behavior. The waiting-view overlay prevents visible flicker. If future work changes the z-index or timing, consider deferring chart destruction to after `hideAllDataPanels()`.
 
-### 14.3 updateNavButtonStates() in renderRefreshView
+### 15.3 updateNavButtonStates() in renderRefreshView
 
 **Current behavior:** `renderRefreshView()` calls `updateNavButtonStates()` after fetching new date bounds, before the recursive `setView` call.
 
