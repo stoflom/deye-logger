@@ -205,7 +205,7 @@ setView(view, opts?)
   │     ├─ opts.columns === true
   │     │     → renderColumnsView(updateWaiting)
   │     │       updateWaiting("Loading column definitions…")
-  │     │       GET /api/columns (if appState.columnMetadata stale)
+  │     │       appState.columnMetadata already loaded (in init)
   │     │       render checkboxes into columnsViewPanel
   │     │       return { ok: true }
   │     │
@@ -643,7 +643,7 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
   → showPanel("waiting") → waitingView.show()
   → renderColumnsView(updateWaiting)
       → updateWaiting("Loading column definitions…")
-      → GET /api/columns (if appState.columnMetadata empty)
+      → appState.columnMetadata already populated (loaded in init)
       → render checkboxes into columnsViewPanel
       → return { ok: true }
   → hidePanel("waiting")
@@ -698,7 +698,7 @@ User clicks Refresh from info-view:
 
 | Endpoint | Method | Used By | Timeout | Purpose |
 |----------|--------|---------|---------|---------|
-| `/api/columns` | GET | renderColumnsView() | 10s | Column metadata (name + label) |
+| `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label) |
 | `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
 | `/api/data` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (single day) |
 | `/api/data-range` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (range) |
@@ -830,8 +830,11 @@ If the URL points to a date with no data, `init()` → `setView()` follows the n
 
 ```
 init()
-  → parse URL → date with no data
-  → setView(view, { replace: true })
+  → parse URL parameters
+  → load /api/version → versionBadgeEl
+  → load /api/columns → appState.columnMetadata (for UI consistency on load)
+  → load /api/dates → min/max available dates
+  → call setView(view, { replace: true }) with date that has no data
       → waiting-view shown
       → fetch data → 0 rows
       → infoView.show(noDataMessage)
@@ -844,6 +847,20 @@ The URL is **not** changed or pushed. The user sees the info message and can:
 1. Click **Refresh** to sync from inverter
 2. Change dates via nav buttons or date pickers
 3. Toggle view mode (useless but harmless — will re-fetch)
+
+### 14.6 Normal Initial Load
+
+```
+init()
+  → parse URL parameters
+  → load /api/version → versionBadgeEl
+  → load /api/columns → appState.columnMetadata (ensures columnMetadata available for all UI operations)
+  → load /api/dates → min/max available dates, updateNavButtonStates()
+  → call setView(urlState.view, { replace: true, split: urlState.isSplit })
+      → Normal render flow (see setView() lifecycle in §10.1–10.3)
+      → Data renders using appState.selectedColumnNames (from localStorage)
+      → Columns panel will have metadata available if user clicks Select
+```
 
 ---
 
