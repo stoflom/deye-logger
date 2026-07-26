@@ -9,7 +9,7 @@
 </head>
 <body>
   <!-- ============================================================
-       TITLE BAR — always visible, persistent
+       TITLE BAR — always visible
        ============================================================ -->
   <div class="header">
     <h1>☀️ <span>Deye</span> Logger Viewer</h1>
@@ -32,7 +32,6 @@
 
   <!-- ============================================================
        HISTOGRAM PANEL — visible only in histogram modes
-       Always positioned between header and state bar
        ============================================================ -->
   <div class="histogram-panel" id="histogram-panel">
     <div class="histogram-panel-header">
@@ -51,7 +50,7 @@
   </div>
 
   <!-- ============================================================
-       STATE BAR — always visible, persistent
+       STATE BAR — always visible
        ============================================================ -->
   <div class="status-bar">
     <span id="row-count"></span>
@@ -61,11 +60,15 @@
   </div>
 
   <!-- ============================================================
+       SUMMARY CARDS — single instance, moved into panels by app.ts
+       ============================================================ -->
+  <div class="summary-cards" id="summary-cards"></div>
+
+  <!-- ============================================================
        CONTENT AREA — exactly one panel visible at a time
-       Managed exclusively by setView()
        ============================================================ -->
 
-  <!-- Waiting view — spinner + text, shown during all async operations -->
+  <!-- Waiting view -->
   <div id="waiting-view" class="content-panel">
     <div class="waiting-content">
       <div class="spinner"></div>
@@ -73,7 +76,7 @@
     </div>
   </div>
 
-  <!-- Error view — modal overlay with Close button -->
+  <!-- Error view -->
   <div id="error-view" class="content-panel error-overlay">
     <div class="error-content">
       <h2>⚠️ Error</h2>
@@ -82,7 +85,7 @@
     </div>
   </div>
 
-  <!-- Info view — non-modal info message panel (transient) -->
+  <!-- Info view -->
   <div id="info-view" class="content-panel">
     <div class="info-content">
       <div class="info-icon">ℹ️</div>
@@ -90,16 +93,13 @@
     </div>
   </div>
 
-  <!-- Columns view — column selection panel (transient) -->
+  <!-- Columns view -->
   <div id="columns-view" class="content-panel">
     <div id="columns-view-inner"></div>
   </div>
 
-  <!-- Summary cards — shown with data views -->
-  <div class="summary-cards" id="summary-cards"></div>
-
   <!-- Raw data chart view -->
-  <div id="raw-data-chart-view" class="content-panel raw-data-chart-view visible">
+  <div id="raw-data-chart-view" class="content-panel raw-data-chart-view">
     <div class="chart-canvas-wrap">
       <canvas id="chart-canvas"></canvas>
     </div>
@@ -124,9 +124,7 @@
 
   <!-- Split histogram view -->
   <div id="split-histogram-view" class="content-panel split-histogram-view">
-    <div id="split-histogram-scroll">
-      <!-- Individual histogram canvases go here -->
-    </div>
+    <div id="split-histogram-scroll"></div>
   </div>
 
   <script type="module" src="/app.js"></script>

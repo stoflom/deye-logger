@@ -21,28 +21,33 @@ body {
   color: white;
   padding: 20px 24px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   flex-shrink: 0;
   z-index: 10;
+}
+
+.header > * {
+  width: 100%;
+  max-width: 1440px;
 }
 
 .header h1 {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  margin-bottom: 12px;
 }
 
 .header h1 span {
   color: #63b3ed;
 }
 
-.controls {
+.header .controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -192,9 +197,15 @@ body {
   flex-shrink: 0;
 }
 
+.histogram-panel > * {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
 .histogram-panel.visible {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 
@@ -235,13 +246,20 @@ body {
 .status-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 8px 24px;
   background: #edf2f7;
   border-bottom: 1px solid #e2e8f0;
   font-size: 12px;
   color: #718096;
   flex-shrink: 0;
+}
+
+.status-bar > * {
+  width: 100%;
+  max-width: 1440px;
+  display: flex;
+  align-items: center;
 }
 
 .status-separator {
@@ -260,6 +278,16 @@ body {
 .content-panel.visible {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto; /* Allow scrolling within the panel */
+}
+
+.content-panel.visible > * {
+  width: 100%;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* ============================================================
@@ -479,12 +507,17 @@ body {
   gap: 12px;
   background: white;
   border-bottom: 1px solid #e2e8f0;
-  flex-shrink: 0;
+}
+
+.summary-cards > * {
+  max-width: 1440px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .summary-cards.visible {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }
 
 .summary-card {
@@ -661,9 +694,17 @@ body.has-histogram-panel #histogram-grid-container {
    RESPONSIVE
    ============================================================ */
 @media (max-width: 768px) {
-  .header { padding: 14px 16px; }
-  .header h1 { font-size: 18px; }
-  .controls { gap: 8px; }
+  .header { padding: 10px 16px; }
+  .header h1 { font-size: 16px; }
+  .controls { gap: 6px; }
+  .controls input[type="date"] {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .btn-view, .columns-toggle, .btn-export, .btn-secondary-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
   .summary-cards { padding: 10px 16px; gap: 8px; }
   .summary-card { padding: 10px; }
   .raw-data-chart-view, .histogram-view { padding: 8px 12px; }
@@ -672,7 +713,11 @@ body.has-histogram-panel #histogram-grid-container {
 }
 
 @media (max-width: 480px) {
+  .header { padding: 8px 12px; }
+  .header h1 { font-size: 14px; }
+  .controls { gap: 4px; }
+  .controls label { font-size: 11px; }
   .summary-cards.visible { grid-template-columns: 1fr; }
-  .raw-data-chart-view, .histogram-view { padding: 6px 8px; }
+  .raw-data-chart-view, .histogram-view { padding: 4px 8px; }
   .error-content { padding: 24px; }
 }
