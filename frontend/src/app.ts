@@ -5,7 +5,7 @@
 
 /// <reference lib="dom" />
 
-export const FRONTEND_VERSION = "1.2.0";
+export const FRONTEND_VERSION = "1.3.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -216,8 +216,13 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   histogramToggleBtn.classList.toggle("active", isHistogramMode);
 
   if (isHistogramMode) {
-    histogramToggleBtn.textContent = "\uD83D\uDCAB Raw Data";
-    histogramToggleBtn.title = "Switch back to raw data view";
+    if (view === "histogram") {
+      histogramToggleBtn.textContent = "\uD83D\uDCAB Raw Chart";
+      histogramToggleBtn.title = "Switch back to raw data chart";
+    } else {
+      histogramToggleBtn.textContent = "\uD83D\uDCAB Raw Grid";
+      histogramToggleBtn.title = "Switch back to raw data grid";
+    }
   } else if (view === "grid") {
     histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram Grid";
     histogramToggleBtn.title = "Show binned average histogram grid";
@@ -240,7 +245,7 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   // Split button — visible only in histogram (not histogram-grid)
   splitBtn.style.display = view === "histogram" ? "" : "none";
   splitBtn.textContent = isSplit ? "Combine" : "Split";
-  splitBtn.title = isSplit ? "Combine into single chart" : "Split into individual charts";
+  splitBtn.title = isSplit ? "Combine columns into single chart" : "Split columns into individual charts";
 
   // Histogram panel — visible in histogram modes
   if (isHistogramMode) {
@@ -284,6 +289,7 @@ async function setView(
       waitingView.hide();
       showPanel("columns");
       columnsToggleBtn.textContent = "\u21BB Load Data";
+      columnsToggleBtn.title = "Close panel and load selected data";
       columnsToggleBtn.classList.add("active");
       enableControlsExcept(["refresh", "export", "viewToggle", "histogramToggle", "split", "binSize", "prevDay", "nextDay", "today"]);
       columnsToggleBtn.disabled = false;
@@ -344,9 +350,9 @@ async function setView(
       if (isEmptyHistogram) {
         message = "No histogram data available for the selected date range. Click <strong>Refresh</strong> to sync from the inverter, or select a different date.";
       } else if (range) {
-        message = `No data found for <strong>${from}</strong> to <strong>${to}</strong>. The inverter may not have produced data in this period. Click <strong>Refresh</strong> to sync from the inverter, or select a different date range.`;
+        message = `No data found for <strong>${from}</strong> to <strong>${to}</strong>. Click <strong>Refresh</strong> to sync from the inverter, or select a different date range.`;
       } else {
-        message = `No data found for <strong>${to}</strong>. The inverter may not have produced data on this day. Click <strong>Refresh</strong> to sync from the inverter, or select a different date.`;
+        message = `No data found for <strong>${to}</strong>. Click <strong>Refresh</strong> to sync from the inverter, or select a different date.`;
       }
 
       // STEP 4b: Empty data — show info-view (transient, no history push)
@@ -489,6 +495,7 @@ columnsToggleBtn.addEventListener("click", () => {
   if (columnsViewPanel.classList.contains("visible")) {
     // Close columns panel — re-render with new column selection
     columnsToggleBtn.textContent = "\u2630 Select";
+    columnsToggleBtn.title = "Select columns to display";
     columnsToggleBtn.classList.remove("active");
     saveSelectedColumnNames(appState.selectedColumnNames);
     setView(appState.activeView);

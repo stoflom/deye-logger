@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** Draft v2.2 — early column metadata loading for UI consistency
+> **Status:** Draft v2.3 — early column metadata loading for UI consistency
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -546,22 +546,22 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 |----------------------|------------|-------------|------------|
 | `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
 | `grid` | `📊 Histogram Grid` | "Show binned average histogram grid" | `histogram-grid` |
-| `histogram` | `📋 Raw Data` | "Switch back to raw data view" | `chart` |
-| `histogram-grid` | `📋 Raw Data` | "Switch back to raw data view" | `grid` |
+| `histogram` | `📋 Raw Chart` | "Switch back to raw data chart" | `chart` |
+| `histogram-grid` | `📋 Raw Grid` | "Switch back to raw data grid" | `grid` |
 
 #### Columns Toggle Button Labels (`columnsToggleBtn`)
 
 | columns-view State | Button Text | Button Title | Action |
 |-------------------|------------|-------------|--------|
 | Closed | `☰ Select` | "Select columns to display" | `setView(activeView, { columns: true })` |
-| Open | `↻ Load Data` | "Close panel and load data" | `setView(appState.activeView)` |
+| Open | `↻ Load Data` | "Close panel and load selected data" | `setView(appState.activeView)` |
 
 #### Split Button Labels (`splitBtn`)
 
 | `histogramIsSplitMode` | Button Text | Button Title | Action |
 |----------------------|------------|-------------|--------|
-| `false` | `Split` | "Split into individual charts" | `setView("histogram", { split: true })` |
-| `true` | `Combine` | "Combine into single chart" | `setView("histogram", { split: false })` |
+| `false` | `Split` | "Split columns into individual charts" | `setView("histogram", { split: true })` |
+| `true` | `Combine` | "Combine columns into single chart" | `setView("histogram", { split: false })` |
 
 ---
 
@@ -797,8 +797,8 @@ When a data renderer succeeds but returns zero rows, the following messages are 
 
 | View | Date context | Message |
 |------|-------------|---------|
-| chart/grid | single day | "No data found for **{date}**. The inverter may not have produced data on this day. Click **Refresh** to sync from the inverter, or select a different date." |
-| chart/grid | range | "No data found for **{from}** to **{to}**. The inverter may not have produced data in this period. Click **Refresh** to sync from the inverter, or select a different date range." |
+| chart/grid | single day | "No data found for **{date}**. Click **Refresh** to sync from the inverter, or select a different date." |
+| chart/grid | range | "No data found for **{from}** to **{to}**. Click **Refresh** to sync from the inverter, or select a different date range." |
 | histogram | any | "No histogram data available for the selected date range. Click **Refresh** to sync from the inverter, or select a different date." |
 | histogram-grid | any | Same as histogram |
 
