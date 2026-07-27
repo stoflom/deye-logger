@@ -1,11 +1,11 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** Draft v2.5 — display panel single scroll-pane with summary cards
+> **Status:** v1.4
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
-> **Versioning scheme:** Frontend version is `major.minor.sub-minor`.
-> - **major** — major new features, architectural changes
-> - **minor** — design changes to implement new features or fix design issues
+> **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
+> - **major** — major new features, architectural changes, number must agree with this document major version
+> - **minor** — design changes to implement new features or fix design issues, number must agree with this document minor version
 > - **sub-minor** — bug fixes requiring no design changes
 
 ---
