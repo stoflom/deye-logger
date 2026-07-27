@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** Draft v2.3 — early column metadata loading for UI consistency
+> **Status:** Draft v2.4 — display panel responsive behavior with summary cards
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -29,6 +29,8 @@ The application is a single-page app with three vertical regions:
 │    • info-view (non-modal info message)  │
 │    • columns-view (selection panel)      │
 │    • data-view (chart/grid/histogram)    │
+│      consists of summary cards at the    │
+│      top followed by a chart or grid.    │
 └──────────────────────────────────────────┘
 ```
 
@@ -864,7 +866,158 @@ init()
 
 ---
 
-## 15. Issues to Consider
+## 15. Display Panel — Summary Cards + Chart/Grid
+
+Each data view (`chart`, `grid`, `histogram`, `histogram-grid`) renders a **display panel** composed of two sub-sections in a fixed vertical order:
+
+```
+┌──────────────────────────────────────┐
+│  Summary Cards Bar                   │  ← scrollable with panel, always at top
+│  ┌──────┐ ┌──────┐ ┌──────┐ …       │
+│  │Card 1│ │Card 2│ │Card 3│ …       │
+│  └──────┘ └──────┘ └──────┘         │
+├──────────────────────────────────────┤
+│  Chart or Grid Area                  │  ← scrollable with panel
+│  ┌─────────────────────────────────┐ │
+│  │                                 │ │
+│  │   Chart.js chart or AG Grid     │ │
+│  │                                 │ │
+│  └─────────────────────────────────┘ │
+└──────────────────────────────────────┘
+```
+
+### 15.1 Structure
+
+The display panel is the content area shown inside the respective view containers:
+
+| Sub-section | Purpose | Rendered By |
+|-------------|---------|-------------|
+| **Summary Cards Bar** (`#summary-cards`) | Row count, metric summary, time range, max/average values | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramView`, `renderHistogramGridView`) |
+| **Chart / Grid Area** | The primary visualisation — Chart.js chart or AG Grid data table | Renderers |
+
+**Order invariant:** Summary cards are **always** rendered above the chart/grid area. The DOM order never changes.
+
+### 15.2 Summary Cards
+
+Summary cards are rendered inside the `#summary-cards` container. They display aggregate information about the current dataset. The specific cards shown depend on the view mode:
+
+| View | Cards Shown |
+|------|-------------|
+| `chart` / `grid` | Row count, time range, metric count, per-metric min/max/average (first few metrics) |
+| `histogram` / `histogram-grid` | Bin count, time range, per-metric max average value + timestamp |
+
+Cards are arranged **horizontally** (side by side) when sufficient horizontal space is available. When the viewport narrows, cards **switch to a vertical arrangement** (stacked, full-width).
+
+### 15.3 Responsive Behavior
+
+On small displays (narrow viewports), the display panel exhibits the following behavior:
+
+#### 15.3.1 Available Space Competition
+
+The display panel has a **fixed height** determined by the content area (full viewport minus title bar and status bar). Both the summary cards bar and the chart/grid area compete for this fixed height:
+
+- When the viewport height is insufficient, the **summary cards bar consumes all available vertical space**, leaving the chart/grid area with **zero visible height**.
+- This makes the chart or grid **invisible** on small screens unless the user scrolls.
+
+#### 15.3.2 Cards Scaling
+
+To mitigate the space competition on small viewports, the summary cards **scale proportionally smaller** as the available height decreases:
+
+- **Wide viewports:** Cards display at full size with their default card dimensions.
+- **Medium viewports:** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing.
+- **Small viewports:** Cards reach a **minimum scale** (e.g., 0.5×–0.6× of default size). Font sizes, padding, and icon sizes are all reduced uniformly.
+- **Very small viewports:** Cards switch to a **vertical (stacked) arrangement**, each card taking full width. This allows more cards to be visible within the constrained height.
+
+The transition between horizontal and vertical card arrangements is triggered by a CSS media query or a JS-measured container width threshold (e.g., `< 600px`).
+
+#### 15.3.3 Full Panel Scroll
+
+On small screens where the summary cards alone exceed the available height, or where the chart/grid area is pushed below the viewport:
+
+- The **entire display panel** (summary cards bar + chart/grid area) is **vertically scrollable**.
+- Scrolling is enabled via `overflow-y: auto` on the panel's container.
+- The summary cards **remain at the top** of the scrollable area (they are not sticky or fixed). The user scrolls the entire content to reach the chart/grid below.
+- Scroll position is **not** preserved across view changes or re-renders.
+
+```css
+/* Conceptual */
+.raw-data-chart-view,       /* chart container */
+.raw-data-grid-view,        /* grid container */
+.histogram-view,            /* histogram container */
+.histogram-grid-view,       /* histogram grid container */
+.split-histogram-view {    /* split histogram container */
+  overflow-y: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#summary-cards {
+  flex-shrink: 0;  /* prevent cards from being squished below zero height */
+}
+```
+
+### 15.4 Viewport Breakpoints
+
+| Breakpoint | Cards Layout | Scroll | Chart/Grid Visibility |
+|-----------|-------------|--------|----------------------|
+| `> 1200px` | Horizontal, full size | No (fits) | Always visible |
+| `800px – 1200px` | Horizontal, scaled down | Conditional | Visible |
+| `500px – 800px` | Vertical (stacked), scaled down | Yes | Hidden by scroll |
+| `< 500px` | Vertical (stacked), min scale | Yes | Hidden by scroll |
+
+### 15.5 setView Integration
+
+The display panel is rendered by every data-view renderer. The `setView` lifecycle integrates with it as follows:
+
+```typescript
+// In setView step 4c (normal render success):
+  → waitingView.hide()
+  → showPanel(view)                    // show chart/grid/histogram/histogram-grid container
+  → show summary-cards                 // render/update cards into #summary-cards
+  → show/hide histogram-panel          // histogram controls visible only in histogram modes
+  → buildUrlParams() → pushState
+  → updateButtonLabels(view, split)
+  → enableAllButtons()
+```
+
+**Key contract for renderers regarding the display panel:**
+
+| Rule | Detail |
+|------|--------|
+| **Render cards into existing container** | Cards are rendered into `#summary-cards` which exists in the view's DOM skeleton. Cards are **updated** (not recreated from scratch) — existing card elements are reused and their content/visibility adjusted. |
+| **Cards always visible** | The summary cards bar is **never hidden**. It is rendered every time a data view is entered, regardless of data size. |
+| **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto`). |
+| **No panel visibility toggling** | Renderers draw into the container; `setView` controls which container is visible (via `showPanel`). |
+
+### 15.6 Histogram Split Mode Display Panel
+
+In split histogram mode (`?split=1`), the display panel has a slightly different structure:
+
+```
+┌──────────────────────────────────────┐
+│  Summary Cards Bar                   │
+│  ┌──────┐ ┌──────┐ ┌──────┐ …       │
+├──────────────────────────────────────┤
+│  Split Histogram Scroll Container    │
+│  ┌─────────────────────────────────┐ │
+│  │  Chart 1                        │ │
+│  ├─────────────────────────────────┤ │
+│  │  Chart 2                        │ │
+│  ├─────────────────────────────────┤ │
+│  │  Chart 3                        │ │
+│  └─────────────────────────────────┘ │
+└──────────────────────────────────────┘
+```
+
+- Summary cards behave identically to non-split mode.
+- The chart area contains **multiple charts** (one per metric) instead of a single chart.
+- The scroll container (`#split-histogram-scroll`) holds all individual charts.
+- Responsive behavior (scaling, vertical stacking, scroll) applies the same way.
+
+---
+
+## 16. Issues to Consider
 
 ### 15.1 cleanupSplitMode() DOM Manipulation
 
