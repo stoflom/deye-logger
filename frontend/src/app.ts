@@ -5,7 +5,8 @@
 
 /// <reference lib="dom" />
 
-export const FRONTEND_VERSION = "1.4.0";
+// major.minor must agree with the design doc version (frontend-design.md **Status**)
+export const FRONTEND_VERSION = "1.5.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
