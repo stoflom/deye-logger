@@ -27,3 +27,7 @@ deno.lock
 frontend/public/app.js
 backend/node_modules/
 frontend/test/
+
+# Miscelaneous
+*.txt
+*.log
