@@ -145,7 +145,7 @@ export const infoViewPanel = getRequiredEl<HTMLElement>("info-view", "#info-view
 export const infoViewMessageEl = getRequiredEl<HTMLElement>("info-message", "#info-message");
 export const columnsViewPanel = getRequiredEl<HTMLElement>("columns-view", "#columns-view");
 export const columnsViewInner = getRequiredEl<HTMLElement>("columns-view-inner", "#columns-view-inner");
-export const histogramPanel = getRequiredEl<HTMLElement>("histogram-panel", "#histogram-panel");
+export const histogramControls = getRequiredEl<HTMLElement>("histogram-controls", "#histogram-controls");
 export const summaryCardsPanel = getRequiredEl<HTMLElement>("summary-cards", "#summary-cards");
 
 // --- Data views ---
@@ -336,16 +336,14 @@ export function hideSummaryCards(): void {
 }
 
 // ------------------------------------------------------------------
-// Histogram panel visibility
+// Histogram controls visibility — toggle inside title bar
 // ------------------------------------------------------------------
 export function showHistogramPanel(): void {
-  histogramPanel.classList.add("visible");
-  document.body.classList.add("has-histogram-panel");
+  histogramControls.style.display = "";
 }
 
 export function hideHistogramPanel(): void {
-  histogramPanel.classList.remove("visible");
-  document.body.classList.remove("has-histogram-panel");
+  histogramControls.style.display = "none";
 }
 
 // ------------------------------------------------------------------

@@ -27,24 +27,19 @@
       <button class="btn-view" id="view-toggle" title="Switch between view modes">📊 Data Grid</button>
       <button class="btn-view" id="histogram-btn" title="Show binned average histogram">📊 Histogram</button>
       <button class="btn-export" id="export-btn" style="display:none" title="Export data as CSV">⬇ CSV</button>
-    </div>
-  </div>
 
-  <!-- ============================================================
-       HISTOGRAM PANEL — visible only in histogram modes
-       Always positioned between header and state bar
-       ============================================================ -->
-  <div class="histogram-panel" id="histogram-panel">
-    <div class="histogram-panel-header">
-      <label for="bin-size-select">Bin size</label>
-      <div style="display:flex;gap:6px;align-items:center">
-        <select id="bin-size-select">
-          <option value="5">5 min</option>
-          <option value="10">10 min</option>
-          <option value="15" selected>15 min</option>
-          <option value="30">30 min</option>
-          <option value="60">1 hour</option>
-        </select>
+      <!-- Histogram controls — visible only in histogram modes -->
+      <div class="histogram-controls" id="histogram-controls" style="display:none">
+        <div class="histogram-control-group">
+          <label for="bin-size-select">Bin size</label>
+          <select id="bin-size-select">
+            <option value="5">5 min</option>
+            <option value="10">10 min</option>
+            <option value="15" selected>15 min</option>
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+          </select>
+        </div>
         <button class="btn-secondary-sm" id="split-btn" title="Split into individual charts">Split</button>
       </div>
     </div>

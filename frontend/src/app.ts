@@ -247,7 +247,7 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   splitBtn.textContent = isSplit ? "Combine" : "Split";
   splitBtn.title = isSplit ? "Combine columns into single chart" : "Split columns into individual charts";
 
-  // Histogram panel — visible in histogram modes
+  // Histogram controls — visible in histogram modes
   if (isHistogramMode) {
     showHistogramPanel();
   } else {

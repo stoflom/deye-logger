@@ -14,26 +14,34 @@ body {
 }
 
 /* ============================================================
-   TITLE BAR — always visible
+   TITLE BAR — always visible, dynamic height
+   Wraps into multiple rows when horizontal space runs out.
+   All buttons live here — no separate histogram panel.
    ============================================================ */
 .header {
   background: linear-gradient(135deg, #2d374e 0%, #1a365d 100%);
   color: white;
-  padding: 20px 24px;
+  padding: 12px 24px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   flex-shrink: 0;
   z-index: 10;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .header h1 {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .header h1 span {
@@ -43,29 +51,58 @@ body {
 .controls {
   display: flex;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Histogram controls — nested group inside the controls row */
+.histogram-controls {
+  display: flex;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.controls label {
-  font-size: 13px;
+.histogram-control-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.histogram-control-group label {
+  font-size: 12px;
   font-weight: 600;
   color: #a0aec0;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .controls input[type="date"] {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid #4a5568;
   border-radius: 6px;
   background: #2d374e;
   color: white;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
 }
 
 .controls input[type="date"]:hover {
+  border-color: #63b3ed;
+}
+
+.histogram-control-group select {
+  padding: 5px 10px;
+  border: 1px solid #718096;
+  border-radius: 4px;
+  background: #2d374e;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.histogram-control-group select:hover {
   border-color: #63b3ed;
 }
 
@@ -178,55 +215,6 @@ body {
   color: #4a5568;
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-/* ============================================================
-   HISTOGRAM PANEL — between header and state bar
-   ============================================================ */
-.histogram-panel {
-  display: none;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 10px 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  flex-shrink: 0;
-}
-
-.histogram-panel.visible {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.histogram-panel-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #4a5568;
-}
-
-.histogram-panel-header label {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-  color: #4a5568;
-  margin-right: 4px;
-}
-
-.histogram-panel-header select {
-  padding: 5px 10px;
-  border: 1px solid #cbd5e0;
-  border-radius: 6px;
-  background: white;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  color: #2d374e;
-}
-
-.histogram-panel-header select:hover {
-  border-color: #3182ce;
 }
 
 /* ============================================================
@@ -471,7 +459,9 @@ body {
 }
 
 /* ============================================================
-   SUMMARY CARDS
+   SUMMARY CARDS — responsive scaling and stacking
+   Cards scale smaller as available height decreases,
+   then switch to vertical arrangement on narrow screens.
    ============================================================ */
 .summary-cards {
   display: none;
@@ -480,11 +470,16 @@ body {
   background: white;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
+  /* Scale cards down proportionally to available height */
+  --card-scale: 1;
+  transform: scale(var(--card-scale));
+  transform-origin: top center;
+  /* Allow cards to stack vertically when narrow */
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
 .summary-cards.visible {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .summary-card {
@@ -509,10 +504,23 @@ body {
 }
 
 .summary-card .value {
-  font-size: clamp(20px, 3vw, 28px);
+  font-size: clamp(18px, 2.5vw, 24px);
   font-weight: 700;
   color: #2d374e;
   font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   CONTENT PANELS — scrollable on small screens
+   Each data-view container is vertically scrollable so that
+   when cards consume height, the chart/grid remains reachable.
+   ============================================================ */
+.content-panel {
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ============================================================
@@ -523,21 +531,11 @@ body {
   background: white;
 }
 
-.raw-data-chart-view.visible {
-  flex: 1;
-  min-height: 0;
-}
-
 /* ============================================================
    RAW DATA GRID VIEW
    ============================================================ */
 .raw-data-grid-view {
   background: white;
-}
-
-.raw-data-grid-view.visible {
-  flex: 1;
-  min-height: 0;
 }
 
 /* ============================================================
@@ -548,21 +546,11 @@ body {
   background: white;
 }
 
-.histogram-view.visible {
-  flex: 1;
-  min-height: 0;
-}
-
 /* ============================================================
    HISTOGRAM GRID VIEW
    ============================================================ */
 .histogram-grid-view {
   background: white;
-}
-
-.histogram-grid-view.visible {
-  flex: 1;
-  min-height: 0;
 }
 
 /* ============================================================
@@ -573,16 +561,9 @@ body {
   background: white;
 }
 
-.split-histogram-view.visible {
-  flex: 1;
-  min-height: 0;
-}
-
 #split-histogram-scroll {
-  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  min-height: 0;
 }
 
 .split-histogram-item {
@@ -646,33 +627,60 @@ body {
   height: 100%;
 }
 
-/* Grid container: reduce height when histogram panel is visible */
-body.has-histogram-panel #grid-container,
-body.has-histogram-panel #histogram-grid-container {
-  height: calc(100vh - 260px);
-}
-
 /* Read-only grid: suppress all selection and focus */
 .ag-theme-quartz .ag-cell-focus:focus {
   outline: none;
 }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE — title bar wrapping, card scaling, and stacking
    ============================================================ */
-@media (max-width: 768px) {
-  .header { padding: 14px 16px; }
+@media (max-width: 1200px) {
+  .header { padding: 12px 16px; }
   .header h1 { font-size: 18px; }
-  .controls { gap: 8px; }
-  .summary-cards { padding: 10px 16px; gap: 8px; }
-  .summary-card { padding: 10px; }
-  .raw-data-chart-view, .histogram-view { padding: 8px 12px; }
-  .summary-cards.visible { grid-template-columns: repeat(2, 1fr); }
-  #columns-view-inner { padding: 16px; }
+  .summary-cards { padding: 10px 16px; gap: 10px; }
+  .raw-data-chart-view, .histogram-view { padding: 12px 16px; }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 900px) {
+  /* Title bar wraps into multiple rows automatically */
+  .controls { gap: 6px; }
+  .btn-view, .btn-export, .columns-toggle, .btn-secondary-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  /* Scale cards down as viewport gets tighter */
+  .summary-cards { --card-scale: 0.85; }
+  .raw-data-chart-view, .histogram-view { padding: 10px 12px; }
+  /* Two-column cards */
+  .summary-cards.visible { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .header { padding: 10px 12px; }
+  .header h1 { font-size: 16px; }
+  .controls { gap: 4px; }
+  .btn-view, .btn-export, .columns-toggle, .btn-secondary-sm {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  .controls input[type="date"] {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  /* Scale cards further down */
+  .summary-cards { --card-scale: 0.7; padding: 8px 12px; gap: 8px; }
+  .summary-card { padding: 8px; }
+  .raw-data-chart-view, .histogram-view { padding: 8px; }
+  .split-histogram-view { padding: 8px 12px 12px; }
+  /* Stack cards vertically */
   .summary-cards.visible { grid-template-columns: 1fr; }
-  .raw-data-chart-view, .histogram-view { padding: 6px 8px; }
-  .error-content { padding: 24px; }
+  #columns-view-inner { padding: 12px; }
+}
+
+@media (max-width: 400px) {
+  /* Minimum scale for very narrow screens */
+  .summary-cards { --card-scale: 0.6; }
+  .header h1 { font-size: 14px; }
+  .error-content { padding: 16px; }
 }
