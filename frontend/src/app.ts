@@ -5,7 +5,7 @@
 
 /// <reference lib="dom" />
 
-export const FRONTEND_VERSION = "1.3.0";
+export const FRONTEND_VERSION = "1.4.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
