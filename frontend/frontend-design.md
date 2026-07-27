@@ -932,9 +932,9 @@ Cards are arranged **horizontally** (side by side) when sufficient horizontal sp
 
 The display panel is inside the **single scrollable content area** (`#content-area`). The summary cards are **always at the top** of the scroll pane, and the chart/grid area follows below. On all viewport sizes the entire content area is vertically scrollable.
 
-#### 15.3.1 Cards Scale to Save Vertical Space
+#### 15.3.1 Cards Reduce Actual Dimensions to Save Vertical Space
 
-When the viewport is narrow and the title bar wraps into multiple rows, less vertical space remains for the content area. The summary cards **scale proportionally smaller** to minimize the space they consume:
+When the viewport is narrow and the title bar wraps into multiple rows, less vertical space remains for the content area. The summary cards **reduce their actual layout dimensions** (padding, font-size, gap) via `calc()` multiplied by `--card-scale`. This is NOT `transform: scale()` which would leave invisible layout gaps that overlap the chart area:
 
 - **Wide viewports (> 1200px):** Cards display at full size. The content area is large enough that cards + chart fit without scrolling.
 - **Medium viewports (800–1200px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`.
@@ -950,6 +950,8 @@ The **entire content area** (`#content-area`) is vertically scrollable (`overflo
 - The summary cards are **not sticky or fixed** — they are part of the scroll flow at the very top.
 - To view the chart/grid, the user scrolls the entire content area downward.
 - The chart/grid area always fills the remaining height inside its content panel.
+- Content panels have `min-height: 300px` which forces `#content-area` to show a scrollbar when the viewport is too small.
+- No view has its own nested scrollbar — there is exactly one scroll pane (`#content-area`).
 - Scroll position is **not** preserved across view changes or re-renders.
 
 ```css
@@ -961,13 +963,15 @@ The **entire content area** (`#content-area`) is vertically scrollable (`overflo
   flex-direction: column;
 }
 
-#summary-cards {         /* top of scroll, fixed height via scale */
+#summary-cards {         /* top of scroll, reduced dimensions via calc() */
   flex-shrink: 0;
+  padding: calc(12px * var(--card-scale, 1)) calc(24px * var(--card-scale, 1));
+  gap: calc(12px * var(--card-scale, 1));
 }
 
-.content-panel {         /* fills remaining space */
+.content-panel {         /* fills remaining space, min-height forces scroll */
   flex: 1;
-  min-height: 0;
+  min-height: 300px;
 }
 ```
 
@@ -1003,7 +1007,7 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 | **Cards shown/hidden by setView** | `setView` shows `#summary-cards` (via `.visible` class) before entering chart/grid/histogram views, and hides it before entering waiting/error/info/columns views. |
 | **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto` on `#content-area`). |
 | **No panel visibility toggling** | Renderers draw into their container; `setView` controls which content panel is visible (via `.visible` class). |
-| **Charts/grids fill remaining space** | Content panels have `flex: 1` and `min-height: 0` so their children (chart canvas, grid container) fill the available height. Chart.js and AG Grid are initialized with dimensions from `getBoundingClientRect()`. |
+| **Charts/grids fill remaining space** | Content panels have `flex: 1` and `min-height: 300px` so they maintain a usable minimum height and force `#content-area` to scroll when vertical space is tight. Chart.js and AG Grid are initialized with dimensions from `getBoundingClientRect()`. |
 
 ### 15.6 Histogram Split Mode Display Panel
 
