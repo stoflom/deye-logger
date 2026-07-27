@@ -26,7 +26,8 @@ node_modules/
 deno.lock
 frontend/public/app.js
 backend/node_modules/
-frontend/test/
+# frontend/test/ scripts tracked, screenshots ignored
+frontend/test/screenshots/
 
 # Miscelaneous
 *.txt
