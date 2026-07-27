@@ -1,11 +1,11 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** Draft v2.4 — display panel responsive behavior with summary cards
+> **Status:** v1.4
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
-> **Versioning scheme:** Frontend version is `major.minor.sub-minor`.
-> - **major** — major new features, architectural changes
-> - **minor** — design changes to implement new features or fix design issues
+> **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
+> - **major** — major new features, architectural changes, number must agree with this document major version
+> - **minor** — design changes to implement new features or fix design issues, number must agree with this document minor version
 > - **sub-minor** — bug fixes requiring no design changes
 
 ---
@@ -22,15 +22,18 @@ The application is a single-page app with three vertical regions:
 │  STATE BAR (always visible, persistent)  │
 │  — row count, version badge, status      │
 ├──────────────────────────────────────────┤
-│  CONTENT AREA (controlled by setView)    │
-│  — exactly one panel is visible at once  │
-│    • waiting-view (spinner + text)       │
-│    • error-view (modal with Close btn)   │
-│    • info-view (non-modal info message)  │
-│    • columns-view (selection panel)      │
-│    • data-view (chart/grid/histogram)    │
-│      consists of summary cards at the    │
-│      top followed by a chart or grid.    │
+│  CONTENT AREA (scrollable, controlled    │
+│  by setView)                             │
+│  ┌────────────────────────────────────┐ │
+│  │ Summary Cards (top, always in pane)│ │
+│  ├────────────────────────────────────┤ │
+│  │ ONE visible panel at a time:       │ │
+│  │ • waiting-view (spinner + text)    │ │
+│  │ • error-view (modal with Close btn)│ │
+│  │ • info-view (non-modal info msg)   │ │
+│  │ • columns-view (selection panel)   │ │
+│  │ • data-view (chart/grid/histogram) │ │
+│  └────────────────────────────────────┘ │
 └──────────────────────────────────────────┘
 ```
 
@@ -56,6 +59,17 @@ These objects are **always rendered and visible** regardless of the current view
 
 ### 2.1 Title Bar (`<div class="header">`)
 
+The title bar contains **all application buttons and controls** in a single horizontal area. When horizontal space runs out, buttons **wrap into additional rows** automatically (CSS `flex-wrap: wrap`). The title bar grows vertically as needed to accommodate wrapped rows, pushing the rest of the page content down. This is different from a fixed-height title bar — the title bar height is **dynamic**.
+
+**Button ordering in wrapped rows:** Buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next row. This means the bin-size and split buttons may appear on a second row when the viewport is narrow.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │ ☰ │
+│  📋 Data Grid │ 📊 Histogram │ ⬇ CSV │ Bin: 15 ▼ │ Split │
+└──────────────────────────────────────────────────────────────────┘
+```
+
 | Element | ID | Purpose |
 |---------|-----|---------|
 | `<h1>` | — | App title: "☀️ Deye Logger Viewer" |
@@ -66,6 +80,8 @@ These objects are **always rendered and visible** regardless of the current view
 | View toggle | `#view-toggle` | Toggle between chart ↔ grid (or histogram ↔ histogram-grid) |
 | Histogram button | `#histogram-btn` | Toggle between normal mode and histogram mode |
 | CSV export | `#export-btn` | Export current grid as CSV (hidden in chart views) |
+| Bin size | `#bin-size-select` | Histogram bin size dropdown: `5` / `10` / `15` / `30` / `60` (hidden in non-histogram modes) |
+| Split button | `#split-btn` | Split/combine histogram buttons (visible only in histogram view) |
 
 ### 2.2 Status Bar (`<div class="status-bar">`)
 
@@ -286,9 +302,9 @@ setView(view, opts?)
   │     │     │
   │     │     → (data present — normal path)
   │     │     → waitingView.hide()
+  │     │     → show summary-cards (add .visible class to #summary-cards)
+  │     │     → hide non-data panels (waiting, error, info, columns)
   │     │     → showPanel(view) — show appropriate data-view
-  │     │     → show summary-cards
-  │     │     → show/hide histogram-panel based on histogram mode
   │     │     → buildUrlParams() → history.pushState/replaceState
   │     │     → updateButtonLabels(view, split)
   │     │     → enableAllButtons()
@@ -305,7 +321,7 @@ setView(view, opts?)
         histogramToggleBtn.text/title  ← contextual label
         viewToggleBtn.text/title       ← contextual label
         splitBtn.visible               ← histogram view only
-        histogramPanel.visible         ← histogram modes only
+        binSizeSelect.visible           ← histogram modes only
 ```
 
 ### 6.3 Renderer Contract
@@ -455,6 +471,7 @@ try {
 
 | Variable | DOM ID | Description |
 |----------|--------|-------------|
+| `contentArea` | `#content-area` | Single scrollable content container (wraps summary cards + content panels) |
 | `waitingViewPanel` | `#waiting-view` | Waiting overlay container |
 | `waitingViewTextEl` | `#waiting-text` | Waiting message text element |
 | `errorViewPanel` | `#error-view` | Error modal overlay container |
@@ -463,14 +480,13 @@ try {
 | `infoViewPanel` | `#info-view` | Info message panel container |
 | `infoViewMessageEl` | `#info-message` | Info message content element |
 | `columnsViewPanel` | `#columns-view` | Column selection panel |
-| `histogramPanel` | `#histogram-panel` | Histogram controls (bin-size, split) — always between header and content |
 | `rawDataChartView` | `#raw-data-chart-view` | Raw data line chart container |
 | `rawDataGridView` | `#raw-data-grid-view` | Raw data grid container |
 | `histogramView` | `#histogram-view` | Combined histogram bar chart container |
 | `histogramGridView` | `#histogram-grid-view` | Histogram grid table container |
-| `splitHistogramView` | `#split-histogram-view` | Split histogram scrollable container |
+| `splitHistogramView` | `#split-histogram-view` | Split histogram container |
 | `splitHistogramScroll` | `#split-histogram-scroll` | Inner scroll container for split charts |
-| `summaryCardsPanel` | `#summary-cards` | Summary cards row |
+| `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`) |
 
 ### 8.4 DOM Button/Control References (`shared.ts`)
 
@@ -531,7 +547,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Histogram Toggle | `histogramToggleBtn` | See labels below | Always | Toggle (normal↔histogram mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | CSV Export | `exportCsvBtn` | `⬇ CSV` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
 | Split | `splitBtn` | `Split` / `Combine` | Histogram view only | Toggle (combined↔split) | `histogramIsSplitMode`, URL `?split=1` | `histogramIsSplitMode`, URL `?split=1` | URL-stateful (via `split`) |
-| Bin Size | `binSizeSelect` | `5` / `10` / `15` / `30` / `60` | Histogram mode (in histogram-panel) | Stateless action (triggers re-render) | Current selection | URL `?binSize=N` | URL-stateful (via `binSize`) |
+| Bin Size | `binSizeSelect` | `5` / `10` / `15` / `30` / `60` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?binSize=N` | URL-stateful (via `binSize`) |
 
 #### View Toggle Button Labels (`viewToggleBtn`)
 
@@ -585,7 +601,7 @@ setView("chart")
       → return { ok: true }
   → hidePanel("waiting") → waitingView.hide()
   → showPanel("raw-data-chart")
-  → show summary-cards
+  → show summary-cards (add .visible class to #summary-cards)
   → push URL history
   → enableAllButtons()
 ```
@@ -596,7 +612,6 @@ setView("chart")
 setView("histogram", { split: true })
   → disableAllButtons()
   → showPanel("waiting") → waitingView.show()
-  → show histogram-panel (histogram controls)
   → renderHistogramView(updateWaiting, { split: true })
       → updateWaiting("Fetching histogram data…")
       → GET /api/histogram?from=X&to=Y&columns=...&binMinutes=N
@@ -609,7 +624,7 @@ setView("histogram", { split: true })
       → return { ok: true }
   → hidePanel("waiting")
   → showPanel("split-histogram")
-  → show summary-cards
+  → show summary-cards (add .visible class to #summary-cards)
   → push URL history (?split=1)
   → enableAllButtons()
 ```
@@ -868,22 +883,27 @@ init()
 
 ## 15. Display Panel — Summary Cards + Chart/Grid
 
-Each data view (`chart`, `grid`, `histogram`, `histogram-grid`) renders a **display panel** composed of two sub-sections in a fixed vertical order:
+Each data view (`chart`, `grid`, `histogram`, `histogram-grid`) renders a **display panel** inside the single scrollable content area (`#content-area`). The summary cards are **always at the top** of the scrollable area, followed by exactly one visible content panel (chart, grid, histogram, etc.) below it.
 
 ```
-┌──────────────────────────────────────┐
-│  Summary Cards Bar                   │  ← scrollable with panel, always at top
-│  ┌──────┐ ┌──────┐ ┌──────┐ …       │
-│  │Card 1│ │Card 2│ │Card 3│ …       │
-│  └──────┘ └──────┘ └──────┘         │
-├──────────────────────────────────────┤
-│  Chart or Grid Area                  │  ← scrollable with panel
-│  ┌─────────────────────────────────┐ │
-│  │                                 │ │
-│  │   Chart.js chart or AG Grid     │ │
-│  │                                 │ │
-│  └─────────────────────────────────┘ │
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│  #content-area (single scrollable pane)  │
+│  ┌──────────────────────────────────────┐│
+│  │ Summary Cards Bar (#summary-cards)   ││  ← at top, scrolls with pane
+│  │ ┌──────┐ ┌──────┐ ┌──────┐ …        ││
+│  │ │Card 1│ │Card 2│ │Card 3│ …        ││
+│  │ └──────┘ └──────┘ └──────┘          ││
+│  ├──────────────────────────────────────┤│
+│  │ ONE visible content panel below:     ││
+│  │                                      ││
+│  │   ┌──────────────────────────────┐   ││
+│  │   │   Chart.js chart or AG Grid  │   ││
+│  │   │                              │   ││
+│  │   │                              │   ││
+│  │   └──────────────────────────────┘   ││
+│  │                                      ││
+│  └──────────────────────────────────────┘│
+└──────────────────────────────────────────┘
 ```
 
 ### 15.1 Structure
@@ -910,50 +930,48 @@ Cards are arranged **horizontally** (side by side) when sufficient horizontal sp
 
 ### 15.3 Responsive Behavior
 
-On small displays (narrow viewports), the display panel exhibits the following behavior:
+The display panel is inside the **single scrollable content area** (`#content-area`). The summary cards are **always at the top** of the scroll pane, and the chart/grid area follows below. On all viewport sizes the entire content area is vertically scrollable.
 
-#### 15.3.1 Available Space Competition
+#### 15.3.1 Cards Reduce Actual Dimensions to Save Vertical Space
 
-The display panel has a **fixed height** determined by the content area (full viewport minus title bar and status bar). Both the summary cards bar and the chart/grid area compete for this fixed height:
+When the viewport is narrow and the title bar wraps into multiple rows, less vertical space remains for the content area. The summary cards **reduce their actual layout dimensions** (padding, font-size, gap) via `calc()` multiplied by `--card-scale`. This is NOT `transform: scale()` which would leave invisible layout gaps that overlap the chart area:
 
-- When the viewport height is insufficient, the **summary cards bar consumes all available vertical space**, leaving the chart/grid area with **zero visible height**.
-- This makes the chart or grid **invisible** on small screens unless the user scrolls.
+- **Wide viewports (> 1200px):** Cards display at full size. The content area is large enough that cards + chart fit without scrolling.
+- **Medium viewports (800–1200px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`.
+- **Small viewports (500–800px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards switch to **vertical (stacked) arrangement**, each card taking full width.
+- **Very small viewports (< 500px):** Cards reach minimum scale (`--card-scale: 0.6`). Stacked full-width arrangement.
 
-#### 15.3.2 Cards Scaling
+The transition between horizontal and vertical card arrangements is triggered by CSS media queries (at `600px`).
 
-To mitigate the space competition on small viewports, the summary cards **scale proportionally smaller** as the available height decreases:
+#### 15.3.2 Single Scroll Pane
 
-- **Wide viewports:** Cards display at full size with their default card dimensions.
-- **Medium viewports:** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing.
-- **Small viewports:** Cards reach a **minimum scale** (e.g., 0.5×–0.6× of default size). Font sizes, padding, and icon sizes are all reduced uniformly.
-- **Very small viewports:** Cards switch to a **vertical (stacked) arrangement**, each card taking full width. This allows more cards to be visible within the constrained height.
+The **entire content area** (`#content-area`) is vertically scrollable (`overflow-y: auto`). It contains the summary cards at the top and the active content panel below:
 
-The transition between horizontal and vertical card arrangements is triggered by a CSS media query or a JS-measured container width threshold (e.g., `< 600px`).
-
-#### 15.3.3 Full Panel Scroll
-
-On small screens where the summary cards alone exceed the available height, or where the chart/grid area is pushed below the viewport:
-
-- The **entire display panel** (summary cards bar + chart/grid area) is **vertically scrollable**.
-- Scrolling is enabled via `overflow-y: auto` on the panel's container.
-- The summary cards **remain at the top** of the scrollable area (they are not sticky or fixed). The user scrolls the entire content to reach the chart/grid below.
+- The summary cards are **not sticky or fixed** — they are part of the scroll flow at the very top.
+- To view the chart/grid, the user scrolls the entire content area downward.
+- The chart/grid area always fills the remaining height inside its content panel.
+- Content panels have `min-height: 300px` which forces `#content-area` to show a scrollbar when the viewport is too small.
+- No view has its own nested scrollbar — there is exactly one scroll pane (`#content-area`).
 - Scroll position is **not** preserved across view changes or re-renders.
 
 ```css
-/* Conceptual */
-.raw-data-chart-view,       /* chart container */
-.raw-data-grid-view,        /* grid container */
-.histogram-view,            /* histogram container */
-.histogram-grid-view,       /* histogram grid container */
-.split-histogram-view {    /* split histogram container */
+/* Structure */
+#content-area {          /* single scrollable container */
+  flex: 1;
   overflow-y: auto;
-  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-#summary-cards {
-  flex-shrink: 0;  /* prevent cards from being squished below zero height */
+#summary-cards {         /* top of scroll, reduced dimensions via calc() */
+  flex-shrink: 0;
+  padding: calc(12px * var(--card-scale, 1)) calc(24px * var(--card-scale, 1));
+  gap: calc(12px * var(--card-scale, 1));
+}
+
+.content-panel {         /* fills remaining space, min-height forces scroll */
+  flex: 1;
+  min-height: 300px;
 }
 ```
 
@@ -974,8 +992,8 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 // In setView step 4c (normal render success):
   → waitingView.hide()
   → showPanel(view)                    // show chart/grid/histogram/histogram-grid container
-  → show summary-cards                 // render/update cards into #summary-cards
-  → show/hide histogram-panel          // histogram controls visible only in histogram modes
+  → show #summary-cards (add .visible class)
+  → render/update cards into #summary-cards
   → buildUrlParams() → pushState
   → updateButtonLabels(view, split)
   → enableAllButtons()
@@ -985,41 +1003,51 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 
 | Rule | Detail |
 |------|--------|
-| **Render cards into existing container** | Cards are rendered into `#summary-cards` which exists in the view's DOM skeleton. Cards are **updated** (not recreated from scratch) — existing card elements are reused and their content/visibility adjusted. |
-| **Cards always visible** | The summary cards bar is **never hidden**. It is rendered every time a data view is entered, regardless of data size. |
-| **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto`). |
-| **No panel visibility toggling** | Renderers draw into the container; `setView` controls which container is visible (via `showPanel`). |
+| **Render cards into existing container** | Cards are rendered into `#summary-cards` which is a direct child of `#content-area` (sibling of all content panels). Cards are **updated** (not recreated from scratch) — existing card elements are reused and their content/visibility adjusted. |
+| **Cards shown/hidden by setView** | `setView` shows `#summary-cards` (via `.visible` class) before entering chart/grid/histogram views, and hides it before entering waiting/error/info/columns views. |
+| **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto` on `#content-area`). |
+| **No panel visibility toggling** | Renderers draw into their container; `setView` controls which content panel is visible (via `.visible` class). |
+| **Charts/grids fill remaining space** | Content panels have `flex: 1` and `min-height: 300px` so they maintain a usable minimum height and force `#content-area` to scroll when vertical space is tight. Chart.js and AG Grid are initialized with dimensions from `getBoundingClientRect()`. |
 
 ### 15.6 Histogram Split Mode Display Panel
 
-In split histogram mode (`?split=1`), the display panel has a slightly different structure:
+In split histogram mode (`?split=1`), the display panel structure is the same as other histogram views. Bin-size and split/combine controls are in the **title bar** (not in the display panel), so they scroll independently of the chart area.
 
 ```
-┌──────────────────────────────────────┐
-│  Summary Cards Bar                   │
-│  ┌──────┐ ┌──────┐ ┌──────┐ …       │
-├──────────────────────────────────────┤
-│  Split Histogram Scroll Container    │
-│  ┌─────────────────────────────────┐ │
-│  │  Chart 1                        │ │
-│  ├─────────────────────────────────┤ │
-│  │  Chart 2                        │ │
-│  ├─────────────────────────────────┤ │
-│  │  Chart 3                        │ │
-│  └─────────────────────────────────┘ │
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│  #content-area (single scrollable pane)  │
+│  ┌──────────────────────────────────────┐│
+│  │ Summary Cards Bar (#summary-cards)   ││
+│  │ ┌──────┐ ┌──────┐ ┌──────┐ …        ││
+│  ├──────────────────────────────────────┤│
+│  │ #split-histogram-view                ││
+│  │  ┌───────────────────────────────┐   ││
+│  │  │ #split-histogram-scroll       │   ││  ← inner scroll for charts
+│  │  │ ┌───────────────────────────┐ │   ││
+│  │  │ │  Chart 1                  │ │   ││
+│  │  │ ├───────────────────────────┤ │   ││
+│  │  │ │  Chart 2                  │ │   ││
+│  │  │ ├───────────────────────────┤ │   ││
+│  │  │ │  Chart 3                  │ │   ││
+│  │  │ └───────────────────────────┘ │   ││
+│  │  └───────────────────────────────┘   ││
+│  │                                      ││
+│  └──────────────────────────────────────┘│
+└──────────────────────────────────────────┘
 ```
 
 - Summary cards behave identically to non-split mode.
+- Bin-size and split/combine controls are in the **title bar** (`#bin-size-select`, `#split-btn`) — always visible regardless of scroll position.
 - The chart area contains **multiple charts** (one per metric) instead of a single chart.
-- The scroll container (`#split-histogram-scroll`) holds all individual charts.
+- The scroll container (`#split-histogram-scroll`) holds all individual charts and has its own inner scroll (`overflow-y: auto`) so users can scroll through many charts without moving the summary cards.
 - Responsive behavior (scaling, vertical stacking, scroll) applies the same way.
+- The outer `#content-area` scroll is also available as a fallback for smaller viewports.
 
 ---
 
 ## 16. Issues to Consider
 
-### 15.1 cleanupSplitMode() DOM Manipulation
+### 16.1 cleanupSplitMode() DOM Manipulation
 
 **Current behavior:** `cleanupSplitMode()` calls `splitHistogramView.classList.remove("visible")` inside `histogram-chart.ts`.
 
@@ -1029,7 +1057,7 @@ In split histogram mode (`?split=1`), the display panel has a slightly different
 
 **Recommendation:** Keep current behavior. The redundant class removal is harmless and acts as defensive cleanup. If future work removes the call from `setView`, `cleanupSplitMode()` already handles visibility correctly.
 
-### 15.2 Chart.js Instance Destruction Timing
+### 16.2 Chart.js Instance Destruction Timing
 
 **Current behavior:** `cleanupSplitMode()` destroys Chart.js instances (`histogramSplitChartInstances`) before `setView` hides the panel in step 2.
 
@@ -1041,7 +1069,7 @@ In split histogram mode (`?split=1`), the display panel has a slightly different
 
 **Recommendation:** Keep current behavior. The waiting-view overlay prevents visible flicker. If future work changes the z-index or timing, consider deferring chart destruction to after `hideAllDataPanels()`.
 
-### 15.3 updateNavButtonStates() in renderRefreshView
+### 16.3 updateNavButtonStates() in renderRefreshView
 
 **Current behavior:** `renderRefreshView()` calls `updateNavButtonStates()` after fetching new date bounds, before the recursive `setView` call.
 

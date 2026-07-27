@@ -5,7 +5,7 @@
 
 /// <reference lib="dom" />
 
-export const FRONTEND_VERSION = "1.3.2";
+export const FRONTEND_VERSION = "1.4.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -51,12 +51,6 @@ import {
   saveSelectedColumnNames,
   ViewMode,
   RenderOk,
-  summaryCardsPanel,
-  rawDataChartView,
-  rawDataGridView,
-  histogramView,
-  histogramGridView,
-  splitHistogramView,
 } from "./shared";
 
 import { renderRawDataChart, updateSummaryCards } from "./chart";
@@ -253,7 +247,7 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   splitBtn.textContent = isSplit ? "Combine" : "Split";
   splitBtn.title = isSplit ? "Combine columns into single chart" : "Split columns into individual charts";
 
-  // Histogram panel — visible in histogram modes
+  // Histogram controls — visible in histogram modes
   if (isHistogramMode) {
     showHistogramPanel();
   } else {
@@ -374,26 +368,16 @@ async function setView(
     waitingView.hide();
 
     // Show appropriate panel
-    let targetPanel: HTMLElement | undefined;
     if (view === "chart") {
       showPanel("raw-data-chart");
-      targetPanel = rawDataChartView;
     } else if (view === "grid") {
       showPanel("raw-data-grid");
-      targetPanel = rawDataGridView;
     } else if (view === "histogram-grid") {
       showPanel("histogram-grid");
-      targetPanel = histogramGridView;
     } else if (view === "histogram" && split) {
       showPanel("split-histogram");
-      targetPanel = splitHistogramView;
     } else if (view === "histogram") {
       showPanel("histogram");
-      targetPanel = histogramView;
-    }
-
-    if (targetPanel) {
-      targetPanel.prepend(summaryCardsPanel);
     }
 
     showSummaryCards();

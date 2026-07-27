@@ -9,7 +9,7 @@
 </head>
 <body>
   <!-- ============================================================
-       TITLE BAR — always visible
+       TITLE BAR — always visible, persistent
        ============================================================ -->
   <div class="header">
     <h1>☀️ <span>Deye</span> Logger Viewer</h1>
@@ -27,30 +27,26 @@
       <button class="btn-view" id="view-toggle" title="Switch between view modes">📊 Data Grid</button>
       <button class="btn-view" id="histogram-btn" title="Show binned average histogram">📊 Histogram</button>
       <button class="btn-export" id="export-btn" style="display:none" title="Export data as CSV">⬇ CSV</button>
-    </div>
-  </div>
 
-  <!-- ============================================================
-       HISTOGRAM PANEL — visible only in histogram modes
-       ============================================================ -->
-  <div class="histogram-panel" id="histogram-panel">
-    <div class="histogram-panel-header">
-      <label for="bin-size-select">Bin size</label>
-      <div style="display:flex;gap:6px;align-items:center">
-        <select id="bin-size-select">
-          <option value="5">5 min</option>
-          <option value="10">10 min</option>
-          <option value="15" selected>15 min</option>
-          <option value="30">30 min</option>
-          <option value="60">1 hour</option>
-        </select>
-        <button class="btn-secondary-sm" id="split-btn" title="Split into individual charts">Split</button>
+      <!-- Histogram controls — visible only in histogram modes -->
+      <div class="histogram-controls" id="histogram-controls" style="display:none">
+        <div class="histogram-control-group">
+          <label for="bin-size-select">Bin size</label>
+          <select id="bin-size-select">
+            <option value="5">5 min</option>
+            <option value="10">10 min</option>
+            <option value="15" selected>15 min</option>
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+          </select>
+        </div>
+        <button class="btn-view" id="split-btn" title="Split into individual charts">Split</button>
       </div>
     </div>
   </div>
 
   <!-- ============================================================
-       STATE BAR — always visible
+       STATE BAR — always visible, persistent
        ============================================================ -->
   <div class="status-bar">
     <span id="row-count"></span>
@@ -60,71 +56,76 @@
   </div>
 
   <!-- ============================================================
-       SUMMARY CARDS — single instance, moved into panels by app.ts
+       CONTENT AREA — single scrollable container
+       Wraps summary cards (top) + one visible content panel
+       Managed exclusively by setView()
        ============================================================ -->
-  <div class="summary-cards" id="summary-cards"></div>
+  <div id="content-area" class="content-area">
 
-  <!-- ============================================================
-       CONTENT AREA — exactly one panel visible at a time
-       ============================================================ -->
+    <!-- Summary cards — shown with data views, always at top -->
+    <div class="summary-cards" id="summary-cards"></div>
 
-  <!-- Waiting view -->
-  <div id="waiting-view" class="content-panel">
-    <div class="waiting-content">
-      <div class="spinner"></div>
-      <div id="waiting-text">Loading…</div>
+    <!-- Waiting view — spinner + text, shown during all async operations -->
+    <div id="waiting-view" class="content-panel">
+      <div class="waiting-content">
+        <div class="spinner"></div>
+        <div id="waiting-text">Loading…</div>
+      </div>
     </div>
-  </div>
 
-  <!-- Error view -->
-  <div id="error-view" class="content-panel error-overlay">
-    <div class="error-content">
-      <h2>⚠️ Error</h2>
-      <p id="error-message"></p>
-      <button id="error-close-btn" title="Close and return to previous page">Close</button>
+    <!-- Error view — modal overlay with Close button -->
+    <div id="error-view" class="content-panel error-overlay">
+      <div class="error-content">
+        <h2>⚠️ Error</h2>
+        <p id="error-message"></p>
+        <button id="error-close-btn" title="Close and return to previous page">Close</button>
+      </div>
     </div>
-  </div>
 
-  <!-- Info view -->
-  <div id="info-view" class="content-panel">
-    <div class="info-content">
-      <div class="info-icon">ℹ️</div>
-      <div id="info-message"></div>
+    <!-- Info view — non-modal info message panel (transient) -->
+    <div id="info-view" class="content-panel">
+      <div class="info-content">
+        <div class="info-icon">ℹ️</div>
+        <div id="info-message"></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Columns view -->
-  <div id="columns-view" class="content-panel">
-    <div id="columns-view-inner"></div>
-  </div>
-
-  <!-- Raw data chart view -->
-  <div id="raw-data-chart-view" class="content-panel raw-data-chart-view">
-    <div class="chart-canvas-wrap">
-      <canvas id="chart-canvas"></canvas>
+    <!-- Columns view — column selection panel (transient) -->
+    <div id="columns-view" class="content-panel">
+      <div id="columns-view-inner"></div>
     </div>
-  </div>
 
-  <!-- Raw data grid view -->
-  <div id="raw-data-grid-view" class="content-panel raw-data-grid-view">
-    <div id="grid-container" class="ag-theme-quartz"></div>
-  </div>
-
-  <!-- Histogram combined view -->
-  <div id="histogram-view" class="content-panel histogram-view">
-    <div class="chart-canvas-wrap">
-      <canvas id="histogram-canvas"></canvas>
+    <!-- Raw data chart view -->
+    <div id="raw-data-chart-view" class="content-panel raw-data-chart-view visible">
+      <div class="chart-canvas-wrap">
+        <canvas id="chart-canvas"></canvas>
+      </div>
     </div>
-  </div>
 
-  <!-- Histogram grid view -->
-  <div id="histogram-grid-view" class="content-panel histogram-grid-view">
-    <div id="histogram-grid-container" class="ag-theme-quartz"></div>
-  </div>
+    <!-- Raw data grid view -->
+    <div id="raw-data-grid-view" class="content-panel raw-data-grid-view">
+      <div id="grid-container" class="ag-theme-quartz"></div>
+    </div>
 
-  <!-- Split histogram view -->
-  <div id="split-histogram-view" class="content-panel split-histogram-view">
-    <div id="split-histogram-scroll"></div>
+    <!-- Histogram combined view -->
+    <div id="histogram-view" class="content-panel histogram-view">
+      <div class="chart-canvas-wrap">
+        <canvas id="histogram-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Histogram grid view -->
+    <div id="histogram-grid-view" class="content-panel histogram-grid-view">
+      <div id="histogram-grid-container" class="ag-theme-quartz"></div>
+    </div>
+
+    <!-- Split histogram view -->
+    <div id="split-histogram-view" class="content-panel split-histogram-view">
+      <div id="split-histogram-scroll">
+        <!-- Individual histogram canvases go here -->
+      </div>
+    </div>
+
   </div>
 
   <script type="module" src="/app.js"></script>
