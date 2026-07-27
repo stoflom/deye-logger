@@ -239,7 +239,19 @@ body {
 }
 
 /* ============================================================
-   CONTENT PANELS — mutual exclusion
+   CONTENT AREA — single scrollable container
+   Wraps summary cards (top) + one visible content panel
+   ============================================================ */
+.content-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ============================================================
+   CONTENT PANELS — mutual exclusion (inside content-area)
    ============================================================ */
 .content-panel {
   display: none;
@@ -460,6 +472,7 @@ body {
 
 /* ============================================================
    SUMMARY CARDS — responsive scaling and stacking
+   Lives inside .content-area, always at top of scrollable pane.
    Cards scale smaller as available height decreases,
    then switch to vertical arrangement on narrow screens.
    ============================================================ */
@@ -511,14 +524,10 @@ body {
 }
 
 /* ============================================================
-   CONTENT PANELS — scrollable on small screens
-   Each data-view container is vertically scrollable so that
-   when cards consume height, the chart/grid remains reachable.
+   CONTENT PANELS — mutual exclusion (inside scrollable area)
    ============================================================ */
 .content-panel {
   display: none;
-  flex-direction: column;
-  overflow-y: auto;
   flex: 1;
   min-height: 0;
 }
