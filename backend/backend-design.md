@@ -70,7 +70,7 @@ This allows the server to serve the complete frontend SPA without a separate web
 
 All telemetry column names and their human-readable labels are defined in a single source-of-truth record `COLUMN_LABELS` in `main.ts`. This record maps internal column names (matching database columns) to display labels with units.
 
-Available columns (43 total):
+Available columns (49 total):
 
 | Column Key | Display Label |
 |------------|---------------|
@@ -92,6 +92,7 @@ Available columns (43 total):
 | `pv2_voltage` | PV2 Voltage (V) |
 | `pv2_current` | PV2 Current (A) |
 | `pv2_power` | PV2 Power (W) |
+| `load_power` | Load Power (W) |
 | `pv3_voltage` | PV3 Voltage (V) |
 | `pv3_current` | PV3 Current (A) |
 | `pv3_power` | PV3 Power (W) |
@@ -124,18 +125,9 @@ Available columns (43 total):
 
 ### 1.5 Database
 
-The SQLite database (`deye_solar_data.db`) is opened in **read-only mode**. The server creates a prepared statement cache on first query. The database is re-opened after a refresh operation to pick up newly imported data.
+The SQLite database (`deye_solar_data.db`) is opened in **read-only mode**. The server creates a prepared statement cache on first query. The database is re-opened after a refresh operation (`POST /api/refresh`) to pick up newly imported data.
 
-#### Database Schema
-
-| Table | Purpose |
-|-------|---------|
-| `inverter_telemetry` | Main telemetry data, primary key on `device_timestamp` |
-| `gap_attempts` | Tracks gap-filling attempts between date ranges |
-| `spurious_records` | Records identified as spurious/invalid API responses |
-| `_schema_migrations` | Schema migration tracking |
-
-The `inverter_telemetry` table has a primary key on `device_timestamp` (TEXT), an index on `device_timestamp`, and an index on `complete`.
+The backend only reads the `inverter_telemetry` table (primary key on `device_timestamp` TEXT, indexed). Other tables (`gap_attempts`, `spurious_records`, `_schema_migrations`) exist in the same database file but are created and managed exclusively by the Python data ingestion script — see [deye-cloud-design.md](../deye-cloud/deye-cloud-design.md).
 
 ---
 
@@ -346,22 +338,12 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
     {
       "label": "Daily Energy (kWh)",
       "data": [10.2, 10.5, 10.8, 11.0, 11.3, ...],
-      "color": "#3182ce",
-      "unit": "kWh",
-      "yAxisID": "y-0",
-      "position": "left",
-      "max": 15.2,
-      "maxTimestamp": "14:30"
+      "unit": "kWh"
     },
     {
       "label": "Battery SOC (%)",
       "data": [50.0, 52.1, 54.3, 55.0, 56.2, ...],
-      "color": "#e53e3e",
-      "unit": "%",
-      "yAxisID": "y-0",
-      "position": "left",
-      "max": 85.0,
-      "maxTimestamp": "18:45"
+      "unit": "%"
     }
   ],
   "maxValues": {
@@ -377,27 +359,10 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 |-------|------|-------------|
 | `labels` | string[] | Time labels for each bin in `HH:MM` format (e.g., `["00:00", "00:15", "00:30"]`) |
 | `datasets` | object[] | One dataset per numeric column (metadata columns like `device_timestamp`, `inverter_sn`, `fetch_timestamp` are excluded). Each dataset contains: |
-| `datasets[].label` | string | Human-readable column label |
-| `datasets[].data` | (number\|null)[] | Averaged values for each bin. `null` if no data for that bin. |
-| `datasets[].color` | string | Hex color from the palette |
-| `datasets[].unit` | string | Unit extracted from the label (e.g., `"kWh"`, `"%"`) |
-| `datasets[].yAxisID` | string | Chart.js axis ID (`y-0`, `y-1`, `yR-0`, etc.) based on unit grouping |
-| `datasets[].position` | string | `"left"` or `"right"` for Chart.js |
-| `datasets[].max` | number\|null | Maximum averaged value across all bins |
-| `datasets[].maxTimestamp` | string\|null | Time label where the maximum occurs |
-| `maxValues` | object | Map of label → `{ value, timestamp }` for peak display in summary cards |
-
-**Column-to-Axis Assignment:**
-- Up to **2 units** are assigned to the **left** y-axis (`y-0`, `y-1`).
-- Additional units are assigned to **right** y-axes (`yR-0`, `yR-1`, ...).
-- Unit is extracted from the label text within parentheses (e.g., `"kWh"` from `"Daily Energy (kWh)"`).
-
-**Color Palette** (15 colors, reused cyclically):
-```
-#3182ce, #e53e3e, #38a169, #d69e2e, #805ad5,
-#dd6b20, #319795, #d53f8c, #2b6cb0, #c53030,
-#276749, #b7791f, #6b46c1, #c05621, #285e61
-```
+| `datasets[].label` | string | Human-readable column label (from `COLUMN_LABELS`) |
+| `datasets[].data` | number[] | Averaged values for each bin. No `null` values — only bins with data for that column are included. |
+| `datasets[].unit` | string | Unit extracted from the column label (text within parentheses, e.g., `"kWh"` from `"Daily Energy (kWh)"`). Returns `""` if no unit. |
+| `maxValues` | object | Map of column label → `{ value: number, timestamp: string }` for peak display in summary cards. Only includes columns that had numeric data. |
 
 **Empty Response:**
 If no data or no numeric columns are found, returns:
@@ -515,9 +480,9 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
            ↓
        Compute per-bin average for each numeric column
            ↓
-       Assign units to axes (left: first 2 unique units, right: rest)
+       Extract units from column labels
            ↓
-       Build datasets with labels, colors, axis IDs, max values
+       Compute per-column max values (value + timestamp)
            ↓
        Return { labels, datasets, maxValues }
 ```
@@ -548,3 +513,11 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
 | Version | Date | Description |
 |---------|------|-------------|
 | 1.2 | 2025-07-28 | Initial design document — all current API endpoints, column schema, histogram logic |
+
+## 9. Change Management
+
+This section tracks changes to the design document itself. Every modification to this document must be recorded below.
+
+| Version | Date | Section Changed | Description |
+|---------|------|----------------|-------------|
+| 1.2 | 2025-07-28 | §1.4, §1.5, §2.6, §5.3 | Initial — API endpoints, column labels, histogram flow |

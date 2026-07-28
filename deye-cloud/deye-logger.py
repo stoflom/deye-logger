@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # ==================== CONFIGURATION ====================
+SCRIPT_VERSION = "1.0.0"
+# Major.minor must agree qith deye-cloud-design.md
 # Fallback default: database in the same directory as the script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB_NAME = os.path.join(SCRIPT_DIR, "deye_solar_data.db")

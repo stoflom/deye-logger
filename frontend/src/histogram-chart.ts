@@ -37,11 +37,8 @@ export let histogramMaxAverageValues: Map<string, { value: number; timestamp: st
 // ------------------------------------------------------------------
 interface HistogramDataset {
   label: string;
-  data: (number | null)[];
-  color: string;
+  data: number[];
   unit: string;
-  yAxisID: string;
-  position: string;
 }
 
 export interface HistogramResponse {
@@ -58,6 +55,55 @@ function waitForFrame(): Promise<void> {
 }
 
 export const isSplitModeActive = () => histogramIsSplitMode;
+
+// ------------------------------------------------------------------
+// Color palette — shared with chart.ts for consistent rendering
+// ------------------------------------------------------------------
+const PALETTE = [
+  "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
+  "#dd6b20", "#319795", "#d53f8c", "#2b6cb0", "#c53030",
+  "#276749", "#b7791f", "#6b46c1", "#c05621", "#285e61",
+  "#97266d",
+];
+
+// ------------------------------------------------------------------
+// Build unit-to-axis mapping from datasets
+// First two unique units → left axes (y-0, y-1), remaining → right axes (yR-0, yR-1, …)
+// ------------------------------------------------------------------
+function buildUnitAxisMap(datasets: HistogramDataset[]): { yAxisID: Record<string, string>; position: Record<string, string>; } {
+  const yAxisID: Record<string, string> = {};
+  const position: Record<string, string> = {};
+  let leftCount = 0;
+  let rightCount = 0;
+
+  for (const ds of datasets) {
+    const unit = ds.unit;
+    if (!(unit in yAxisID)) {
+      const axisId = leftCount < 2 ? `y-${leftCount}` : `yR-${rightCount}`;
+      const pos = leftCount < 2 ? "left" : "right";
+      yAxisID[unit] = axisId;
+      position[unit] = pos;
+      if (leftCount < 2) leftCount++; else rightCount++;
+    }
+  }
+  return { yAxisID, position };
+}
+
+// ------------------------------------------------------------------
+// Enrich datasets with display fields (color, yAxisID, position)
+// computed locally from unit — backend only provides data + unit.
+// ------------------------------------------------------------------
+type EnrichedDataset = HistogramDataset & { color: string; yAxisID: string; position: string; };
+
+function enrichDatasets(datasets: HistogramDataset[]): EnrichedDataset[] {
+  const { yAxisID, position } = buildUnitAxisMap(datasets);
+  return datasets.map((ds, i) => ({
+    ...ds,
+    color: PALETTE[i % PALETTE.length],
+    yAxisID: yAxisID[ds.unit] ?? "y-0",
+    position: position[ds.unit] ?? "left",
+  }));
+}
 
 // ------------------------------------------------------------------
 // Fetch histogram data from backend. Pure data fetcher — no rendering.
@@ -145,7 +191,10 @@ export async function renderHistogramChart(updateWaiting: (text: string) => void
     },
   };
 
-  for (const ds of result.datasets) {
+  // Enrich datasets with display fields computed from unit
+  const enriched = enrichDatasets(result.datasets);
+
+  for (const ds of enriched) {
     if (!(ds.yAxisID in scales)) {
       scales[ds.yAxisID] = {
         position: ds.position,
@@ -175,7 +224,7 @@ export async function renderHistogramChart(updateWaiting: (text: string) => void
     type: "bar",
     data: {
       labels: result.labels,
-      datasets: result.datasets.map((ds) => ({
+      datasets: enriched.map((ds) => ({
         label: ds.label,
         data: ds.data,
         backgroundColor: ds.color + "80",
@@ -273,10 +322,11 @@ export async function showSplitHistogram(): Promise<RenderOk> {
   // Clear scroll container
   splitHistogramScroll.innerHTML = "";
 
-  // Build a lookup from raw column name to dataset
-  const colDatasetMap = new Map<string, HistogramDataset>();
-  for (let i = 0; i < histogramLastColumnNames.length && i < result.datasets.length; i++) {
-    colDatasetMap.set(histogramLastColumnNames[i], result.datasets[i]);
+  // Build a lookup from raw column name to enriched dataset
+  const enriched = enrichDatasets(result.datasets);
+  const colDatasetMap = new Map<string, EnrichedDataset>();
+  for (let i = 0; i < histogramLastColumnNames.length && i < enriched.length; i++) {
+    colDatasetMap.set(histogramLastColumnNames[i], enriched[i]);
   }
 
   // Create one chart per column
@@ -348,7 +398,7 @@ export async function showSplitHistogram(): Promise<RenderOk> {
         return new Chart(canvas, {
           type: "bar",
           data: {
-            labels: result!.labels,
+            labels: enriched!.labels,
             datasets: [
               {
                 label: dataset.label,

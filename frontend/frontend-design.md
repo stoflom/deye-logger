@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v1.5
+> **Status:** v1.6
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -1080,3 +1080,14 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 **Mitigation:** The recursive `setView` call re-enables all controls in step 4c, which includes calling `updateNavButtonStates()`. So the call in `renderRefreshView` is redundant. **Removing it is safe** as long as `setView` always calls `updateNavButtonStates()` in step 4c.
 
 **Recommendation:** Currently removed from `renderRefreshView` in favor of `setView` handling it. Monitor for any edge cases where date bounds update but `setView` doesn't run (e.g., error path after successful refresh).
+
+---
+
+## 17. Change Management
+
+This section tracks changes to the design document itself. Every modification to this document must be recorded below.
+
+| Version | Date | Section Changed | Description |
+|---------|------|----------------|-------------|
+| 1.5 | 2025-07-28 | §1, §2, §3, §6, §8, §9, §10, §15 | Initial — full SPA architecture, URL state, setView lifecycle, responsive layout |
+| 1.6 | 2025-07-28 | §4, §11 | Moved histogram display concerns (color, axis assignment, yAxisID, position) from backend to frontend — backend only serves data + unit; frontend computes display fields locally |
