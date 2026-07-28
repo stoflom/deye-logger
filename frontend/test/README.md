@@ -15,6 +15,8 @@ Browser-based UI tests for the Deye Logger Viewer frontend using **Selenium + Fi
    ```
    This provides the `FirefoxTester` class (see `SKILL.md` in that directory).
 
+   The skill source code is available on GitHub: <https://github.com/stoflom/pi-skills>.
+
    The test script auto-discovers it via:
    ```python
    skill_path = "/home/stoflom/.pi/agent/skills/firefox-testing"
