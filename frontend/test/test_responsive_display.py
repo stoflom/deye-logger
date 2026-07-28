@@ -16,6 +16,7 @@ Screenshots are saved to frontend/test/screenshots/
 import sys
 import os
 import time
+from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
 
 # Add the skill directory to sys.path to allow importing
 skill_path = "/home/stoflom/.pi/agent/skills/firefox-testing"
@@ -29,6 +30,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
+TEST_DATE = "2026-07-27"  # Date with actual data
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 VIEWPORTS = {
     "wide": (1440, 900),
@@ -54,7 +56,10 @@ def take_screenshot(tester, filename, description=""):
 
 def set_view(tester, view_mode):
     """Set view mode via URL and wait for content."""
-    tester.navigate(f"{BASE_URL}/?view={view_mode}")
+    from urllib.parse import urlencode
+    params = {"date": TEST_DATE, "view": view_mode}
+    url = f"{BASE_URL}/?{urlencode(params)}"
+    tester.navigate(url)
     tester.wait_for_element(By.ID, "summary-cards")
     time.sleep(0.5)
 
@@ -396,7 +401,9 @@ def main():
     with FirefoxTester(headless=True) as tester:
         # Verify server is running
         print("[Setup] Checking if server is running...")
-        tester.navigate(BASE_URL)
+        from urllib.parse import urlencode
+        params = {"date": TEST_DATE}
+        tester.navigate(f"{BASE_URL}/?{urlencode(params)}")
         title = tester.get_title()
         print(f"  ✓ Server running, page title: {title}")
 
