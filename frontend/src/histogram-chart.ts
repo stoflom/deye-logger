@@ -398,7 +398,7 @@ export async function showSplitHistogram(): Promise<RenderOk> {
         return new Chart(canvas, {
           type: "bar",
           data: {
-            labels: enriched!.labels,
+            labels: result.labels,
             datasets: [
               {
                 label: dataset.label,
