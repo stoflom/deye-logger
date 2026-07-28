@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v1.6
+> **Status:** v1.7
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -937,8 +937,8 @@ The display panel is inside the **single scrollable content area** (`#content-ar
 When the viewport is narrow and the title bar wraps into multiple rows, less vertical space remains for the content area. The summary cards **reduce their actual layout dimensions** (padding, font-size, gap) via `calc()` multiplied by `--card-scale`. This is NOT `transform: scale()` which would leave invisible layout gaps that overlap the chart area:
 
 - **Wide viewports (> 1200px):** Cards display at full size. The content area is large enough that cards + chart fit without scrolling.
-- **Medium viewports (800–1200px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`.
-- **Small viewports (500–800px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards switch to **vertical (stacked) arrangement**, each card taking full width.
+- **Medium viewports (800–1200px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`. Cards arrange in **3 columns**.
+- **Small viewports (500–800px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards arrange in **2 columns**.
 - **Very small viewports (< 500px):** Cards reach minimum scale (`--card-scale: 0.6`). Stacked full-width arrangement.
 
 The transition between horizontal and vertical card arrangements is triggered by CSS media queries (at `600px`).
@@ -979,10 +979,10 @@ The **entire content area** (`#content-area`) is vertically scrollable (`overflo
 
 | Breakpoint | Cards Layout | Scroll | Chart/Grid Visibility |
 |-----------|-------------|--------|----------------------|
-| `> 1200px` | Horizontal, full size | No (fits) | Always visible |
-| `800px – 1200px` | Horizontal, scaled down | Conditional | Visible |
-| `500px – 800px` | Vertical (stacked), scaled down | Yes | Hidden by scroll |
-| `< 500px` | Vertical (stacked), min scale | Yes | Hidden by scroll |
+| `> 1200px` | Horizontal, full size, auto-fit | No (fits) | Always visible |
+| `800px – 1200px` | Horizontal, scaled down, 3 columns | Conditional | Visible |
+| `500px – 800px` | Horizontal, scaled down, 2 columns | Yes | Hidden by scroll |
+| `< 500px` | Stacked, min scale | Yes | Hidden by scroll |
 
 ### 15.5 setView Integration
 
@@ -1091,3 +1091,4 @@ This section tracks changes to the design document itself. Every modification to
 |---------|------|----------------|-------------|
 | 1.5 | 2025-07-28 | §1, §2, §3, §6, §8, §9, §10, §15 | Initial — full SPA architecture, URL state, setView lifecycle, responsive layout |
 | 1.6 | 2025-07-28 | §4, §11 | Moved histogram display concerns (color, axis assignment, yAxisID, position) from backend to frontend — backend only serves data + unit; frontend computes display fields locally |
+| 1.7 | 2025-07-28 | §15.3.1, §15.4, style.css | Summary cards use 3 columns at 800–1200px and 2 columns at 500–800px instead of 2 columns and stacked layout — prevents cards from growing to 100% horizontal width on small displays |
