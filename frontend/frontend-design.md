@@ -553,7 +553,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 
 | `appState.activeView` | Button Text | Button Title | Toggles To |
 |----------------------|------------|-------------|------------|
-| `chart` | `💫 Data Grid` | "Switch to data grid" | `grid` |
+| `chart` | `📋 Data Grid` | "Switch to data grid" | `grid` |
 | `grid` | `📈 Chart` | "Switch to chart" | `chart` |
 | `histogram` | `📊 Histogram Grid` | "Switch to histogram grid" | `histogram-grid` |
 | `histogram-grid` | `📈 Histogram Chart` | "Switch to histogram chart" | `histogram` |
@@ -564,8 +564,8 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 |----------------------|------------|-------------|------------|
 | `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
 | `grid` | `📊 Histogram Grid` | "Show binned average histogram grid" | `histogram-grid` |
-| `histogram` | `💫 Raw Chart` | "Switch back to raw data chart" | `chart` |
-| `histogram-grid` | `💫 Raw Grid` | "Switch back to raw data grid" | `grid` |
+| `histogram` | `📋 Raw Chart` | "Switch back to raw data chart" | `chart` |
+| `histogram-grid` | `📋 Raw Grid` | "Switch back to raw data grid" | `grid` |
 
 #### Columns Toggle Button Labels (`columnsToggleBtn`)
 
