@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v1.4
+> **Status:** v1.8
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -819,7 +819,52 @@ When a data renderer succeeds but returns zero rows, the following messages are 
 | histogram | any | "No histogram data available for the selected date range. Click **Refresh** to sync from the inverter, or select a different date." |
 | histogram-grid | any | Same as histogram |
 
-### 14.3 Future Use Cases
+### 14.3 Init Procedure — Immediate Waiting View
+
+On initial page load the browser must show visual feedback **before** any async metadata is fetched. The init procedure follows this exact sequence:
+
+```
+Page loaded
+  → document ready (DOMContentLoaded or module evaluated)
+  → Synchronously: show waiting-view with text "Loading…"
+  → Title bar is already rendered (in HTML) — always visible
+  → Status bar is already rendered (in HTML) — always visible (empty state OK)
+  → Concurrent async fetches:
+    ├─ GET /api/version → versionBadgeEl
+    ├─ GET /api/columns → appState.columnMetadata
+    └─ GET /api/dates → min/max available dates, updateNavButtonStates()
+  → All metadata fetched → call setView(view, { replace: true, split })
+    → setView's step 2: waiting-view already visible → show() is idempotent
+    → Normal render path (fetch data, draw chart/grid, etc.)
+    → On success: waiting-view hidden, data view shown
+    → On error: waiting-view hidden, error-view shown
+```
+
+**Key properties:**
+- The waiting-view is shown **synchronously** (no `await`), before any `fetch()` calls. This ensures the user never sees a blank page.
+- Title bar and status bar are **already in the HTML** and rendered immediately by the browser — no JS needed.
+- `setView()`'s step 2 (`waitingView.show()`) is called again after metadata loads. This call is **idempotent** — if the waiting-view is already visible, showing it again is a no-op.
+- The waiting-view text during `init()` is the default "Loading…". During `setView()` rendering, it transitions to "Fetching data…", "Drawing chart…", etc.
+
+**Error handling during init:**
+- If any metadata fetch fails (version, columns, dates), the fetch is **silently skipped** (try/catch). The app continues to `setView()` with available data.
+- If the final `setView()` call fails (data fetch error), the normal error-view path is followed.
+
+#### 14.3.1 Init Flow Summary
+
+| Phase | Action | Waiting View? | Async? |
+|-------|--------|---------------|--------|
+| 1 | Parse URL parameters | No | Sync |
+| 2 | Show waiting-view ("Loading…") | **Yes** | Sync |
+| 3a | Load `/api/version` | Yes (still) | Async |
+| 3b | Load `/api/columns` | Yes (still) | Async |
+| 3c | Load `/api/dates` | Yes (still) | Async |
+| 4 | Call `setView(view, opts)` | Yes (idempotent show) | Async |
+| 5a | Fetch data + render | Yes (updates text) | Async |
+| 5b | Success → hide waiting, show data | No | Async |
+| 5c | Error → hide waiting, show error | No | Async |
+
+### 14.4 Future Use Cases
 
 The info-view is intentionally general-purpose. Planned future uses include:
 - **About dialog:** Application version, credits, usage info
@@ -829,7 +874,7 @@ The info-view is intentionally general-purpose. Planned future uses include:
 
 Any caller can invoke `infoView.show(message)` to display content. The panel is controlled via `setView()` using a sentinel view value or a dedicated `info` option.
 
-### 14.4 Integration with setView
+### 14.5 Integration with setView
 
 The info-view is shown by `setView` step 4 when data is empty. It can also be shown programmatically via:
 
@@ -841,18 +886,17 @@ showPanel("info");
 
 When the user interacts with any title-bar control while info-view is shown, `setView()` runs its normal lifecycle (waiting-view → render → result) and replaces the info-view.
 
-### 14.5 Initial Load with No Data
+### 14.6 Initial Load with No Data
 
-If the URL points to a date with no data, `init()` → `setView()` follows the normal empty-data path:
+When `init()` (see §14.3) finishes loading metadata and calls `setView()`, the normal empty-data flow applies. The only difference from the normal case is that the waiting-view is **already visible** from init (step 2 of §14.3), so `setView()`'s step 2 (`waitingView.show()`) is idempotent.
 
 ```
-init()
+init() (§14.3)
   → parse URL parameters
-  → load /api/version → versionBadgeEl
-  → load /api/columns → appState.columnMetadata (for UI consistency on load)
-  → load /api/dates → min/max available dates
-  → call setView(view, { replace: true }) with date that has no data
-      → waiting-view shown
+  → show waiting-view ("Loading…")    ← §14.3 step 2
+  → load /api/version, /api/columns, /api/dates  ← §14.3 step 3
+  → call setView(view, { replace: true, split })  ← §14.3 step 4
+      → setView step 2: waiting-view.show() (idempotent)
       → fetch data → 0 rows
       → infoView.show(noDataMessage)
       → showPanel("info")
@@ -865,16 +909,18 @@ The URL is **not** changed or pushed. The user sees the info message and can:
 2. Change dates via nav buttons or date pickers
 3. Toggle view mode (useless but harmless — will re-fetch)
 
-### 14.6 Normal Initial Load
+### 14.7 Normal Initial Load
 
 ```
-init()
+init() (§14.3)
   → parse URL parameters
+  → show waiting-view ("Loading…")    ← §14.3 step 2
   → load /api/version → versionBadgeEl
   → load /api/columns → appState.columnMetadata (ensures columnMetadata available for all UI operations)
   → load /api/dates → min/max available dates, updateNavButtonStates()
-  → call setView(urlState.view, { replace: true, split: urlState.isSplit })
+  → call setView(urlState.view, { replace: true, split: urlState.isSplit })  ← §14.3 step 4
       → Normal render flow (see setView() lifecycle in §10.1–10.3)
+      → waiting-view.text updates: "Fetching data…" → "Drawing chart…"
       → Data renders using appState.selectedColumnNames (from localStorage)
       → Columns panel will have metadata available if user clicks Select
 ```
@@ -1080,3 +1126,16 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 **Mitigation:** The recursive `setView` call re-enables all controls in step 4c, which includes calling `updateNavButtonStates()`. So the call in `renderRefreshView` is redundant. **Removing it is safe** as long as `setView` always calls `updateNavButtonStates()` in step 4c.
 
 **Recommendation:** Currently removed from `renderRefreshView` in favor of `setView` handling it. Monitor for any edge cases where date bounds update but `setView` doesn't run (e.g., error path after successful refresh).
+
+---
+
+## 17. Change Management
+
+This section tracks changes to the design document itself. Every modification to this document must be recorded below.
+
+| Version | Date | Section Changed | Description |
+|---------|------|----------------|-------------|
+| 1.5 | 2025-07-28 | §1, §2, §3, §6, §8, §9, §10, §15 | Initial — full SPA architecture, URL state, setView lifecycle, responsive layout |
+| 1.6 | 2025-07-28 | §4, §11 | Moved histogram display concerns (color, axis assignment, yAxisID, position) from backend to frontend — backend only serves data + unit; frontend computes display fields locally |
+| 1.7 | 2025-07-28 | §15.3.1, §15.4, style.css | Summary cards use 3 columns at 800–1200px and 2 columns at 500–800px instead of 2 columns and stacked layout — prevents cards from growing to 100% horizontal width on small displays |
+| 1.8 | 2025-07-28 | §14.3, §14.6, §14.7 | Init procedure: show waiting-view synchronously before metadata fetches (title bar, status bar, and waiting-view all visible immediately), then recursively call setView() after metadata loaded — eliminates blank-page period during init |

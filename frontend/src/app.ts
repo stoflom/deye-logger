@@ -5,7 +5,7 @@
 
 /// <reference lib="dom" />
 
-export const FRONTEND_VERSION = "1.4.0";
+export const FRONTEND_VERSION = "1.8.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -560,6 +560,11 @@ async function init(): Promise<void> {
   if (urlState.binSize) {
     binSizeSelect.value = urlState.binSize;
   }
+
+  // Show waiting-view synchronously before any async work — eliminates blank page.
+  // setView() will call show() again (idempotent) once it starts its lifecycle.
+  waitingView.show();
+  waitingView.setText("Loading…");
 
   // Version badge
   try {
