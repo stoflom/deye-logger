@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v1.8
+> **Status:** v1.9
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -541,7 +541,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Prev Day | `prevDayBtn` | `‹` | Always | Action (shift -1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.minAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Next Day | `nextDayBtn` | `›` | Always | Action (shift +1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.maxAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Today | `todayBtn` | `Today` | Always | Action (set to today) | — | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`) |
-| Refresh | `refreshBtn` | `↻ Refresh` / `⟳ Fetching…` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })` | Stateless action |
+| Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })` | Stateless action |
 | Columns Toggle | `columnsToggleBtn` | `☰ Select` (closed) / `↻ Load Data` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (transient) | Stateless (columns persist to localStorage) |
 | View Toggle | `viewToggleBtn` | See labels below | Always | Toggle (within mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Histogram Toggle | `histogramToggleBtn` | See labels below | Always | Toggle (normal↔histogram mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
@@ -553,7 +553,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 
 | `appState.activeView` | Button Text | Button Title | Toggles To |
 |----------------------|------------|-------------|------------|
-| `chart` | `📋 Data Grid` | "Switch to data grid" | `grid` |
+| `chart` | `💫 Data Grid` | "Switch to data grid" | `grid` |
 | `grid` | `📈 Chart` | "Switch to chart" | `chart` |
 | `histogram` | `📊 Histogram Grid` | "Switch to histogram grid" | `histogram-grid` |
 | `histogram-grid` | `📈 Histogram Chart` | "Switch to histogram chart" | `histogram` |
@@ -564,8 +564,8 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 |----------------------|------------|-------------|------------|
 | `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
 | `grid` | `📊 Histogram Grid` | "Show binned average histogram grid" | `histogram-grid` |
-| `histogram` | `📋 Raw Chart` | "Switch back to raw data chart" | `chart` |
-| `histogram-grid` | `📋 Raw Grid` | "Switch back to raw data grid" | `grid` |
+| `histogram` | `💫 Raw Chart` | "Switch back to raw data chart" | `chart` |
+| `histogram-grid` | `💫 Raw Grid` | "Switch back to raw data grid" | `grid` |
 
 #### Columns Toggle Button Labels (`columnsToggleBtn`)
 
@@ -1026,9 +1026,10 @@ The **entire content area** (`#content-area`) is vertically scrollable (`overflo
 | Breakpoint | Cards Layout | Scroll | Chart/Grid Visibility |
 |-----------|-------------|--------|----------------------|
 | `> 1200px` | Horizontal, full size, auto-fit | No (fits) | Always visible |
-| `800px – 1200px` | Horizontal, scaled down, 3 columns | Conditional | Visible |
-| `500px – 800px` | Horizontal, scaled down, 2 columns | Yes | Hidden by scroll |
-| `< 500px` | Stacked, min scale | Yes | Hidden by scroll |
+| `901px – 1200px` | Horizontal, full size, auto-fit | No (fits) | Always visible |
+| `601px – 900px` | Horizontal, scaled down (`--card-scale: 0.85`), 3 columns | Conditional | Visible |
+| `401px – 600px` | Horizontal, scaled down (`--card-scale: 0.7`), 2 columns | Yes | Hidden by scroll |
+| `≤ 400px` | Grid auto-fit, min scale (`--card-scale: 0.6`) | Yes | Hidden by scroll |
 
 ### 15.5 setView Integration
 
@@ -1139,3 +1140,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.6 | 2025-07-28 | §4, §11 | Moved histogram display concerns (color, axis assignment, yAxisID, position) from backend to frontend — backend only serves data + unit; frontend computes display fields locally |
 | 1.7 | 2025-07-28 | §15.3.1, §15.4, style.css | Summary cards use 3 columns at 800–1200px and 2 columns at 500–800px instead of 2 columns and stacked layout — prevents cards from growing to 100% horizontal width on small displays |
 | 1.8 | 2025-07-28 | §14.3, §14.6, §14.7 | Init procedure: show waiting-view synchronously before metadata fetches (title bar, status bar, and waiting-view all visible immediately), then recursively call setView() after metadata loaded — eliminates blank-page period during init |
+| 1.9 | 2026-07-29 | §9.3, §15.4 | Fix viewport breakpoints in 15.4 (actual CSS: 900px/600px/400px) and button emoji in 9.3 (💫 not 📋 for Data Grid/Raw Chart/Raw Grid); remove non-existent Refresh `⟳ Fetching…` alternate text |
