@@ -5,6 +5,7 @@
 
 /// <reference lib="dom" />
 
+// major.minor must agree with the design doc version (frontend-design.md **Status**)
 export const FRONTEND_VERSION = "1.8.0";
 
 import { ModuleRegistry } from "ag-grid-community";

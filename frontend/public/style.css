@@ -658,8 +658,8 @@ body {
   /* Shrink cards with actual dimension reduction (not transform) */
   .summary-cards { --card-scale: 0.85; }
   .raw-data-chart-view, .histogram-view { padding: 10px 12px; }
-  /* Two-column cards */
-  .summary-cards.visible { grid-template-columns: repeat(2, 1fr); }
+  /* Three-column compact cards */
+  .summary-cards.visible { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -679,8 +679,8 @@ body {
   .summary-card { padding: calc(12px * var(--card-scale, 1)); }
   .raw-data-chart-view, .histogram-view { padding: 8px; }
   .split-histogram-view { padding: 8px 12px 12px; }
-  /* Stack cards vertically */
-  .summary-cards.visible { grid-template-columns: 1fr; }
+  /* Two-column compact cards */
+  .summary-cards.visible { grid-template-columns: repeat(2, 1fr); }
   #columns-view-inner { padding: 12px; }
 }
 
