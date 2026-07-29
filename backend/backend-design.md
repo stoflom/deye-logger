@@ -6,6 +6,7 @@
 > **Runtime:** Deno with `node:sqlite`, Express.js
 
 > **Software Versioning scheme:** Backend version is `major.minor.subminor`.
+>
 > - **major** — major new features, architectural changes, number must agree with this document major version
 > - **minor** — design changes to implement new features or fix design issues, number must agree with this document minor version
 > - **subminor** — bug fixes requiring no design changes
@@ -18,9 +19,9 @@ The backend is a lightweight HTTP server built with **Deno** and **Express.js** 
 
 ```
 ┌──────────────┐       ┌──────────────────┐       ┌─────────────────────┐
-│   Frontend    │──────▶│  Deno + Express   │──────▶│   SQLite Database   │
-│  (SPA in      │◀──────│  HTTP Server      │◀──────│  (read-only)        │
-│   public/)    │       └──────────────────┘       └─────────────────────┘
+│   Frontend   │─────▶│  Deno + Express  │─────▶│   SQLite Database   │
+│  (SPA in     │◀─────│  HTTP Server     │◀─────│  (read-only)        │
+│   public/)   │       └──────────────────┘       └─────────────────────┘
 └──────────────┘       │  static file serving  │
                        │  /api/* REST endpoints│
                        └───────────────────────┘
@@ -28,16 +29,16 @@ The backend is a lightweight HTTP server built with **Deno** and **Express.js** 
                               │ POST /api/refresh
                               ▼
                        ┌──────────────────┐
-                       │ Python Script     │
-                       │ deye-logger.py    │
-                       │ (Deye Cloud API)  │
+                       │ Python Script    │
+                       │ deye-logger.py   │
+                       │ (Deye Cloud API) │
                        └──────────────────┘
 ```
 
 ### 1.1 Source Files
 
 | File | Responsibility |
-|------|----------------|
+| ------ | ---------------- |
 | `main.ts` | Application entry point, Express routes, SQLite queries, static file serving |
 | `deno.json` | Deno configuration, task definitions (dev, build) |
 | `start.sh` | Startup script — builds frontend, resolves DB path, launches server |
@@ -47,7 +48,7 @@ The backend is a lightweight HTTP server built with **Deno** and **Express.js** 
 The server is configured via command-line arguments (no environment variables required for the server itself):
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ------ | --------- | ------------- |
 | `--host <host>` | `localhost` | Host to bind to |
 | `--port <port>` | `8090` | Port to listen on |
 | `--db <db_path>` | *(required)* | Path to the SQLite database file |
@@ -73,7 +74,7 @@ All telemetry column names and their human-readable labels are defined in a sing
 Available columns (49 total):
 
 | Column Key | Display Label |
-|------------|---------------|
+| ------------ | --------------- |
 | `device_timestamp` | Timestamp |
 | `fetch_timestamp` | Fetch Time |
 | `inverter_sn` | Inverter SN |
@@ -140,11 +141,13 @@ All API endpoints respond with **JSON** and are prefixed with `/api/`.
 Returns the list of all available telemetry columns with their human-readable labels.
 
 **Request:**
+
 ```
 GET /api/columns
 ```
 
 **Response (200 OK):**
+
 ```json
 [
   { "name": "device_timestamp", "label": "Timestamp" },
@@ -168,11 +171,13 @@ GET /api/columns
 Returns the backend server version.
 
 **Request:**
+
 ```
 GET /api/version
 ```
 
 **Response (200 OK):**
+
 ```json
 { "version": "1.2.0" }
 ```
@@ -190,11 +195,13 @@ GET /api/version
 Returns the minimum and maximum timestamp range available in the database. Useful for the frontend to populate date picker boundaries.
 
 **Request:**
+
 ```
 GET /api/dates
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "min": "2025-01-01",
@@ -216,6 +223,7 @@ GET /api/dates
 Fetches raw telemetry rows for a **single date**. The client selects which columns to include.
 
 **Request:**
+
 ```
 GET /api/data?date=2025-07-27&columns=daily_energy,battery_soc,current_power,battery_voltage
 ```
@@ -228,10 +236,12 @@ GET /api/data?date=2025-07-27&columns=daily_energy,battery_soc,current_power,bat
 | `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
 
 **Validation:**
+
 - If `date` or `columns` is missing → `400 Bad Request`
 - If no valid columns are requested (none match known keys) → `400 Bad Request`
 
 **Response (200 OK):**
+
 ```json
 {
   "rows": [
@@ -257,6 +267,7 @@ GET /api/data?date=2025-07-27&columns=daily_energy,battery_soc,current_power,bat
 | `rows` | array | Array of row objects, each containing only the requested columns plus `device_timestamp`. Ordered by `device_timestamp` ascending. |
 
 **Error Response:**
+
 ```json
 { "error": "Error message" }
 ```
@@ -268,6 +279,7 @@ GET /api/data?date=2025-07-27&columns=daily_energy,battery_soc,current_power,bat
 Fetches raw telemetry rows across a **date range**. The client selects which columns to include.
 
 **Request:**
+
 ```
 GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,current_power
 ```
@@ -275,16 +287,18 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
 **Query Parameters:**
 
 | Parameter | Required | Description |
-|-----------|----------|-------------|
+| ----------- | ---------- | ------------- |
 | `from` | Yes | Start date in YYYY-MM-DD format (inclusive) |
 | `to` | Yes | End date in YYYY-MM-DD format (inclusive) |
 | `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
 
 **Validation:**
+
 - If any of `from`, `to`, or `columns` is missing → `400 Bad Request`
 - If no valid columns are requested → `400 Bad Request`
 
 **Response (200 OK):**
+
 ```json
 {
   "rows": [
@@ -302,6 +316,7 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
 | `rows` | array | Array of row objects, each containing only the requested columns plus `device_timestamp`. Ordered by `device_timestamp` ascending. |
 
 **Error Response:**
+
 ```json
 { "error": "Error message" }
 ```
@@ -313,6 +328,7 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
 Computes time-binned averages of telemetry data across a date range. Designed for the histogram chart view. The results are pre-aggregated: each bin contains the average of each numeric column.
 
 **Request:**
+
 ```
 GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_soc,current_power,battery_voltage&binMinutes=15
 ```
@@ -320,17 +336,19 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 **Query Parameters:**
 
 | Parameter | Required | Description |
-|-----------|----------|-------------|
+| ----------- | ---------- | ------------- |
 | `from` | Yes | Start date in YYYY-MM-DD format (inclusive) |
 | `to` | Yes | End date in YYYY-MM-DD format (inclusive) |
 | `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
 | `binMinutes` | No | Bin size in minutes. Default: `15`. Values: any positive integer (commonly 5, 10, 15, 30, 60). |
 
 **Validation:**
+
 - If any of `from`, `to`, or `columns` is missing → `400 Bad Request`
 - If no valid columns are requested → `400 Bad Request`
 
 **Response (200 OK):**
+
 ```json
 {
   "labels": ["00:00", "00:15", "00:30", "00:45", "01:00", ...],
@@ -356,7 +374,7 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 **Response Fields:**
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `labels` | string[] | Time labels for each bin in `HH:MM` format (e.g., `["00:00", "00:15", "00:30"]`) |
 | `datasets` | object[] | One dataset per numeric column (metadata columns like `device_timestamp`, `inverter_sn`, `fetch_timestamp` are excluded). Each dataset contains: |
 | `datasets[].label` | string | Human-readable column label (from `COLUMN_LABELS`) |
@@ -366,6 +384,7 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 
 **Empty Response:**
 If no data or no numeric columns are found, returns:
+
 ```json
 { "labels": [], "datasets": [], "maxValues": {} }
 ```
@@ -377,11 +396,13 @@ If no data or no numeric columns are found, returns:
 Triggers the Python data ingestion script (`deye-cloud/deye-logger.py`) to fetch the latest telemetry data from the Deye Cloud API and import it into the SQLite database. After success, the server re-opens the database to pick up new data.
 
 **Request:**
+
 ```
 POST /api/refresh
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -394,13 +415,14 @@ POST /api/refresh
 **Response Fields:**
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `success` | boolean | Whether the Python script exited with code 0 |
 | `code` | number | Exit code of the Python script |
 | `output` | string | stdout from the Python script |
 | `error` | string | stderr from the Python script |
 
 **Error Response:**
+
 ```json
 { "error": "Exception message" }
 ```
@@ -417,6 +439,7 @@ All endpoints follow a consistent error response pattern:
 | `500` | Server/database error |
 
 Error responses are always:
+
 ```json
 { "error": "Human-readable error message" }
 ```
@@ -508,13 +531,7 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
 
 ---
 
-## 8. Version History
-
-| Version | Date | Description |
-|---------|------|-------------|
-| 1.2 | 2025-07-28 | Initial design document — all current API endpoints, column schema, histogram logic |
-
-## 9. Change Management
+## 8. Change Management
 
 This section tracks changes to the design document itself. Every modification to this document must be recorded below.
 
