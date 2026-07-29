@@ -218,10 +218,10 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
 
   if (isHistogramMode) {
     if (view === "histogram") {
-      histogramToggleBtn.textContent = "\uD83D\uDCAB Raw Chart";
+      histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Chart";
       histogramToggleBtn.title = "Switch back to raw data chart";
     } else {
-      histogramToggleBtn.textContent = "\uD83D\uDCAB Raw Grid";
+      histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Grid";
       histogramToggleBtn.title = "Switch back to raw data grid";
     }
   } else if (view === "grid") {
@@ -239,7 +239,7 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
     viewToggleBtn.title = view === "histogram" ? "Switch to histogram grid" : "Switch to histogram chart";
   } else {
     viewToggleBtn.classList.toggle("active", isAnyGrid);
-    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCAB Data Grid" : "\uD83D\uDCC8 Chart";
+    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Data Grid" : "\uD83D\uDCC8 Chart";
     viewToggleBtn.title = view === "chart" ? "Switch to data grid" : "Switch to chart";
   }
 
