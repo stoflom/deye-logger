@@ -4,6 +4,7 @@
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
+>
 > - **major** — major new features, architectural changes, number must agree with this document major version
 > - **minor** — design changes to implement new features or fix design issues, number must agree with this document minor version
 > - **sub-minor** — bug fixes requiring no design changes
@@ -40,7 +41,7 @@ The application is a single-page app with three vertical regions:
 ### 1.1 Source Files
 
 | File | Responsibility |
-|------|----------------|
+| ------ | ---------------- |
 | `shared.ts` | Global state object, DOM refs, URL parsing, utility helpers |
 | `app.ts` | Entry point, `setView()`, button handlers, init, popstate |
 | `chart.ts` | Chart.js line chart rendering, summary cards |
@@ -71,7 +72,7 @@ The title bar contains **all application buttons and controls** in a single hori
 ```
 
 | Element | ID | Purpose |
-|---------|-----|---------|
+| --------- | ----- | --------- |
 | `<h1>` | — | App title: "☀️ Deye Logger Viewer" |
 | Date inputs | `#date-from`, `#date-to` | Date range selectors |
 | Nav buttons | `#prev-day`, `#next-day`, `#today-btn` | Shift dates by ±1 day or go to today |
@@ -86,7 +87,7 @@ The title bar contains **all application buttons and controls** in a single hori
 ### 2.2 Status Bar (`<div class="status-bar">`)
 
 | Element | ID | Purpose |
-|---------|-----|---------|
+| --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
@@ -99,7 +100,7 @@ These objects define the **page state** and must be pushed to URL history so tha
 ### 3.1 URL Query Parameters
 
 | Parameter | Values | Source | Used By |
-|-----------|--------|--------|---------|
+| ----------- | -------- | -------- | --------- |
 | `view` | `chart`, `grid`, `histogram`, `histogram-grid` | `setView()` | `getStateFromUrl()`, `setView()` |
 | `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getStateFromUrl()` (single day) |
 | `from` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range start) |
@@ -108,6 +109,7 @@ These objects define the **page state** and must be pushed to URL history so tha
 | `split` | `1` (presence = true) | Split button | `getStateFromUrl()`, `setView()` |
 
 **Serialization rules** (`buildUrlParams()`):
+
 - Single day: `?view=chart&date=2025-07-20`
 - Range: `?view=chart&from=2025-07-18&to=2025-07-20`
 - Histogram with custom bin: `?view=histogram&date=2025-07-20&binSize=30`
@@ -117,7 +119,7 @@ These objects define the **page state** and must be pushed to URL history so tha
 ### 3.2 History State (pushState payload)
 
 | Property | Type | Purpose |
-|----------|------|---------|
+| ---------- | ------ | --------- |
 | `view` | string | Current view mode |
 | `isSplit` | boolean | Whether histogram is in split mode (redundant with URL but available for fast popstate) |
 | `error` | boolean | Whether this is an error-state entry |
@@ -135,7 +137,7 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 ```
 
 | Trigger | Pushes History? | Notes |
-|---------|----------------|-------|
+| --------- | ---------------- | ------- |
 | `viewToggle` click | Yes (on success) | Full view change |
 | `histogramBtn` click | Yes (on success) | Mode toggle |
 | Date nav (prev/next/today/picker) | Yes (on success) | Date change triggers full re-render |
@@ -156,7 +158,7 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 These actions produce a side effect but **do not change URL history state**. They cannot be recreated from a URL and are not navigable via back/forward.
 
 | Action | Element | Behavior |
-|--------|---------|----------|
+| -------- | --------- | ---------- |
 | **CSV Export** | `#export-btn` | Calls `gridApi.exportDataAsCsv()`. Browser download only. |
 | **Close error** | Button in error-view | Calls `history.back()` to restore previous page. |
 | **Column selection** | Checkboxes in `#columns-view` | Updates `state.selectedColumns`, persists to `localStorage`. Not in URL. |
@@ -172,7 +174,7 @@ These actions produce a side effect but **do not change URL history state**. The
 Below the title bar and state bar, **exactly one panel is visible at any time**. `setView` controls which panel is shown.
 
 | Panel | DOM ID | Triggered By | Pushes History? |
-|-------|--------|-------------|-----------------|
+| ------- | -------- | ------------- | ----------------- |
 | **Waiting view** | `#waiting-view` | `setView()` step 2 — always shown first | No |
 | **Error view** | `#error-view` | Render failure — modal with Close button | Yes (`error: true`) |
 | **Info view** | `#info-view` | Data fetch returned zero rows, or general info message | No (transient) |
@@ -339,7 +341,7 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 ```
 
 | Rule | Detail |
-|------|--------|
+| ------ | -------- |
 | **Always update waiting-view before backend call** | `updateWaiting("Fetching data…")` before any `fetch()` |
 | **Update waiting-view during long operations** | `updateWaiting("Drawing chart…")` during chart construction |
 | **Return `{ ok: true }` on success** | Uniform success indicator |
@@ -351,7 +353,7 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 ### 6.4 Call Sites
 
 | Call Site | Trigger | Flags | Notes |
-|-----------|---------|-------|-------|
+| ----------- | --------- | ------- | ------- |
 | `init()` → `setView(urlState.view, { split: urlState.isSplit })` | Page load | `split` from URL | Initial render |
 | `viewToggleBtn` click | View toggle button | — | Toggles chart↔grid or histogram↔histogram-grid |
 | `histogramToggleBtn` click | Histogram mode button | — | Enters/exits histogram mode |
@@ -443,7 +445,7 @@ try {
 ### 8.1 Global State Object (`appState`)
 
 | Variable | Type | Persistence | Description |
-|----------|------|-------------|-------------|
+| ---------- | ------ | ------------- | ------------- |
 | `appState.columnMetadata` | `ColumnMeta[]` | Transient (session) | Column definitions from `/api/columns` (name + label) |
 | `appState.selectedColumnNames` | `Set<string>` | localStorage | User-selected column names for data queries |
 | `appState.dateRangeFrom` | `string` | URL-stateful | Start date of the query range (ISO) |
@@ -459,7 +461,7 @@ try {
 ### 8.2 Histogram Module Variables (`histogram-chart.ts`)
 
 | Variable | Type | Persistence | Description |
-|----------|------|-------------|-------------|
+| ---------- | ------ | ------------- | ------------- |
 | `histogramCombinedChartInstance` | `Chart \| null` | Transient (render) | Chart.js instance for the combined bar chart |
 | `histogramSplitChartInstances` | `Chart[]` | Transient (render) | Array of Chart.js instances for split individual charts |
 | `histogramIsSplitMode` | `boolean` | URL-stateful (`?split=1`) | Whether histogram is currently in split mode |
@@ -470,7 +472,7 @@ try {
 ### 8.3 DOM Panel References (`shared.ts`)
 
 | Variable | DOM ID | Description |
-|----------|--------|-------------|
+| ---------- | -------- | ------------- |
 | `contentArea` | `#content-area` | Single scrollable content container (wraps summary cards + content panels) |
 | `waitingViewPanel` | `#waiting-view` | Waiting overlay container |
 | `waitingViewTextEl` | `#waiting-text` | Waiting message text element |
@@ -491,7 +493,7 @@ try {
 ### 8.4 DOM Button/Control References (`shared.ts`)
 
 | Variable | DOM ID | Description |
-|----------|--------|-------------|
+| ---------- | -------- | ------------- |
 | `dateFromInput` | `#date-from` | Start date picker |
 | `dateToInput` | `#date-to` | End date picker |
 | `prevDayBtn` | `#prev-day` | Previous day button |
@@ -537,7 +539,7 @@ Split mode is now a URL parameter (`?split=1`). It is bookmarkable and navigable
 Every button in the title bar is documented with its text, visibility, toggle/action behavior, state variables, and statefulness.
 
 | Button | Variable | Text / Label | Visibility | Type | Reads State | Writes State | Stateful? |
-|--------|----------|-------------|------------|------|-------------|-------------|-----------|
+| -------- | ---------- | ------------- | ------------ | ------ | ------------- | ------------- | ----------- |
 | Prev Day | `prevDayBtn` | `‹` | Always | Action (shift -1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.minAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Next Day | `nextDayBtn` | `›` | Always | Action (shift +1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.maxAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Today | `todayBtn` | `Today` | Always | Action (set to today) | — | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`) |
@@ -552,7 +554,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 #### View Toggle Button Labels (`viewToggleBtn`)
 
 | `appState.activeView` | Button Text | Button Title | Toggles To |
-|----------------------|------------|-------------|------------|
+| ---------------------- | ------------ | ------------- | ------------ |
 | `chart` | `📋 Data Grid` | "Switch to data grid" | `grid` |
 | `grid` | `📈 Chart` | "Switch to chart" | `chart` |
 | `histogram` | `📊 Histogram Grid` | "Switch to histogram grid" | `histogram-grid` |
@@ -561,7 +563,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 #### Histogram Toggle Button Labels (`histogramToggleBtn`)
 
 | `appState.activeView` | Button Text | Button Title | Toggles To |
-|----------------------|------------|-------------|------------|
+| ---------------------- | ------------ | ------------- | ------------ |
 | `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
 | `grid` | `📊 Histogram Grid` | "Show binned average histogram grid" | `histogram-grid` |
 | `histogram` | `📋 Raw Chart` | "Switch back to raw data chart" | `chart` |
@@ -570,14 +572,14 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 #### Columns Toggle Button Labels (`columnsToggleBtn`)
 
 | columns-view State | Button Text | Button Title | Action |
-|-------------------|------------|-------------|--------|
+| ------------------- | ------------ | ------------- | -------- |
 | Closed | `☰ Select` | "Select columns to display" | `setView(activeView, { columns: true })` |
 | Open | `↻ Load Data` | "Close panel and load selected data" | `setView(appState.activeView)` |
 
 #### Split Button Labels (`splitBtn`)
 
 | `histogramIsSplitMode` | Button Text | Button Title | Action |
-|----------------------|------------|-------------|--------|
+| ---------------------- | ------------ | ------------- | -------- |
 | `false` | `Split` | "Split columns into individual charts" | `setView("histogram", { split: true })` |
 | `true` | `Combine` | "Combine columns into single chart" | `setView("histogram", { split: false })` |
 
@@ -714,7 +716,7 @@ User clicks Refresh from info-view:
 ## 11. API Endpoints Used
 
 | Endpoint | Method | Used By | Timeout | Purpose |
-|----------|--------|---------|---------|---------|
+| ---------- | -------- | --------- | --------- | --------- |
 | `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label) |
 | `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
 | `/api/data` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (single day) |
@@ -803,6 +805,7 @@ setView("chart")
 ```
 
 **Key properties:**
+
 - **Non-modal:** Unlike error-view, the info-view does **not** block user interaction. All title-bar controls remain enabled.
 - **No Back button:** Unlike error-view, the info-view has **no** Close button. The user dismisses it implicitly by interacting with any control (date nav, refresh, view toggle, columns).
 - **No history push:** The info-view is transient — it is never pushed to URL history. It simply sits in the content area until the user does something.
@@ -813,7 +816,7 @@ setView("chart")
 When a data renderer succeeds but returns zero rows, the following messages are displayed:
 
 | View | Date context | Message |
-|------|-------------|---------|
+| ------ | ------------- | --------- |
 | chart/grid | single day | "No data found for **{date}**. Click **Refresh** to sync from the inverter, or select a different date." |
 | chart/grid | range | "No data found for **{from}** to **{to}**. Click **Refresh** to sync from the inverter, or select a different date range." |
 | histogram | any | "No histogram data available for the selected date range. Click **Refresh** to sync from the inverter, or select a different date." |
@@ -841,19 +844,21 @@ Page loaded
 ```
 
 **Key properties:**
+
 - The waiting-view is shown **synchronously** (no `await`), before any `fetch()` calls. This ensures the user never sees a blank page.
 - Title bar and status bar are **already in the HTML** and rendered immediately by the browser — no JS needed.
 - `setView()`'s step 2 (`waitingView.show()`) is called again after metadata loads. This call is **idempotent** — if the waiting-view is already visible, showing it again is a no-op.
 - The waiting-view text during `init()` is the default "Loading…". During `setView()` rendering, it transitions to "Fetching data…", "Drawing chart…", etc.
 
 **Error handling during init:**
+
 - If any metadata fetch fails (version, columns, dates), the fetch is **silently skipped** (try/catch). The app continues to `setView()` with available data.
 - If the final `setView()` call fails (data fetch error), the normal error-view path is followed.
 
 #### 14.3.1 Init Flow Summary
 
 | Phase | Action | Waiting View? | Async? |
-|-------|--------|---------------|--------|
+| ------- | -------- | --------------- | -------- |
 | 1 | Parse URL parameters | No | Sync |
 | 2 | Show waiting-view ("Loading…") | **Yes** | Sync |
 | 3a | Load `/api/version` | Yes (still) | Async |
@@ -867,6 +872,7 @@ Page loaded
 ### 14.4 Future Use Cases
 
 The info-view is intentionally general-purpose. Planned future uses include:
+
 - **About dialog:** Application version, credits, usage info
 - **Welcome message:** First-time user guidance
 - **Feature announcements:** New feature descriptions
@@ -905,6 +911,7 @@ init() (§14.3)
 ```
 
 The URL is **not** changed or pushed. The user sees the info message and can:
+
 1. Click **Refresh** to sync from inverter
 2. Change dates via nav buttons or date pickers
 3. Toggle view mode (useless but harmless — will re-fetch)
@@ -1024,7 +1031,7 @@ The **entire content area** (`#content-area`) is vertically scrollable (`overflo
 ### 15.4 Viewport Breakpoints
 
 | Breakpoint | Cards Layout | Scroll | Chart/Grid Visibility |
-|-----------|-------------|--------|----------------------|
+| ----------- | ------------- | -------- | ---------------------- |
 | `> 1200px` | Horizontal, full size, auto-fit | No (fits) | Always visible |
 | `901px – 1200px` | Horizontal, full size, auto-fit | No (fits) | Always visible |
 | `601px – 900px` | Horizontal, scaled down (`--card-scale: 0.85`), 3 columns | Conditional | Visible |
@@ -1049,7 +1056,7 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 **Key contract for renderers regarding the display panel:**
 
 | Rule | Detail |
-|------|--------|
+| ------ | -------- |
 | **Render cards into existing container** | Cards are rendered into `#summary-cards` which is a direct child of `#content-area` (sibling of all content panels). Cards are **updated** (not recreated from scratch) — existing card elements are reused and their content/visibility adjusted. |
 | **Cards shown/hidden by setView** | `setView` shows `#summary-cards` (via `.visible` class) before entering chart/grid/histogram views, and hides it before entering waiting/error/info/columns views. |
 | **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto` on `#content-area`). |
@@ -1134,7 +1141,7 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 This section tracks changes to the design document itself. Every modification to this document must be recorded below.
 
 | Version | Date | Section Changed | Description |
-|---------|------|----------------|-------------|
+| --------- | ------ | ---------------- | ------------- |
 | 1.5 | 2025-07-28 | §1, §2, §3, §6, §8, §9, §10, §15 | Initial — full SPA architecture, URL state, setView lifecycle, responsive layout |
 | 1.6 | 2025-07-28 | §4, §11 | Moved histogram display concerns (color, axis assignment, yAxisID, position) from backend to frontend — backend only serves data + unit; frontend computes display fields locally |
 | 1.7 | 2025-07-28 | §15.3.1, §15.4, style.css | Summary cards use 3 columns at 800–1200px and 2 columns at 500–800px instead of 2 columns and stacked layout — prevents cards from growing to 100% horizontal width on small displays |

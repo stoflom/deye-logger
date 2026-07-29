@@ -74,7 +74,7 @@ The script authenticates with each run using email + SHA-256 hashed password. Th
 ### 3.1 Environment Variables (`.env`)
 
 | Variable | Required | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `DEYE_APP_ID` | Yes | — | DeyeCloud developer `appId` |
 | `DEYE_APP_SECRET` | Yes | — | DeyeCloud developer `appSecret` |
 | `DEYE_EMAIL` | Yes | — | DeyeCloud account email |
@@ -92,6 +92,7 @@ The script authenticates with each run using email + SHA-256 hashed password. Th
 ### 3.3 CLI Overrides
 
 Database path resolution priority (highest first):
+
 1. `-db <path>` CLI flag
 2. `.env` `DB_NAME`
 3. `deye_solar_data.db` in script directory
@@ -99,7 +100,7 @@ Database path resolution priority (highest first):
 ## 4. API Endpoints
 
 | Endpoint | Method | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `/v1.0/account/token` | POST | Authentication |
 | `/v1.0/device/latest` | POST | Realtime telemetry (45 fields) |
 | `/v1.0/device/history` | POST | Historical data (gap backfill & bulk import) |
@@ -107,7 +108,7 @@ Database path resolution priority (highest first):
 ### 4.1 History API Granularity
 
 | Value | Meaning | Date format | Measure points |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `1` | Intraday (~1 min) | `YYYY-MM-DD` | Required (max 5) |
 | `2` | Daily summary | `YYYY-MM-DD` | Must be null |
 | `3` | Monthly summary | `YYYY-MM` | Must be null |
@@ -118,7 +119,7 @@ Database path resolution priority (highest first):
 45 fields are split into 9 batches of 5 (API limit):
 
 | Batch | Fields |
-|---|---|
+| --- | --- |
 | 1 | `DailyActiveProduction`, `TotalActiveProduction`, `InverterOutputPowerL1L2`, `SOC`, `BatteryVoltage` |
 | 2 | `BatteryCurrent`, `TotalGridPower`, `GridVoltageL1L2`, `GridFrequency`, `DCPowerPV2` |
 | 3 | `DCVoltagePV1`, `DCCurrentPV1`, `DCPowerPV1`, `DCVoltagePV2`, `DCCurrentPV2` |
@@ -132,22 +133,28 @@ Database path resolution priority (highest first):
 ## 5. API Quirks & Workarounds
 
 ### 5.1 Endpoint Naming
+
 The history endpoint is `/v1.0/device/history`, **not** `/v1.0/device/historyRaw` (which returns 500).
 
 ### 5.2 Parameter Format
+
 - History API uses string dates (`YYYY-MM-DD`) in `startAt`/`endAt` — epoch millis are rejected.
 - Realtime API uses epoch timestamps.
 
 ### 5.3 Measure Point Limit (5 per call)
+
 The intraday endpoint returns `"list too long"` if more than 5 measure points are requested. The script batches 45 fields into 9 groups of 5, then merges results by timestamp.
 
 ### 5.4 1440-Point Silent Cap
+
 The API silently caps responses at ~1440 data points (one day at 1-min granularity). Multi-day queries return only the first day. Workaround: iterate day-by-day in `fetch_historical_range()`.
 
 ### 5.5 Measure Point Names
+
 The history API uses string names (e.g. `"SOC"`, `"BatteryVoltage"`), not numeric IDs. Names are retrieved from `/v1.0/device/measurePoints`.
 
 ### 5.6 Bearer Token Casing
+
 Both `Bearer` and `bearer` work in the `Authorization` header.
 
 ## 6. Data Model
@@ -171,7 +178,7 @@ Fields checked to determine if a response is likely spurious:
 #### `inverter_telemetry`
 
 | Column | Type | Description |
-|---|---|---|
+| --- | --- | --- |
 | `device_timestamp` | TEXT (PK) | Inverter timestamp |
 | `fetch_timestamp` | TEXT | Local fetch timestamp |
 | `inverter_sn` | TEXT | Inverter serial number |
@@ -223,7 +230,7 @@ Index: `idx_timestamp` on `device_timestamp`, `idx_complete` on `complete`.
 Tracks which gaps have been attempted for backfill (prevents re-querying).
 
 | Column | Type | Description |
-|---|---|---|
+| --- | --- | --- |
 | `gap_start` | TEXT (PK) | Gap start timestamp |
 | `gap_end` | TEXT (PK) | Gap end timestamp |
 | `attempted_at` | TEXT | When the attempt was made |
@@ -234,7 +241,7 @@ Tracks which gaps have been attempted for backfill (prevents re-querying).
 Stores records identified as spurious before deletion.
 
 | Column | Type | Description |
-|---|---|---|
+| --- | --- | --- |
 | `device_timestamp` | TEXT (PK) | Timestamp of spurious record |
 | `cumulative_consumption` | REAL | The spurious zero value |
 | `previous_cumulative_consumption` | REAL | Non-zero value from previous row |
@@ -245,7 +252,7 @@ Stores records identified as spurious before deletion.
 One-time migration tracking.
 
 | Column | Type | Description |
-|---|---|---|
+| --- | --- | --- |
 | `key` | TEXT (PK) | Migration name |
 | `done` | INTEGER | Always `1`; row presence = migration applied |
 
@@ -280,6 +287,7 @@ python deye-logger.py --find-spurious
 ```
 
 Two detection rules:
+
 1. **Zero-reset**: `cumulative_consumption` is 0 but the previous row had a non-zero value.
 2. **Incomplete data**: `complete='N'` (API returned fewer than 45 fields).
 
@@ -299,7 +307,7 @@ usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
 ```
 
 | Flag | Type | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `--fetch-since` | str | — | Bulk import from date (7-day chunking) |
 | `-g, --gap` | int | `3` | Min gap minutes to trigger backfill |
 | `-fs, --find-spurious` | flag | — | Detect spurious records |
@@ -307,6 +315,7 @@ usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
 | `-db` | str | script dir | Path to SQLite database |
 
 **Date formats supported** for `--fetch-since`:
+
 - `YYYY-MM-DD`
 - `DD Mon YYYY` / `DD MMMM YYYY`
 - `YYYY/MM/DD`
