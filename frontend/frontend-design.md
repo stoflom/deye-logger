@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v1.9
+> **Status:** v1.10
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -485,7 +485,7 @@ try {
 | `histogramView` | `#histogram-view` | Combined histogram bar chart container |
 | `histogramGridView` | `#histogram-grid-view` | Histogram grid table container |
 | `splitHistogramView` | `#split-histogram-view` | Split histogram container |
-| `splitHistogramScroll` | `#split-histogram-scroll` | Inner scroll container for split charts |
+| `splitHistogramScroll` | `#split-histogram-scroll` | Container for split charts (no inner scroll — single scroll pane on `#content-area`) |
 | `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`) |
 
 ### 8.4 DOM Button/Control References (`shared.ts`)
@@ -1058,7 +1058,7 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 
 ### 15.6 Histogram Split Mode Display Panel
 
-In split histogram mode (`?split=1`), the display panel structure is the same as other histogram views. Bin-size and split/combine controls are in the **title bar** (not in the display panel), so they scroll independently of the chart area.
+In split histogram mode (`?split=1`), the display panel structure is the same as other histogram views. Bin-size and split/combine controls are in the **title bar** (not in the display panel), so they are always visible regardless of scroll position.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -1069,7 +1069,7 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 │  ├──────────────────────────────────────┤│
 │  │ #split-histogram-view                ││
 │  │  ┌───────────────────────────────┐   ││
-│  │  │ #split-histogram-scroll       │   ││  ← inner scroll for charts
+│  │  │ #split-histogram-scroll      │   ││  ← no inner scroll
 │  │  │ ┌───────────────────────────┐ │   ││
 │  │  │ │  Chart 1                  │ │   ││
 │  │  │ ├───────────────────────────┤ │   ││
@@ -1086,9 +1086,8 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 - Summary cards behave identically to non-split mode.
 - Bin-size and split/combine controls are in the **title bar** (`#bin-size-select`, `#split-btn`) — always visible regardless of scroll position.
 - The chart area contains **multiple charts** (one per metric) instead of a single chart.
-- The scroll container (`#split-histogram-scroll`) holds all individual charts and has its own inner scroll (`overflow-y: auto`) so users can scroll through many charts without moving the summary cards.
-- Responsive behavior (scaling, vertical stacking, scroll) applies the same way.
-- The outer `#content-area` scroll is also available as a fallback for smaller viewports.
+- There is **no inner scroll** on `#split-histogram-scroll`. The single scroll pane is `#content-area`, which contains both the summary cards and all charts. Users scroll the entire content area to view charts below the summary cards.
+- Responsive behavior (scaling, vertical stacking, scroll) applies the same way as other views.
 
 ---
 
@@ -1141,3 +1140,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.7 | 2025-07-28 | §15.3.1, §15.4, style.css | Summary cards use 3 columns at 800–1200px and 2 columns at 500–800px instead of 2 columns and stacked layout — prevents cards from growing to 100% horizontal width on small displays |
 | 1.8 | 2025-07-28 | §14.3, §14.6, §14.7 | Init procedure: show waiting-view synchronously before metadata fetches (title bar, status bar, and waiting-view all visible immediately), then recursively call setView() after metadata loaded — eliminates blank-page period during init |
 | 1.9 | 2026-07-29 | §9.3, §15.4 | Fix viewport breakpoints in 15.4 (actual CSS: 900px/600px/400px) and button emoji in 9.3 (💫 not 📋 for Data Grid/Raw Chart/Raw Grid); remove non-existent Refresh `⟳ Fetching…` alternate text |
+| 1.10 | 2026-07-29 | §15.6, §8.3 | Correct §15.6 — no inner scroll on `#split-histogram-scroll`; entire content area including summary cards scrolls together via `#content-area` |
