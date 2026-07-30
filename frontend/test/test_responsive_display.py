@@ -336,6 +336,8 @@ def test_day_filter_selector(tester):
     tester.wait_for_element(By.ID, "summary-cards")
     time.sleep(0.5)
 
+    # Re-locate element after navigation (previous reference is stale)
+    day_filter_select = tester.find_element(By.ID, "day-filter-select")
     selected_value = day_filter_select.get_attribute("value")
     assert selected_value == "mon", f"Day filter should be 'mon' after URL navigation, got '{selected_value}'"
     print(f"  ✓ Day filter correctly set from URL parameter")
