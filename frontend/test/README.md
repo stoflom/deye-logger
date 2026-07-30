@@ -66,8 +66,9 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 | 5 | Card stacking at mobile | Cards stack vertically (full-width) at ≤600px |
 | 6 | Single scroll pane | `#content-area` scrolls, panels have `min-height: 300px`, no nested scrollbars |
 | 7 | Histogram control visibility | Controls hidden in non-histogram views, visible in histogram views |
-| 8 | Histogram controls in histogram modes | Present in both histogram and histogram-grid views |
-| 9 | Single scroll pane structure | `#summary-cards` is a direct child of `#content-area`, scrollable |
+| 8 | Day filter selector | Day filter dropdown (All/Sun/Mon/Tue/Wed/Thu/Fri/Sat) exists and works, default is 'All' |
+| 9 | Histogram controls in histogram modes | Present in both histogram and histogram-grid views |
+| 10 | Single scroll pane structure | `#summary-cards` is a direct child of `#content-area`, scrollable |
 
 ## Troubleshooting
 

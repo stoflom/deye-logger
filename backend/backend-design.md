@@ -71,7 +71,7 @@ This allows the server to serve the complete frontend SPA without a separate web
 
 All telemetry column names and their human-readable labels are defined in a single source-of-truth record `COLUMN_LABELS` in `main.ts`. This record maps internal column names (matching database columns) to display labels with units.
 
-Available columns (49 total):
+Available columns (48 total):
 
 | Column Key | Display Label |
 | ------------ | --------------- |

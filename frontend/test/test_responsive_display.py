@@ -294,9 +294,61 @@ def test_histogram_control_visibility(tester):
                    "Histogram controls visibility toggle")
 
 
+def test_day_filter_selector(tester):
+    """Test that day filter selector exists and works in histogram modes."""
+    print("\n[Test 8] Day filter selector in histogram controls")
+
+    # Switch to histogram mode
+    set_view(tester, "histogram")
+    resize_viewport(tester, 900, 800)
+
+    # Check that day-filter-select element exists
+    day_filter_select = tester.find_element(By.ID, "day-filter-select")
+    assert day_filter_select is not None, "Day filter select should exist"
+
+    # Check it's inside histogram-controls
+    histogram_controls = tester.find_element(By.ID, "histogram-controls")
+    controls_in_histogram = histogram_controls.find_elements(By.CSS_SELECTOR, "#day-filter-select")
+    assert len(controls_in_histogram) > 0, "Day filter select should be inside histogram-controls"
+
+    # Check that day filter has all expected options
+    options = day_filter_select.find_elements(By.CSS_SELECTOR, "option")
+    option_values = [opt.get_attribute("value") for opt in options]
+    expected_values = ["all", "sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+    assert option_values == expected_values, f"Day filter options: {option_values} (expected {expected_values})"
+    print(f"  ✓ Day filter select has all 8 options: {', '.join(option_values)}")
+
+    # Check that default selection is "All"
+    selected_value = day_filter_select.get_attribute("value")
+    assert selected_value == "all", f"Default day filter should be 'all', got '{selected_value}'"
+    print(f"  ✓ Default day filter selection is 'All'")
+
+    # Check that day filter select is visible (display != none)
+    display = tester.get_computed_style(By.CSS_SELECTOR, "#day-filter-select", "display")
+    print(f"  Day filter select display: {display}")
+    assert display != "none", "Day filter select should be visible in histogram mode"
+
+    # Test changing day filter via URL
+    from urllib.parse import urlencode
+    params = {"date": TEST_DATE, "view": "histogram", "dayFilter": "mon"}
+    url = f"{BASE_URL}/?{urlencode(params)}"
+    tester.navigate(url)
+    tester.wait_for_element(By.ID, "summary-cards")
+    time.sleep(0.5)
+
+    selected_value = day_filter_select.get_attribute("value")
+    assert selected_value == "mon", f"Day filter should be 'mon' after URL navigation, got '{selected_value}'"
+    print(f"  ✓ Day filter correctly set from URL parameter")
+
+    take_screenshot(tester, "day-filter-selector.png",
+                   "Day filter selector in histogram mode")
+
+    print("  ✓ Day filter selector verified")
+
+
 def test_all_view_modes_with_histogram_controls(tester):
     """Test histogram controls are present in histogram view modes."""
-    print("\n[Test 8] Histogram controls in histogram view modes")
+    print("\n[Test 10] Histogram controls in histogram view modes")
 
     for view_mode in ["histogram", "histogram-grid"]:
         set_view(tester, view_mode)
@@ -309,7 +361,8 @@ def test_all_view_modes_with_histogram_controls(tester):
 
         bin_select = tester.find_element(By.ID, "bin-size-select")
         split_btn = tester.find_element(By.ID, "split-btn")
-        print(f"  {view_mode}: bin-select={bin_select is not None}, split-btn={split_btn is not None}")
+        day_filter = tester.find_element(By.ID, "day-filter-select")
+        print(f"  {view_mode}: bin-select={bin_select is not None}, split-btn={split_btn is not None}, day-filter={day_filter is not None}")
 
         take_screenshot(tester, f"controls-{view_mode}.png",
                        f"Histogram controls in {view_mode} view")
@@ -320,7 +373,7 @@ def test_all_view_modes_with_histogram_controls(tester):
 
 def test_single_scroll_pane_structure(tester):
     """Test that #summary-cards is inside #content-area (single scroll pane)."""
-    print("\n[Test 9] Single scroll pane structure")
+    print("\n[Test 11] Single scroll pane structure")
 
     set_view(tester, "chart")
     resize_viewport(tester, 900, 800)
@@ -416,6 +469,7 @@ def main():
             test_cards_stacking_at_mobile(tester)
             test_display_panel_scroll(tester)
             test_histogram_control_visibility(tester)
+            test_day_filter_selector(tester)
             test_all_view_modes_with_histogram_controls(tester)
             test_single_scroll_pane_structure(tester)
         except AssertionError as e:
