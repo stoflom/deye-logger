@@ -23,3 +23,8 @@ Each application has a **version number** consisting of `major.minor.subminor`:
 
 - **Major** and **minor** always correspond to the design document's version (`major.minor`).
 - **Subminor** is used for bug fixes and small changes that do not require modification of the design document.
+
+## Thinking
+
+- Do not loop
+- If confused stop and ask for clarity
