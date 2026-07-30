@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.0.0";
+const BACKEND_VERSION = "2.0.1";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -330,52 +330,25 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       return `${h}:${m}`;
     });
 
-    // Group columns by unit for axis assignment
-    const unitToAxis: Record<string, string> = {};
-    const unitPosition: Record<string, string> = {};
-    let leftCount = 0;
-    let rightCount = 0;
-
-    function extractUnit(label: string): string {
-      const match = label.match(/\((.+)\)$/);
-      return match ? match[1] : "";
-    }
-
-    for (const col of numericCols) {
-      const label = COLUMN_LABELS[col] ?? col;
-      const unit = extractUnit(label);
-      if (!(unit in unitToAxis)) {
-        unitToAxis[unit] = leftCount < 2 ? `y-${leftCount}` : `yR-${rightCount}`;
-        unitPosition[unit] = leftCount < 2 ? "left" : "right";
-        if (leftCount < 2) leftCount++; else rightCount++;
-      }
-    }
-
-    const palette = [
-      "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
-      "#dd6b20", "#319795", "#d53f8c", "#2b6cb0", "#c53030",
-      "#276749", "#b7791f", "#6b46c1", "#c05621", "#285e61",
-    ];
-
     // Build datasets and compute max values
-    const datasets = numericCols.map((col, i) => {
+    // Backend only serves data + label + unit.
+    // Display fields (color, yAxisID, position) are computed by the frontend.
+    const datasets = numericCols.map((col) => {
       const label = COLUMN_LABELS[col] ?? col;
-      const unit = extractUnit(label);
-      const yAxisID = unitToAxis[unit] ?? "y-0";
-      const position = unitPosition[unit] ?? "left";
-      const color = palette[i % palette.length];
+      const match = label.match(/\((.+)\)$/);
+      const unit = match ? match[1] : "";
       const binCount = binMap.size;
 
-      const data: (number | null)[] = [];
+      const data: number[] = [];
       let max = -Infinity;
       let maxIdx = -1;
 
       for (let j = 0; j < sortedKeys.length; j++) {
         const bin = binMap.get(sortedKeys[j].toString())!;
         const val = bin.sum[col];
-        const avg = val !== undefined ? val / bin.count : null;
+        const avg = val !== undefined ? val / bin.count : 0;
         data.push(avg);
-        if (typeof avg === "number" && avg > max) {
+        if (avg > max) {
           max = avg;
           maxIdx = j;
         }
@@ -384,19 +357,16 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       return {
         label,
         data,
-        color,
         unit,
-        yAxisID,
-        position,
-        max: max !== -Infinity ? max : null,
-        maxTimestamp: maxIdx >= 0 ? labels[maxIdx] : null,
+        max: max !== -Infinity ? max : 0,
+        maxTimestamp: maxIdx >= 0 ? labels[maxIdx] : "",
       };
     });
 
     // Build maxValues map: label → { value, timestamp }
     const maxValues: Record<string, { value: number; timestamp: string }> = {};
     for (const ds of datasets) {
-      if (ds.max !== null && ds.maxTimestamp !== null) {
+      if (ds.max > 0 && ds.maxTimestamp) {
         maxValues[ds.label] = { value: ds.max, timestamp: ds.maxTimestamp };
       }
     }

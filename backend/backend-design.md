@@ -551,4 +551,6 @@ This section tracks changes to the design document itself. Every modification to
 | Version | Date | Section Changed | Description |
 |---------|------|----------------|-------------|
 | 1.2 | 2025-07-28 | §1.4, §1.5, §2.6, §5.3 | Initial — API endpoints, column labels, histogram flow |
+| 1.3 | 2025-07-28 | §2.6, §5.3 | Backend stripped of display fields (color, yAxisID, position, palette) from `/api/histogram` — backend only serves `label`, `data`, `unit`; frontend computes display fields locally (color palette, axis grouping, axis position) |
 | 2.0 | 2025-07-30 | §2.2, §2.6, §5.3, §8 | Day-of-week filter for histogram — new `dayFilter` query parameter on `/api/histogram`, version bumped to 2.0.0 |
+| 2.1 | 2025-07-30 | §2.6 | Remove display fields (color, yAxisID, position) from histogram endpoint response to match frontend v1.6 contract — backend only serves raw data + unit; version bumped to 2.0.1 |

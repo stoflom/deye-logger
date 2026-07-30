@@ -214,7 +214,7 @@ def test_version(t: TestResult) -> None:
     print("\n[Test 1] GET /api/version")
     result = http_get("/api/version")
     t.check("version" in result, "Response has 'version' field")
-    t.check(result["version"] == "2.0.0", f"Version is 2.0.0 (got {result.get('version')})")
+    t.check(result["version"] == "2.0.1", f"Version is 2.0.1 (got {result.get('version')})")
 
 
 def test_columns(t: TestResult) -> None:
