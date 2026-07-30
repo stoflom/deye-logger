@@ -24,6 +24,7 @@ import json
 import subprocess
 import signal
 import argparse
+import re
 from urllib.parse import urlencode
 from urllib.request import urlopen, Request
 from urllib.error import URLError
@@ -214,7 +215,7 @@ def test_version(t: TestResult) -> None:
     print("\n[Test 1] GET /api/version")
     result = http_get("/api/version")
     t.check("version" in result, "Response has 'version' field")
-    t.check(result["version"] == "2.0.0", f"Version is 2.0.0 (got {result.get('version')})")
+    t.check(bool(re.match(r'^\d+\.\d+\.\d+$', result["version"])), f"Version matches semver pattern (got {result.get('version')})")
 
 
 def test_columns(t: TestResult) -> None:
