@@ -15,6 +15,7 @@ import {
   appState,
   histogramChartCanvas,
   binSizeSelect,
+  dayFilterSelect,
   splitHistogramView,
   splitHistogramScroll,
   fetchWithTimeout,
@@ -114,11 +115,13 @@ export async function fetchHistogramData(): Promise<HistogramResponse> {
   if (!cols.includes("device_timestamp")) cols.unshift("device_timestamp");
 
   const binMinutes = parseInt(binSizeSelect.value, 10) || 15;
+  const dayFilter = dayFilterSelect.value || "all";
   const params = new URLSearchParams({
     from: appState.dateRangeFrom,
     to: appState.dateRangeTo,
     columns: cols.join(","),
     binMinutes: String(binMinutes),
+    dayFilter,
   });
 
   const res = await fetchWithTimeout(`/api/histogram?${params}`, 30_000);

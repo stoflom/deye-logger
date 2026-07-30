@@ -134,6 +134,7 @@ export const histogramToggleBtn = getRequiredEl<HTMLButtonElement>("histogram-bt
 export const exportCsvBtn = getRequiredEl<HTMLButtonElement>("export-btn", "#export-btn");
 export const splitBtn = getRequiredEl<HTMLButtonElement>("split-btn", "#split-btn");
 export const binSizeSelect = getRequiredEl<HTMLSelectElement>("bin-size-select", "#bin-size-select");
+export const dayFilterSelect = getRequiredEl<HTMLSelectElement>("day-filter-select", "#day-filter-select");
 
 // --- Panels ---
 export const waitingViewPanel = getRequiredEl<HTMLElement>("waiting-view", "#waiting-view");
@@ -274,6 +275,7 @@ const ALL_CONTROLS: (HTMLElement | null)[] = [
   histogramToggleBtn,
   exportCsvBtn,
   binSizeSelect,
+  dayFilterSelect,
   splitBtn,
 ];
 
@@ -311,6 +313,7 @@ export function enableControlsExcept(exceptKeys: string[]): void {
     histogramToggle: histogramToggleBtn,
     export: exportCsvBtn,
     binSize: binSizeSelect,
+    dayFilter: dayFilterSelect,
     split: splitBtn,
   };
 
@@ -401,6 +404,7 @@ export interface ParsedUrlState {
   dateTo: string;
   binSize: string;
   isSplit: boolean;
+  dayFilter: string;
 }
 
 export function getUrlState(): ParsedUrlState {
@@ -418,15 +422,16 @@ export function getUrlState(): ParsedUrlState {
   const dateTo = params.get("to") || params.get("date") || appState.dateRangeTo || todayStr();
   const binSize = params.get("binSize") || "15";
   const isSplit = params.get("split") === "1";
+  const dayFilter = params.get("dayFilter") || "all";
 
-  return { view, dateFrom, dateTo, binSize, isSplit };
+  return { view, dateFrom, dateTo, binSize, isSplit, dayFilter };
 }
 
 export function buildUrlString(
   view: string,
   from: string,
   to: string,
-  opts?: { binSize?: string; isSplit?: boolean },
+  opts?: { binSize?: string; isSplit?: boolean; dayFilter?: string },
 ): string {
   const params = new URLSearchParams();
   params.set("view", view);
@@ -445,6 +450,11 @@ export function buildUrlString(
 
   if (opts?.isSplit) {
     params.set("split", "1");
+  }
+
+  const dayFilter = opts?.dayFilter;
+  if (dayFilter && dayFilter !== "all") {
+    params.set("dayFilter", dayFilter);
   }
 
   const query = params.toString();

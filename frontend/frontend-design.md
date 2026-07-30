@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v1.10
+> **Status:** v2.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -65,10 +65,10 @@ The title bar contains **all application buttons and controls** in a single hori
 **Button ordering in wrapped rows:** Buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next row. This means the bin-size and split buttons may appear on a second row when the viewport is narrow.
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────────┐
 │  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │ ☰ │
-│  📋 Data Grid │ 📊 Histogram │ ⬇ CSV │ Bin: 15 ▼ │ Split │
-└──────────────────────────────────────────────────────────────────┘
+│  📋 Data Grid │ 📊 Histogram │ ⬇ CSV │ Bin: 15 ▼ │ Day: All ▼ │ Split │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 | Element | ID | Purpose |
@@ -82,6 +82,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Histogram button | `#histogram-btn` | Toggle between normal mode and histogram mode |
 | CSV export | `#export-btn` | Export current grid as CSV (hidden in chart views) |
 | Bin size | `#bin-size-select` | Histogram bin size dropdown: `5` / `10` / `15` / `30` / `60` (hidden in non-histogram modes) |
+| Day filter | `#day-filter-select` | Histogram day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` (hidden in non-histogram modes) |
 | Split button | `#split-btn` | Split/combine histogram buttons (visible only in histogram view) |
 
 ### 2.2 Status Bar (`<div class="status-bar">`)
@@ -105,8 +106,9 @@ These objects define the **page state** and must be pushed to URL history so tha
 | `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getStateFromUrl()` (single day) |
 | `from` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range start) |
 | `to` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range end) |
-| `binSize` | `5`, `10`, `15`, `30`, `60` | `#bin-size-select` | `getStateFromUrl()`, histogram fetch |
-| `split` | `1` (presence = true) | Split button | `getStateFromUrl()`, `setView()` |
+| `binSize` | `5`, `10`, `15`, `30`, `60` | `#bin-size-select` | `getUrlState()`, histogram fetch |
+| `split` | `1` (presence = true) | Split button | `getUrlState()`, `setView()` |
+| `dayFilter` | `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` | `#day-filter-select` | `getUrlState()`, histogram fetch |
 
 **Serialization rules** (`buildUrlParams()`):
 
@@ -114,7 +116,9 @@ These objects define the **page state** and must be pushed to URL history so tha
 - Range: `?view=chart&from=2025-07-18&to=2025-07-20`
 - Histogram with custom bin: `?view=histogram&date=2025-07-20&binSize=30`
 - Histogram split: `?view=histogram&date=2025-07-20&split=1`
+- Histogram with day filter: `?view=histogram&date=2025-07-20&dayFilter=mon`
 - Default `binSize=15` is omitted from URL
+- Default `dayFilter=all` is omitted from URL
 
 ### 3.2 History State (pushState payload)
 
@@ -142,6 +146,7 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | `histogramBtn` click | Yes (on success) | Mode toggle |
 | Date nav (prev/next/today/picker) | Yes (on success) | Date change triggers full re-render |
 | `binSizeSelect` change | Yes (on success) | Re-renders current view |
+| `dayFilterSelect` change | Yes (on success) | Re-renders current view |
 | Split/Combine toggle | Yes (on success) | `split=1` in URL |
 | `popstate` (browser back/forward) | No (`replace`) | Restores view without double-push |
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
@@ -275,7 +280,7 @@ setView(view, opts?)
   │     │     → waitingView.hide()
   │     │     → showPanel("columns")
   │     │     → enableButtonsExcept(["refresh", "export", "viewToggle",
-  │     │       "histogramToggle", "split", "binSize", "prevDay", "nextDay", "today"])
+  │     │       "histogramToggle", "split", "binSize", "dayFilter", "prevDay", "nextDay", "today"])
   │     │     → columnsToggleBtn stays enabled (to close)
   │     │     → NO history push (transient)
   │     │
@@ -324,6 +329,7 @@ setView(view, opts?)
         viewToggleBtn.text/title       ← contextual label
         splitBtn.visible               ← histogram view only
         binSizeSelect.visible           ← histogram modes only
+        dayFilterSelect.visible          ← histogram modes only
 ```
 
 ### 6.3 Renderer Contract
@@ -361,6 +367,7 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | `popstate` | Browser back/forward | `{ replace: true, split: urlState.isSplit }` | Restores from URL state |
 | `popstate` → error | Error state detected | — | Shows error-view directly (no render) |
 | `binSizeSelect` change | Bin size dropdown | `split` from URL | Re-renders current histogram view |
+| `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram view |
 | `splitBtn` click | Split/combine toggle | `{ split: !histogramIsSplitMode }` | Toggles split mode |
 | `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
 | `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Transient — no history push |
@@ -468,6 +475,7 @@ try {
 | `histogramLastApiResult` | `HistogramResponse \| null` | Transient (cache) | Cached histogram API response for split rendering |
 | `histogramLastColumnNames` | `string[]` | Transient (cache) | Column names used in the last histogram API call |
 | `histogramMaxAverageValues` | `Map \| null` | Transient (render) | Per-metric max average value + timestamp from histogram |
+| `histogramDayFilter` | `string` | URL-stateful (`?dayFilter=X`) | Current day-of-week filter: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
 
 ### 8.3 DOM Panel References (`shared.ts`)
 
@@ -506,6 +514,7 @@ try {
 | `exportCsvBtn` | `#export-btn` | CSV export button |
 | `splitBtn` | `#split-btn` | Split/combine histogram button |
 | `binSizeSelect` | `#bin-size-select` | Histogram bin size dropdown |
+| `dayFilterSelect` | `#day-filter-select` | Histogram day-of-week filter dropdown |
 | `rowCountEl` | `#row-count` | Row/metric count display |
 | `versionBadgeEl` | `#version-badge` | Version string display |
 
@@ -550,6 +559,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | CSV Export | `exportCsvBtn` | `⬇ CSV` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
 | Split | `splitBtn` | `Split` / `Combine` | Histogram view only | Toggle (combined↔split) | `histogramIsSplitMode`, URL `?split=1` | `histogramIsSplitMode`, URL `?split=1` | URL-stateful (via `split`) |
 | Bin Size | `binSizeSelect` | `5` / `10` / `15` / `30` / `60` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?binSize=N` | URL-stateful (via `binSize`) |
+| Day Filter | `dayFilterSelect` | `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?dayFilter=X` | URL-stateful (via `dayFilter`) |
 
 #### View Toggle Button Labels (`viewToggleBtn`)
 
@@ -616,7 +626,7 @@ setView("histogram", { split: true })
   → showPanel("waiting") → waitingView.show()
   → renderHistogramView(updateWaiting, { split: true })
       → updateWaiting("Fetching histogram data…")
-      → GET /api/histogram?from=X&to=Y&columns=...&binMinutes=N
+      → GET /api/histogram?from=X&to=Y&columns=...&binMinutes=N&dayFilter=X
       → histogramLastApiResult = response
       → histogramMaxAverageValues = maxValues
       → updateWaiting("Drawing histogram…")
@@ -667,7 +677,7 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
       → return { ok: true }
   → hidePanel("waiting")
   → showPanel("columns")
-  → enableButtonsExcept(["refresh", "export", "viewToggle", "histogramToggle", "split", "binSize"])
+  → enableButtonsExcept(["refresh", "export", "viewToggle", "histogramToggle", "split", "binSize", "dayFilter"])
   → columnsToggleBtn stays enabled (to close)
   → NO history push (transient)
 
@@ -1148,3 +1158,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.8 | 2025-07-28 | §14.3, §14.6, §14.7 | Init procedure: show waiting-view synchronously before metadata fetches (title bar, status bar, and waiting-view all visible immediately), then recursively call setView() after metadata loaded — eliminates blank-page period during init |
 | 1.9 | 2026-07-29 | §9.3, §15.4 | Fix viewport breakpoints in 15.4 (actual CSS: 900px/600px/400px) and button emoji in 9.3 (💫 not 📋 for Data Grid/Raw Chart/Raw Grid); remove non-existent Refresh `⟳ Fetching…` alternate text |
 | 1.10 | 2026-07-29 | §15.6, §8.3 | Correct §15.6 — no inner scroll on `#split-histogram-scroll`; entire content area including summary cards scrolls together via `#content-area` |
+| 2.0 | 2025-07-30 | §2.1, §3.1, §3.3, §6.4, §8.2, §8.4, §9.3, §10.2, §17 | Day-of-week filter for histogram — new `dayFilter` URL parameter, `#day-filter-select` dropdown in title bar (visible in histogram modes), `histogramDayFilter` module variable, backend passes `dayFilter` to `/api/histogram`. Version bumped to 2.0. |

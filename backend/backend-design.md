@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v1.2
+> **Status:** v2.0
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -179,7 +179,7 @@ GET /api/version
 **Response (200 OK):**
 
 ```json
-{ "version": "1.2.0" }
+{ "version": "2.0.0" }
 ```
 
 **Response Fields:**
@@ -341,11 +341,13 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 | `to` | Yes | End date in YYYY-MM-DD format (inclusive) |
 | `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
 | `binMinutes` | No | Bin size in minutes. Default: `15`. Values: any positive integer (commonly 5, 10, 15, 30, 60). |
+| `dayFilter` | No | Day-of-week filter. Default: `all`. Values: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat`. When set to a specific day, only rows matching that day of week are included in the histogram bins. |
 
 **Validation:**
 
 - If any of `from`, `to`, or `columns` is missing → `400 Bad Request`
 - If no valid columns are requested → `400 Bad Request`
+- If `dayFilter` is provided but not one of `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` → treated as `all` (ignored)
 
 **Response (200 OK):**
 
@@ -493,11 +495,15 @@ Client → GET /api/data-range?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...
 ### 5.3 Histogram Queries (`/api/histogram`)
 
 ```
-Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinutes=N
+Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinutes=N&dayFilter=X
            ↓
        Parse columns, validate numeric columns (exclude metadata)
            ↓
+       Parse dayFilter (default: "all")
+           ↓
        Query all rows in range (same SQL as data-range)
+           ↓
+       If dayFilter != "all", filter rows to matching day-of-week only
            ↓
        Group rows into time bins (floor timestamps to bin boundary)
            ↓
@@ -509,6 +515,13 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
            ↓
        Return { labels, datasets, maxValues }
 ```
+
+**Day-of-week filtering logic:**
+
+- `dayFilter=all` (default): no filtering, all rows included (current behavior).
+- `dayFilter=mon` (or any other day): only rows whose `device_timestamp` falls on that day of week are included.
+- Day mapping: `sun=0`, `mon=1`, `tue=2`, `wed=3`, `thu=4`, `fri=5`, `sat=6` (JavaScript `Date.getDay()` convention).
+- Filtering is applied **after** the SQL range query, before binning. This means the date range still controls the overall window, but only matching days contribute data to the bins.
 
 ---
 
@@ -538,3 +551,4 @@ This section tracks changes to the design document itself. Every modification to
 | Version | Date | Section Changed | Description |
 |---------|------|----------------|-------------|
 | 1.2 | 2025-07-28 | §1.4, §1.5, §2.6, §5.3 | Initial — API endpoints, column labels, histogram flow |
+| 2.0 | 2025-07-30 | §2.2, §2.6, §5.3, §8 | Day-of-week filter for histogram — new `dayFilter` query parameter on `/api/histogram`, version bumped to 2.0.0 |

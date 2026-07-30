@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "1.10.0";
+export const FRONTEND_VERSION = "2.0.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -24,6 +24,7 @@ import {
   viewToggleBtn,
   histogramToggleBtn,
   binSizeSelect,
+  dayFilterSelect,
   exportCsvBtn,
   splitBtn,
   versionBadgeEl,
@@ -403,6 +404,7 @@ async function setView(
       {
         binSize: isHistogramMode ? binSizeSelect.value : undefined,
         isSplit: split,
+        dayFilter: isHistogramMode ? dayFilterSelect.value : undefined,
       },
     );
     const historyMethod = replace ? history.replaceState : history.pushState;
@@ -474,6 +476,15 @@ binSizeSelect.addEventListener("change", () => {
   }
 });
 
+// Day filter change — re-render current histogram view
+dayFilterSelect.addEventListener("change", () => {
+  if (appState.activeView === "histogram" || appState.activeView === "histogram-grid") {
+    const params = new URLSearchParams(window.location.search);
+    const currentSplit = params.get("split") === "1";
+    setView(appState.activeView, { split: currentSplit });
+  }
+});
+
 // CSV export — stateless action
 exportCsvBtn.addEventListener("click", () => {
   const api = appState.activeView === "histogram-grid" ? getHistogramGridApi() : appState.rawDataGridApi;
@@ -537,6 +548,9 @@ window.addEventListener("popstate", () => {
   if (urlState.binSize) {
     binSizeSelect.value = urlState.binSize;
   }
+  if (urlState.dayFilter) {
+    dayFilterSelect.value = urlState.dayFilter;
+  }
   updateNavButtonStates();
 
   setView(urlState.view, { replace: true, split: urlState.isSplit });
@@ -560,6 +574,9 @@ async function init(): Promise<void> {
   dateToInput.value = urlState.dateTo;
   if (urlState.binSize) {
     binSizeSelect.value = urlState.binSize;
+  }
+  if (urlState.dayFilter) {
+    dayFilterSelect.value = urlState.dayFilter;
   }
 
   // Show waiting-view synchronously before any async work — eliminates blank page.

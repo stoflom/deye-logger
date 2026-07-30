@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "1.2.0";
+const BACKEND_VERSION = "2.0.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -229,6 +229,12 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     const to = req.query.to as string;
     const columns = req.query.columns as string;
     const binMinutes = parseInt(req.query.binMinutes as string, 10) || 15;
+    const dayFilter = (req.query.dayFilter as string)?.toLowerCase() ?? "all";
+
+    // Validate dayFilter against allowed values
+    const validDays = ["all", "sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const targetDay = validDays.includes(dayFilter) ? dayFilter : "all";
+    const dayIndex = dayFilter === "all" ? -1 : ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(dayFilter);
 
     if (!from || !to || !columns) {
       res.status(400).json({ error: "Missing 'from', 'to', and 'columns' query params" });
@@ -246,7 +252,22 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     }
     const rows = queryTelemetryBetween(db, parsedCols, fromTs, toTs) as Record<string, unknown>[];
 
-    if (rows.length === 0) {
+    // Filter rows by day of week if dayFilter is set
+    const filteredRows = dayIndex >= 0
+      ? rows.filter((row) => {
+          const ts = row.device_timestamp;
+          let d: Date | null = null;
+          if (typeof ts === "number") {
+            d = new Date(ts > 1e12 ? ts : ts * 1000);
+          } else if (typeof ts === "string" && ts) {
+            d = new Date(ts);
+            if (isNaN(d.getTime())) d = null;
+          }
+          return d && d.getDay() === dayIndex;
+        })
+      : rows;
+
+    if (filteredRows.length === 0) {
       res.json({ labels: [], datasets: [], maxValues: {} });
       return;
     }
@@ -267,7 +288,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     // Parse timestamps and group into bins
     const binMap = new Map<string, { sum: Record<string, number>; count: number }>();
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const ts = row.device_timestamp;
       let d: Date | null = null;
       if (typeof ts === "number") {
