@@ -151,13 +151,26 @@ cd frontend && npm run dev
 
 ### Viewer Features
 
-- **Chart view** — time-series line chart, toggleable columns
+The viewer supports four view modes, toggled via the **View Toggle** and **Histogram** buttons:
+
+- **Chart view** — time-series line chart with multiple y-axes (one per unit)
+- **Data Grid** — sortable, filterable, resizable AG Grid with units in column headers and CSV export
 - **Histogram view** — time-binned bar chart (5/10/15/30/60 min bins) showing averages across a date range
-- **Data Grid** — sortable, filterable, resizable AG Grid with CSV export
+- **Histogram Grid** — binned data as a sortable AG Grid
+- **Split Histogram** — histogram columns displayed as individual charts for detailed comparison
+
+Controls in the histogram toolbar:
+- **Bin size** — choose bin width (5/10/15/30/60 minutes)
+- **Day filter** — filter histogram by day of week (All/Sun/Mon/Tue/Wed/Thu/Fri/Sat)
+- **Split/Combine** — toggle split mode for histograms
+
+Additional features:
 - **Date navigation** — ‹/› arrows and date picker with range selection
-- **Column selection** — toggle columns on/off (persisted in localStorage)
-- **Summary cards** — dynamic max-value cards for all numeric columns
+- **Column selection** — toggle columns on/off, persisted in localStorage ("Save as Default")
+- **Summary cards** — dynamic max/average value cards with units (e.g. `1245.6 W`, `85 %`)
+- **Version badge** — shows frontend and backend versions
 - **Refresh button** — triggers `deye-logger.py` to fetch latest telemetry then reloads
+- **URL-stateful** — all views are bookmarkable via URL parameters (`view`, `date`, `from`, `to`, `binSize`, `split`, `dayFilter`)
 
 ### Server Options
 
