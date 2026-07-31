@@ -327,11 +327,11 @@ usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
 - `DD-MM-YYYY`
 - `MM/DD/YYYY`
 
-## 8. Column Metadata Management
+## 9. Column Metadata Management
 
 The deye-logger script fetches column metadata from the DeyeCloud API and stores it in the `column_metadata` table.
 
-### 8.1 Metadata Fetch
+### 9.1 Metadata Fetch
 
 On each run, the script calls the DeyeCloud API's measure points endpoint to retrieve the full list of available telemetry columns:
 
@@ -342,18 +342,18 @@ Authorization: Bearer {accessToken}
 
 The response contains field codes and names for all available measure points. The script maps these to database columns using the field mapping information and stores the result in `column_metadata`.
 
-### 8.2 Initialization
+### 9.2 Initialization
 
 If the `column_metadata` table does not exist, the script creates it automatically (using `CREATE TABLE IF NOT EXISTS`). On every run, the table is **replaced** (truncated and re-inserted) from the latest API data to stay in sync with any DeyeCloud API changes.
 
-### 8.3 Field Mapping
+### 9.3 Field Mapping
 
 The script uses `FIELD_MAP` (DB column → API key names) and `HISTORY_FIELD_MAP` (API key → DB column) to map DeyeCloud API field codes to internal database column names. These mappings are used for:
 
 1. **Data ingestion**: Translating API responses into the correct DB columns.
 2. **Metadata population**: Determining the `column_name` for each `api_field_code` returned by the measure points API.
 
-## 9. Schema Evolution
+## 10. Schema Evolution
 
 The script handles migration automatically in `init_database()`:
 
@@ -362,13 +362,13 @@ The script handles migration automatically in `init_database()`:
 - **Table reordering**: `telemetry_sorted` migration for timestamp-ordered data.
 - **Stale data cleanup**: `gap_attempts_cleared` and `spurious_records_cleared` one-time migrations.
 
-## 10. Dependencies
+## 11. Dependencies
 
 - Python 3.8+
 - `requests`
 - `python-dotenv`
 
-## 11. Change Management
+## 12. Change Management
 
 This section tracks changes to the design document itself. Every modification to this document must be recorded below.
 
