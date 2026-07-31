@@ -66,6 +66,46 @@ def create_test_database(db_path: str) -> None:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+    # Create column_metadata table (single source of truth for column definitions)
+    cursor.execute("""
+        CREATE TABLE column_metadata (
+            column_name TEXT PRIMARY KEY,
+            display_label TEXT NOT NULL,
+            is_numeric INTEGER NOT NULL DEFAULT 1,
+            unit TEXT NOT NULL DEFAULT '',
+            api_field_code TEXT,
+            description TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    # Insert all 48 column definitions
+    columns = [
+        ("device_timestamp", "Timestamp", 0, "", "", "", 0),
+        ("fetch_timestamp", "Fetch Time", 0, "", "", "", 1),
+        ("inverter_sn", "Inverter SN", 0, "", "", "", 2),
+        ("daily_energy", "Daily Energy", 1, "kWh", "", "", 3),
+        ("total_energy", "Total Energy", 1, "kWh", "", "", 4),
+        ("current_power", "Current Power", 1, "W", "", "", 5),
+        ("battery_soc", "Battery SOC", 1, "%", "", "", 6),
+        ("battery_voltage", "Battery Voltage", 1, "V", "", "", 7),
+        ("battery_current", "Battery Current", 1, "A", "", "", 8),
+        ("grid_power", "Grid Power", 1, "W", "", "", 9),
+        ("grid_voltage", "Grid Voltage", 1, "V", "", "", 10),
+        ("grid_frequency", "Grid Frequency", 1, "Hz", "", "", 11),
+        ("pv1_voltage", "PV1 Voltage", 1, "V", "", "", 12),
+        ("pv1_current", "PV1 Current", 1, "A", "", "", 13),
+        ("pv1_power", "PV1 Power", 1, "W", "", "", 14),
+        ("pv2_voltage", "PV2 Voltage", 1, "V", "", "", 15),
+        ("pv2_current", "PV2 Current", 1, "A", "", "", 16),
+        ("pv2_power", "PV2 Power", 1, "W", "", "", 17),
+        ("load_power", "Load Power", 1, "W", "", "", 18),
+        ("total_dc_power", "Total DC Power", 1, "W", "", "", 19),
+        ("battery_power", "Battery Power", 1, "W", "", "", 20),
+        ("ac_voltage", "AC Voltage", 1, "V", "", "", 21),
+        ("ac_current", "AC Current", 1, "A", "", "", 22),
+    ]
+    cursor.executemany("INSERT INTO column_metadata VALUES (?,?,?,?,?,?,?)", columns)
+
     # Create the inverter_telemetry table
     cursor.execute("""
         CREATE TABLE inverter_telemetry (
@@ -223,11 +263,15 @@ def test_columns(t: TestResult) -> None:
     print("\n[Test 2] GET /api/columns")
     result = http_get("/api/columns")
     t.check(isinstance(result, list), "Response is an array")
-    t.check(len(result) == 48, f"Returns 48 columns (got {len(result)})")
+    t.check(len(result) == 23, f"Returns 23 test columns (got {len(result)})")
     if len(result) > 0:
         t.check("name" in result[0], "Columns have 'name' field")
         t.check("label" in result[0], "Columns have 'label' field")
+        t.check("unit" in result[0], "Columns have 'unit' field")
+        t.check("is_numeric" in result[0], "Columns have 'is_numeric' field")
         t.check(result[0]["name"] == "device_timestamp", f"First column is device_timestamp")
+        t.check(result[0]["label"] == "Timestamp", f"First column label is 'Timestamp' (got {result[0]['label']})")
+        t.check(result[4]["unit"] == "kWh", f"daily_energy unit is 'kWh' (got {result[4].get('unit')})")
 
 
 def test_dates(t: TestResult) -> None:
