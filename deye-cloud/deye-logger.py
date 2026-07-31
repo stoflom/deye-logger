@@ -203,32 +203,51 @@ HISTORY_FIELD_MAP = {
 def _derive_unit(api_field_code: str, db_column: str) -> str:
     """Derives unit from API field code or DB column name as fallback.
 
-    Used when the measurePoints API doesn't return unit information.
-    Returns empty string if unit cannot be determined.
+    Splits the field code into word segments (by camelCase boundaries and
+    acronyms) for accurate matching. Uses DB column as fallback.
     """
-    # Try to extract from API field code
-    upper = api_field_code.upper()
-    if any(k in upper for k in ["VOLTAGE", "AC", "DC", "PV", "LOAD"]):
-        return "V"
-    if any(k in upper for k in ["CURRENT", "CT"]):
-        return "A"
-    if any(k in upper for k in ["POWER", "WATT"]):
-        return "W"
-    if any(k in upper for k in ["ENERGY", "PRODUCTION", "CONSUMPTION", "CHARGE",
-                                 "DISCHARGE", "FEED", "PURCHASED"]):
-        return "kWh"
-    if "SOC" in upper:
-        return "%"
-    if "FREQUENCY" in upper:
-        return "Hz"
-    if "TEMPERATURE" in upper:
-        return "°C"
-    if "RATED_CAPACITY" in upper:
-        return "Ah"
-    if "RATED_POWER" in upper:
-        return "W"
+    # Split API field code into word segments using regex
+    # e.g. 'DailyActiveProduction' -> ['Daily', 'Active', 'Production']
+    #      'DCVoltagePV1' -> ['DC', 'Voltage', 'PV1']
+    #      'InverterOutputPowerL1L2' -> ['Inverter', 'Output', 'Power', 'L1L2']
+    # Matches: acronyms (consecutive uppercase) followed by lowercase words
+    import re
+    words = re.findall(r'[A-Z]+(?=[A-Z][a-z]|[\d\W]|$)|[A-Z]?[a-z]+|[0-9]+', api_field_code)
 
-    # Fallback to DB column
+    upper_words = [w.upper() for w in words]
+    # Check ALL words for the most specific matches first
+    for w in upper_words:
+        if w == "POWER" or w == "WATT":
+            return "W"
+    for w in upper_words:
+        if w == "CURRENT" or w == "CT":
+            return "A"
+    for w in upper_words:
+        if w == "FREQUENCY":
+            return "Hz"
+        if "TEMPERATURE" in w or w == "TEMP":
+            return "°C"
+
+    # Then check for voltage-related words
+    for w in upper_words:
+        if w == "VOLTAGE" or w in ("AC", "DC", "PV"):
+            return "V"
+
+    # Then check energy-related words
+    for w in upper_words:
+        if w in ("ENERGY", "PRODUCTION", "CONSUMPTION", "CHARGE",
+                 "DISCHARGE", "FEED", "PURCHASED"):
+            return "kWh"
+        if "SOC" in w:
+            return "%"
+
+    for w in upper_words:
+        if "RATED" in w and "CAPACITY" in w:
+            return "Ah"
+        if "RATED" in w and "POWER" in w:
+            return "W"
+
+    # Fallback to DB column name
     lower = db_column.lower()
     if "voltage" in lower:
         return "V"
@@ -250,36 +269,59 @@ def _derive_unit(api_field_code: str, db_column: str) -> str:
     return ""
 
 
+def _field_code_to_label(field_code: str) -> str:
+    """Converts a DeyeCloud API field code to a human-readable label.
+
+    Handles common patterns:
+    - camelCase: 'DailyActiveProduction' → 'Daily Active Production'
+    - acronyms followed by words: 'DCVoltagePV1' → 'DC Voltage PV1'
+    - special cases: 'Temperature- Battery' → 'Battery Temperature'
+    """
+    # Special case with hyphen
+    if "-" in field_code:
+        parts = field_code.split("-", 1)
+        return parts[1].strip() + " " + parts[0].strip() if len(parts[1].strip()) < len(parts[0].strip()) else parts[0].strip() + " " + parts[1].strip()
+
+    # Insert spaces before:
+    # 1. An uppercase char preceded by lowercase (DailyActive → Daily Active)
+    # 2. An uppercase char followed by lowercase and preceded by uppercase (DCVoltage → DC Voltage)
+    result = []
+    for i, ch in enumerate(field_code):
+        if i > 0:
+            prev_ch = field_code[i - 1]
+            if ch.isupper():
+                if prev_ch.islower():
+                    result.append(" ")
+                elif prev_ch.isupper() and i + 1 < len(field_code) and field_code[i + 1].islower():
+                    result.append(" ")
+        result.append(ch)
+    return "".join(result)
+
+
 def fetch_measure_points(token: str) -> list:
-    """Fetches measure point metadata from DeyeCloud API.
+    """Fetches measure point field codes from DeyeCloud API.
 
-    Returns a list of measure point dicts. Each dict may contain:
-    - name: field code
-    - label: human-readable name
-    - unit: unit of measurement
-    - description: optional description
+    The API returns a flat list of field name strings (e.g. ['SOC', 'BatteryVoltage', ...]).
+    No per-field metadata (label, unit, description) is returned.
 
-    Handles various response formats.
+    Returns the list of field name strings, or empty list on failure.
     """
     url = f"{BASE_URL}/v1.0/device/measurePoints"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {"deviceSn": INVERTER_SN}
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
         if data.get("code") == "1000000":
-            # Try various response structures
-            data_block = data.get("data", {})
-            if isinstance(data_block, dict):
-                measure_points = data_block.get("measurePoints", [])
-                if not measure_points:
-                    measure_points = data_block.get("data", [])
-            elif isinstance(data_block, list):
-                measure_points = data_block
-            else:
-                measure_points = []
-            return measure_points if isinstance(measure_points, list) else []
+            measure_points = data.get("measurePoints", [])
+            # API may return a flat list of strings (actual format)
+            if measure_points and isinstance(measure_points[0], str):
+                return measure_points
+            # Fallback: nested list of objects with 'name' field
+            if isinstance(measure_points, list):
+                return [mp.get("name", mp.get("fieldCode", mp.get("code", ""))) for mp in measure_points if isinstance(mp, dict)]
+            return []
         else:
             print(f"  \u26a0\ufe0f Measure points API error: {data.get('msg', 'Unknown error')}")
             return []
@@ -292,26 +334,24 @@ def populate_column_metadata(token: str) -> bool:
     """Fetches column metadata from DeyeCloud API and stores in column_metadata table.
 
     On each run, the table is truncated and re-populated from the latest API data.
+    The API returns a flat list of field name strings; labels and units are
+    derived from the field codes using _field_code_to_label() and _derive_unit().
+
     Returns True if metadata was updated, False if API failed (existing data preserved).
     """
     print("  Fetching column metadata from DeyeCloud API...")
 
-    # Build reverse map: API field code -> DB column name
-    api_to_db = {v: k for k, v in HISTORY_FIELD_MAP.items()}
+    # Build map: API field code -> DB column name
+    api_to_db = {k: v for k, v in HISTORY_FIELD_MAP.items()}
 
-    # Fetch measure points from API
+    # Fetch measure points from API (flat list of field name strings)
     measure_points = fetch_measure_points(token)
     if not measure_points:
         print("  \u26a0\ufe0f Could not fetch measure points from API. Keeping existing column metadata.")
         return False
 
-    # Create a map from API field code to measure point data
-    api_data = {}
-    for mp in measure_points:
-        if isinstance(mp, dict):
-            name = mp.get("name", mp.get("fieldCode", mp.get("code", "")))
-            if name:
-                api_data[name] = mp
+    # Convert flat list to a set for fast lookup
+    available_api_fields = set(measure_points)
 
     # Define sort order for DB columns (matches the DB schema column order)
     column_order = [
@@ -339,23 +379,21 @@ def populate_column_metadata(token: str) -> bool:
     # Truncate and re-insert
     cursor.execute("DELETE FROM column_metadata")
 
+    # Track stats
+    found_from_api = 0
+    missing_from_api = 0
+
     # Process each known column from HISTORY_FIELD_MAP
     for api_field_code, db_column in sorted(api_to_db.items(),
                                             key=lambda x: column_order.index(x[1]) if x[1] in column_order else 999):
-        api_info = api_data.get(api_field_code, {})
+        # Derive display label from field code
+        display_label = _field_code_to_label(api_field_code)
 
-        # Get display label from API response
-        display_label = api_info.get("label", api_info.get("name", api_field_code))
+        # Derive unit
+        unit = _derive_unit(api_field_code, db_column)
 
-        # Get unit from API response
-        unit = api_info.get("unit", "")
-
-        # Derive unit if not provided by API
-        if not unit:
-            unit = _derive_unit(api_field_code, db_column)
-
-        # Description from API if available
-        description = api_info.get("description", "")
+        # Description from API if available (not supported in this API format)
+        description = ""
 
         # All telemetry columns are numeric
         is_numeric = 1
@@ -363,13 +401,19 @@ def populate_column_metadata(token: str) -> bool:
         # Sort order based on position in column_order
         sort_order = column_order.index(db_column) if db_column in column_order else len(column_order)
 
+        # Check if this field is available from the API
+        if api_field_code in available_api_fields:
+            found_from_api += 1
+        else:
+            missing_from_api += 1
+
         cursor.execute('''
             INSERT INTO column_metadata
             (column_name, display_label, is_numeric, unit, api_field_code, description, sort_order)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (db_column, display_label, is_numeric, unit, api_field_code, description, sort_order))
 
-    # Add metadata columns (not from API)
+    # Add metadata columns (not from API measurePoints)
     metadata_columns = [
         ("device_timestamp", "Timestamp", 0, "", None, 0),
         ("fetch_timestamp", "Fetch Time", 0, "", None, 1),
@@ -388,6 +432,7 @@ def populate_column_metadata(token: str) -> bool:
     cursor.execute("SELECT COUNT(*) FROM column_metadata")
     count = cursor.fetchone()[0]
     print(f"  \u2705 Stored {count} column metadata records.")
+    print(f"     {found_from_api} fields available from DeyeCloud API, {missing_from_api} not returned by API.")
 
     conn.close()
     return True
