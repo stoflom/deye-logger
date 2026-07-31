@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v2.0
+> **Status:** v2.2
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -69,60 +69,21 @@ This allows the server to serve the complete frontend SPA without a separate web
 
 ### 1.4 Column Labels
 
-All telemetry column names and their human-readable labels are defined in a single source-of-truth record `COLUMN_LABELS` in `main.ts`. This record maps internal column names (matching database columns) to display labels with units.
+Column metadata (names, display labels, units, numeric flag, sort order) is stored in the `column_metadata` table in the SQLite database and populated by the deye-logger Python script from the DeyeCloud API. No column information is hardcoded in the backend.
 
-Available columns (48 total):
+The `column_metadata` table schema:
 
-| Column Key | Display Label |
-| ------------ | --------------- |
-| `device_timestamp` | Timestamp |
-| `fetch_timestamp` | Fetch Time |
-| `inverter_sn` | Inverter SN |
-| `daily_energy` | Daily Energy (kWh) |
-| `total_energy` | Total Energy (kWh) |
-| `current_power` | Current Power (W) |
-| `battery_soc` | Battery SOC (%) |
-| `battery_voltage` | Battery Voltage (V) |
-| `battery_current` | Battery Current (A) |
-| `grid_power` | Grid Power (W) |
-| `grid_voltage` | Grid Voltage (V) |
-| `grid_frequency` | Grid Frequency (Hz) |
-| `pv1_voltage` | PV1 Voltage (V) |
-| `pv1_current` | PV1 Current (A) |
-| `pv1_power` | PV1 Power (W) |
-| `pv2_voltage` | PV2 Voltage (V) |
-| `pv2_current` | PV2 Current (A) |
-| `pv2_power` | PV2 Power (W) |
-| `load_power` | Load Power (W) |
-| `pv3_voltage` | PV3 Voltage (V) |
-| `pv3_current` | PV3 Current (A) |
-| `pv3_power` | PV3 Power (W) |
-| `total_dc_power` | Total DC Power (W) |
-| `total_consumption_power` | Total Consumption Power (W) |
-| `cumulative_consumption` | Cumulative Consumption (kWh) |
-| `daily_consumption` | Daily Consumption (kWh) |
-| `battery_power` | Battery Power (W) |
-| `total_charge_energy` | Total Charge Energy (kWh) |
-| `total_discharge_energy` | Total Discharge Energy (kWh) |
-| `daily_charging_energy` | Daily Charging Energy (kWh) |
-| `daily_discharging_energy` | Daily Discharging Energy (kWh) |
-| `cumulative_grid_feed_in` | Cumulative Grid Feed-in (kWh) |
-| `cumulative_energy_purchased` | Cumulative Energy Purchased (kWh) |
-| `daily_grid_feed_in` | Daily Grid Feed-in (kWh) |
-| `daily_energy_purchased` | Daily Energy Purchased (kWh) |
-| `load_voltage` | Load Voltage (V) |
-| `grid_current` | Grid Current (A) |
-| `external_ct_power` | External CT Power (W) |
-| `battery_rated_capacity` | Battery Rated Capacity (Ah) |
-| `battery_temp` | Battery Temp (°C) |
-| `dc_temp` | DC Temp (°C) |
-| `ac_temp` | AC Temp (°C) |
-| `generator_frequency` | Generator Frequency (Hz) |
-| `generator_voltage` | Generator Voltage (V) |
-| `total_generator_production` | Total Generator Prod. (kWh) |
-| `ac_voltage` | AC Voltage (V) |
-| `ac_current` | AC Current (A) |
-| `rated_power` | Rated Power (W) |
+| Column | Type | Description |
+| --- | --- | --- |
+| `column_name` | TEXT (PK) | Internal database column name |
+| `display_label` | TEXT | Human-readable label with units |
+| `is_numeric` | INTEGER | `1` if numeric, `0` if metadata/text |
+| `unit` | TEXT | Unit of measurement (e.g., `kWh`, `V`, `W`) |
+| `api_field_code` | TEXT | Original DeyeCloud API field code |
+| `description` | TEXT | Optional description |
+| `sort_order` | INTEGER | Display order |
+
+The backend reads this table to serve the `/api/columns` endpoint. The `parseColumnsParam()` function validates incoming column requests against the column names stored in this table (not against a hardcoded list). Numeric columns are identified by the `is_numeric` flag.
 
 ### 1.5 Database
 
@@ -138,7 +99,7 @@ All API endpoints respond with **JSON** and are prefixed with `/api/`.
 
 ### 2.1 `GET /api/columns`
 
-Returns the list of all available telemetry columns with their human-readable labels.
+Returns the list of all available telemetry columns with their human-readable labels. Data is read from the `column_metadata` table in the SQLite database, which is populated by the deye-logger Python script from the DeyeCloud API.
 
 **Request:**
 
@@ -379,9 +340,9 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 | ------- | ------ | ------------- |
 | `labels` | string[] | Time labels for each bin in `HH:MM` format (e.g., `["00:00", "00:15", "00:30"]`) |
 | `datasets` | object[] | One dataset per numeric column (metadata columns like `device_timestamp`, `inverter_sn`, `fetch_timestamp` are excluded). Each dataset contains: |
-| `datasets[].label` | string | Human-readable column label (from `COLUMN_LABELS`) |
+| `datasets[].label` | string | Human-readable column label (from `column_metadata.display_label`) |
 | `datasets[].data` | number[] | Averaged values for each bin. No `null` values — only bins with data for that column are included. |
-| `datasets[].unit` | string | Unit extracted from the column label (text within parentheses, e.g., `"kWh"` from `"Daily Energy (kWh)"`). Returns `""` if no unit. |
+| `datasets[].unit` | string | Unit extracted from the column metadata (`column_metadata.unit`). Returns `""` if no unit. |
 | `maxValues` | object | Map of column label → `{ value: number, timestamp: string }` for peak display in summary cards. Only includes columns that had numeric data. |
 
 **Empty Response:**
@@ -454,7 +415,7 @@ The `parseColumnsParam` function validates incoming column requests:
 
 1. Splits the comma-separated `columns` query parameter.
 2. Trims whitespace and filters empty strings.
-3. Keeps only columns that exist in the `COLUMN_LABELS` registry.
+3. Keeps only columns that exist in the `column_metadata` table (column names from the database).
 4. Automatically prepends `device_timestamp` to the list if any valid column was requested (ensures timestamps are always present).
 5. Returns the validated list; empty list → 400 error.
 
@@ -497,7 +458,7 @@ Client → GET /api/data-range?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...
 ```
 Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinutes=N&dayFilter=X
            ↓
-       Parse columns, validate numeric columns (exclude metadata)
+       Parse columns, validate against column_metadata table
            ↓
        Parse dayFilter (default: "all")
            ↓
@@ -509,7 +470,7 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
            ↓
        Compute per-bin average for each numeric column
            ↓
-       Extract units from column labels
+       Retrieve labels and units from column_metadata table
            ↓
        Compute per-column max values (value + timestamp)
            ↓
@@ -554,3 +515,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.3 | 2025-07-28 | §2.6, §5.3 | Backend stripped of display fields (color, yAxisID, position, palette) from `/api/histogram` — backend only serves `label`, `data`, `unit`; frontend computes display fields locally (color palette, axis grouping, axis position) |
 | 2.0 | 2025-07-30 | §2.2, §2.6, §5.3, §8 | Day-of-week filter for histogram — new `dayFilter` query parameter on `/api/histogram`, version bumped to 2.0.0 |
 | 2.1 | 2025-07-30 | §2.6 | Remove display fields (color, yAxisID, position) from histogram endpoint response to match frontend v1.6 contract — backend only serves raw data + unit; version bumped to 2.0.1 |
+| 2.2 | 2026-07-30 | §1.4, §2.1, §2.6, §4, §5.3 | Column labels no longer hardcoded — backend reads column metadata from `column_metadata` table populated by deye-logger from DeyeCloud API; histogram units from database; column filtering validates against database |

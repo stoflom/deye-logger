@@ -159,7 +159,7 @@ export function renderRawDataChart(): void {
 
   for (const col of numericCols) {
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.name === col);
-    const unit = extractUnit(meta ? meta.label : col);
+    const unit = extractUnit(meta, col);
     if (!(unit in unitAxisMap)) {
       const axisId = leftCount < 2 ? `y-${leftCount}` : `yR-${rightCount}`;
       const position = leftCount < 2 ? "left" : "right";
@@ -203,7 +203,7 @@ export function renderRawDataChart(): void {
   // Step 3: Build datasets referencing the pre-created axes
   const datasets = numericCols.map((col, i) => {
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.name === col);
-    const unit = extractUnit(meta ? meta.label : col);
+    const unit = extractUnit(meta, col);
     const yAxisId = unitAxisMap[unit] ?? "y-0";
 
     return {

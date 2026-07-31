@@ -16,6 +16,7 @@ import { Chart } from "chart.js";
 export interface ColumnMeta {
   name: string;
   label: string;
+  unit: string;
 }
 
 export type ViewMode = "chart" | "grid" | "histogram" | "histogram-grid";
@@ -373,7 +374,10 @@ export function updateNavButtonStates(): void {
   nextDayBtn.disabled = !appState.maxAvailableDate || appState.dateRangeTo >= effectiveMax;
 }
 
-export function extractUnit(label: string): string {
+export function extractUnit(meta: ColumnMeta | undefined, fallback?: string): string {
+  if (meta && meta.unit) return meta.unit;
+  // Fallback: parse from label (legacy support)
+  const label = meta?.label ?? fallback ?? "";
   const match = label.match(/\((.+)\)$/);
   return match ? match[1] : "";
 }
