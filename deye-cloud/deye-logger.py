@@ -1130,13 +1130,13 @@ def main():
     args = parser.parse_args()
 
     # Resolve DB path: CLI arg (-db) > .env DB_NAME > fallback default
-    # Resolve relative paths against the script's directory
+    # All relative paths are resolved against the script's directory
     global DB_NAME
     if args.db:
         DB_NAME = os.path.abspath(args.db) if not os.path.isabs(args.db) else args.db
     elif os.getenv("DB_NAME"):
         env_db = os.getenv("DB_NAME")
-        DB_NAME = os.path.abspath(env_db) if not os.path.isabs(env_db) else env_db
+        DB_NAME = os.path.normpath(os.path.join(SCRIPT_DIR, env_db)) if not os.path.isabs(env_db) else env_db
     else:
         DB_NAME = DEFAULT_DB_NAME
 
