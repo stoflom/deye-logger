@@ -3,7 +3,7 @@
 > **Status:** v2.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
-> **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
+> **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
 >
 > - **major** — major new features, architectural changes, number must agree with this document major version
 > - **minor** — design changes to implement new features or fix design issues, number must agree with this document minor version
