@@ -199,6 +199,200 @@ HISTORY_FIELD_MAP = {
     "RatedPower": "rated_power",
 }
 
+
+def _derive_unit(api_field_code: str, db_column: str) -> str:
+    """Derives unit from API field code or DB column name as fallback.
+
+    Used when the measurePoints API doesn't return unit information.
+    Returns empty string if unit cannot be determined.
+    """
+    # Try to extract from API field code
+    upper = api_field_code.upper()
+    if any(k in upper for k in ["VOLTAGE", "AC", "DC", "PV", "LOAD"]):
+        return "V"
+    if any(k in upper for k in ["CURRENT", "CT"]):
+        return "A"
+    if any(k in upper for k in ["POWER", "WATT"]):
+        return "W"
+    if any(k in upper for k in ["ENERGY", "PRODUCTION", "CONSUMPTION", "CHARGE",
+                                 "DISCHARGE", "FEED", "PURCHASED"]):
+        return "kWh"
+    if "SOC" in upper:
+        return "%"
+    if "FREQUENCY" in upper:
+        return "Hz"
+    if "TEMPERATURE" in upper:
+        return "°C"
+    if "RATED_CAPACITY" in upper:
+        return "Ah"
+    if "RATED_POWER" in upper:
+        return "W"
+
+    # Fallback to DB column
+    lower = db_column.lower()
+    if "voltage" in lower:
+        return "V"
+    if "current" in lower:
+        return "A"
+    if "power" in lower:
+        return "W"
+    if any(k in lower for k in ["energy", "production", "consumption"]):
+        return "kWh"
+    if "soc" in lower:
+        return "%"
+    if "frequency" in lower:
+        return "Hz"
+    if "temp" in lower:
+        return "°C"
+    if "capacity" in lower:
+        return "Ah"
+
+    return ""
+
+
+def fetch_measure_points(token: str) -> list:
+    """Fetches measure point metadata from DeyeCloud API.
+
+    Returns a list of measure point dicts. Each dict may contain:
+    - name: field code
+    - label: human-readable name
+    - unit: unit of measurement
+    - description: optional description
+
+    Handles various response formats.
+    """
+    url = f"{BASE_URL}/v1.0/device/measurePoints"
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"deviceSn": INVERTER_SN}
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("code") == "1000000":
+            # Try various response structures
+            data_block = data.get("data", {})
+            if isinstance(data_block, dict):
+                measure_points = data_block.get("measurePoints", [])
+                if not measure_points:
+                    measure_points = data_block.get("data", [])
+            elif isinstance(data_block, list):
+                measure_points = data_block
+            else:
+                measure_points = []
+            return measure_points if isinstance(measure_points, list) else []
+        else:
+            print(f"  \u26a0\ufe0f Measure points API error: {data.get('msg', 'Unknown error')}")
+            return []
+    except Exception as e:
+        print(f"  \u26a0\ufe0f Measure points fetch error: {e}")
+        return []
+
+
+def populate_column_metadata(token: str) -> bool:
+    """Fetches column metadata from DeyeCloud API and stores in column_metadata table.
+
+    On each run, the table is truncated and re-populated from the latest API data.
+    Returns True if metadata was updated, False if API failed (existing data preserved).
+    """
+    print("  Fetching column metadata from DeyeCloud API...")
+
+    # Build reverse map: API field code -> DB column name
+    api_to_db = {v: k for k, v in HISTORY_FIELD_MAP.items()}
+
+    # Fetch measure points from API
+    measure_points = fetch_measure_points(token)
+    if not measure_points:
+        print("  \u26a0\ufe0f Could not fetch measure points from API. Keeping existing column metadata.")
+        return False
+
+    # Create a map from API field code to measure point data
+    api_data = {}
+    for mp in measure_points:
+        if isinstance(mp, dict):
+            name = mp.get("name", mp.get("fieldCode", mp.get("code", "")))
+            if name:
+                api_data[name] = mp
+
+    # Define sort order for DB columns (matches the DB schema column order)
+    column_order = [
+        "device_timestamp", "fetch_timestamp", "inverter_sn",  # metadata first
+        "complete",  # status flag
+        "daily_energy", "total_energy", "current_power", "battery_soc",
+        "battery_voltage", "battery_current", "grid_power", "grid_voltage", "grid_frequency",
+        "pv1_voltage", "pv1_current", "pv1_power", "pv2_voltage", "pv2_current", "pv2_power",
+        "load_power", "pv3_voltage", "pv3_current", "pv3_power", "total_dc_power",
+        "total_consumption_power", "cumulative_consumption", "daily_consumption",
+        "battery_power", "total_charge_energy", "total_discharge_energy",
+        "daily_charging_energy", "daily_discharging_energy",
+        "cumulative_grid_feed_in", "cumulative_energy_purchased",
+        "daily_grid_feed_in", "daily_energy_purchased",
+        "load_voltage", "grid_current", "external_ct_power",
+        "battery_rated_capacity", "battery_temp", "dc_temp", "ac_temp",
+        "generator_frequency", "generator_voltage", "total_generator_production",
+        "ac_voltage", "ac_current", "rated_power"
+    ]
+
+    # Get DB connection
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # Truncate and re-insert
+    cursor.execute("DELETE FROM column_metadata")
+
+    # Process each known column from HISTORY_FIELD_MAP
+    for api_field_code, db_column in sorted(api_to_db.items(),
+                                            key=lambda x: column_order.index(x[1]) if x[1] in column_order else 999):
+        api_info = api_data.get(api_field_code, {})
+
+        # Get display label from API response
+        display_label = api_info.get("label", api_info.get("name", api_field_code))
+
+        # Get unit from API response
+        unit = api_info.get("unit", "")
+
+        # Derive unit if not provided by API
+        if not unit:
+            unit = _derive_unit(api_field_code, db_column)
+
+        # Description from API if available
+        description = api_info.get("description", "")
+
+        # All telemetry columns are numeric
+        is_numeric = 1
+
+        # Sort order based on position in column_order
+        sort_order = column_order.index(db_column) if db_column in column_order else len(column_order)
+
+        cursor.execute('''
+            INSERT INTO column_metadata
+            (column_name, display_label, is_numeric, unit, api_field_code, description, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (db_column, display_label, is_numeric, unit, api_field_code, description, sort_order))
+
+    # Add metadata columns (not from API)
+    metadata_columns = [
+        ("device_timestamp", "Timestamp", 0, "", None, 0),
+        ("fetch_timestamp", "Fetch Time", 0, "", None, 1),
+        ("inverter_sn", "Inverter SN", 0, "", None, 2),
+    ]
+    for col_name, label, is_num, unit, api_code, sort_ord in metadata_columns:
+        cursor.execute('''
+            INSERT INTO column_metadata
+            (column_name, display_label, is_numeric, unit, api_field_code, description, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (col_name, label, is_num, unit, api_code, "", sort_ord))
+
+    conn.commit()
+
+    # Report
+    cursor.execute("SELECT COUNT(*) FROM column_metadata")
+    count = cursor.fetchone()[0]
+    print(f"  \u2705 Stored {count} column metadata records.")
+
+    conn.close()
+    return True
+
+
 def init_database():
     """Sets up SQLite schema with explicit timestamp index for fast gap checking."""
     os.makedirs(os.path.dirname(DB_NAME), exist_ok=True)
@@ -280,6 +474,18 @@ def init_database():
             cumulative_consumption REAL,
             previous_cumulative_consumption REAL,
             identified_at TEXT
+        )
+    ''')
+    # Column metadata table (populated by fetch_measure_points API on each run)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS column_metadata (
+            column_name TEXT PRIMARY KEY,
+            display_label TEXT,
+            is_numeric INTEGER,
+            unit TEXT,
+            api_field_code TEXT,
+            description TEXT,
+            sort_order INTEGER
         )
     ''')
     # Migrate existing databases: add columns if missing
@@ -904,6 +1110,9 @@ def main():
     if not token:
         print("Failed to acquire access token.")
         return
+
+    # Populate column metadata from DeyeCloud API
+    populate_column_metadata(token)
 
     if args.fetch_since:
         try:
