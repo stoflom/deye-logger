@@ -79,11 +79,13 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
     }
 
     const prefix = isHistogramView ? "Max Average" : "Max";
+    const unit = extractUnit(meta, col);
+    const valueStr = unit ? `${fmtNum(max)} ${unit}` : fmtNum(max);
     const card = document.createElement("div");
     card.className = "summary-card";
     card.innerHTML = `
       <div class="label">${prefix} ${meta ? meta.label : col}</div>
-      <div class="value" style="color:${color}">${fmtNum(max)}</div>
+      <div class="value" style="color:${color}">${valueStr}</div>
       <div style="font-size:10px;color:#a0aec0;margin-top:2px">${ts}</div>
     `;
     summaryCardsPanel.appendChild(card);
