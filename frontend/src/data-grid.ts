@@ -13,6 +13,7 @@ import {
   rawDataGridContainer,
   histogramGridContainer,
   ColumnMeta,
+  extractUnit,
 } from "./shared";
 
 // ------------------------------------------------------------------
@@ -21,9 +22,12 @@ import {
 function buildRawDataGridCols(): ColDef[] {
   return [...appState.selectedColumnNames].map((colName) => {
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.name === colName);
+    const unit = extractUnit(meta, colName);
+    const displayName = meta ? meta.label : colName;
+    const headerName = unit ? `${displayName} (${unit})` : displayName;
     return {
       field: colName,
-      headerName: meta ? meta.label : colName,
+      headerName,
       sortable: true,
       filter: true,
       resizable: true,
@@ -94,9 +98,12 @@ export function buildHistogramGridCols(datasets: { label: string }[]): ColDef[] 
     },
   ];
   for (const ds of datasets) {
+    const meta = appState.columnMetadata.find((c: ColumnMeta) => c.label === ds.label);
+    const unit = extractUnit(meta, ds.label);
+    const headerName = unit ? `${ds.label} (${unit})` : ds.label;
     cols.push({
       field: ds.label,
-      headerName: ds.label,
+      headerName,
       sortable: true,
       filter: true,
       resizable: true,
