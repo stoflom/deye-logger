@@ -32,3 +32,5 @@ frontend/test/screenshots/
 # Miscelaneous
 *.txt
 *.log
+*.saved
+*.orig

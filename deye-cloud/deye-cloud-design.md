@@ -1,6 +1,6 @@
 # Deye Cloud — Design Document
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 
 ---
 
@@ -247,16 +247,21 @@ Stores records identified as spurious before deletion.
 | `previous_cumulative_consumption` | REAL | Non-zero value from previous row |
 | `identified_at` | TEXT | When detection occurred |
 
-#### `_schema_migrations`
+#### `column_metadata`
 
-One-time migration tracking.
+Stores column metadata (names, labels, units, descriptions, API field codes) fetched from the DeyeCloud API during initialization. This table is the source of truth for all column display information served by the backend's `/api/columns` endpoint. The deye-logger script populates this table at startup.
 
 | Column | Type | Description |
 | --- | --- | --- |
-| `key` | TEXT (PK) | Migration name |
-| `done` | INTEGER | Always `1`; row presence = migration applied |
+| `column_name` | TEXT (PK) | Internal database column name (e.g., `daily_energy`) |
+| `display_label` | TEXT | Human-readable label with units (e.g., `Daily Energy (kWh)`) |
+| `is_numeric` | INTEGER | `1` if the column contains numeric data, `0` otherwise |
+| `unit` | TEXT | Unit of measurement (e.g., `kWh`, `V`, `W`, `%`), empty string if none |
+| `api_field_code` | TEXT | Original DeyeCloud API field code (e.g., `DailyActiveProduction`) |
+| `description` | TEXT | Optional human-readable description of the column |
+| `sort_order` | INTEGER | Display order in UI (0 = first) |
 
-Known migrations: `telemetry_sorted`, `gap_attempts_cleared`, `spurious_records_cleared`.
+Known migrations: `telemetry_sorted`, `gap_attempts_cleared`, `spurious_records_cleared`, `column_metadata`.
 
 ## 7. Operational Modes
 
@@ -322,6 +327,32 @@ usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
 - `DD-MM-YYYY`
 - `MM/DD/YYYY`
 
+## 8. Column Metadata Management
+
+The deye-logger script fetches column metadata from the DeyeCloud API and stores it in the `column_metadata` table.
+
+### 8.1 Metadata Fetch
+
+On each run, the script calls the DeyeCloud API's measure points endpoint to retrieve the full list of available telemetry columns:
+
+```
+GET /v1.0/device/measurePoints
+Authorization: Bearer {accessToken}
+```
+
+The response contains field codes and names for all available measure points. The script maps these to database columns using the field mapping information and stores the result in `column_metadata`.
+
+### 8.2 Initialization
+
+If the `column_metadata` table does not exist, the script creates it automatically (using `CREATE TABLE IF NOT EXISTS`). On every run, the table is **replaced** (truncated and re-inserted) from the latest API data to stay in sync with any DeyeCloud API changes.
+
+### 8.3 Field Mapping
+
+The script uses `FIELD_MAP` (DB column → API key names) and `HISTORY_FIELD_MAP` (API key → DB column) to map DeyeCloud API field codes to internal database column names. These mappings are used for:
+
+1. **Data ingestion**: Translating API responses into the correct DB columns.
+2. **Metadata population**: Determining the `column_name` for each `api_field_code` returned by the measure points API.
+
 ## 9. Schema Evolution
 
 The script handles migration automatically in `init_database()`:
@@ -344,3 +375,4 @@ This section tracks changes to the design document itself. Every modification to
 | Version | Date | Section Changed | Description |
 |---------|------|----------------|-------------|
 | 1.0.0 | 2025-07-28 | All sections | Initial design document — API integration, data model, operational modes |
+| 1.1.0 | 2026-07-30 | §6.3, §8, §9 | Column metadata no longer hardcoded — new `column_metadata` table populated from DeyeCloud API; deye-logger fetches measure points on each run; metadata serves as source of truth for backend `/api/columns` |

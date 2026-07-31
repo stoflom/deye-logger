@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.0
+> **Status:** v2.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -453,7 +453,7 @@ try {
 
 | Variable | Type | Persistence | Description |
 | ---------- | ------ | ------------- | ------------- |
-| `appState.columnMetadata` | `ColumnMeta[]` | Transient (session) | Column definitions from `/api/columns` (name + label) |
+| `appState.columnMetadata` | `ColumnMeta[]` | Transient (session) | Column definitions from `/api/columns` (name + label); data sourced from backend which reads from `column_metadata` database table populated by deye-logger from DeyeCloud API |
 | `appState.selectedColumnNames` | `Set<string>` | localStorage | User-selected column names for data queries |
 | `appState.dateRangeFrom` | `string` | URL-stateful | Start date of the query range (ISO) |
 | `appState.dateRangeTo` | `string` | URL-stateful | End date of the query range (ISO) |
@@ -727,7 +727,7 @@ User clicks Refresh from info-view:
 
 | Endpoint | Method | Used By | Timeout | Purpose |
 | ---------- | -------- | --------- | --------- | --------- |
-| `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label) |
+| `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label); sourced from `column_metadata` database table via backend |
 | `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
 | `/api/data` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (single day) |
 | `/api/data-range` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (range) |
@@ -1159,3 +1159,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.9 | 2026-07-29 | §9.3, §15.4 | Fix viewport breakpoints in 15.4 (actual CSS: 900px/600px/400px) and button emoji in 9.3 (💫 not 📋 for Data Grid/Raw Chart/Raw Grid); remove non-existent Refresh `⟳ Fetching…` alternate text |
 | 1.10 | 2026-07-29 | §15.6, §8.3 | Correct §15.6 — no inner scroll on `#split-histogram-scroll`; entire content area including summary cards scrolls together via `#content-area` |
 | 2.0 | 2025-07-30 | §2.1, §3.1, §3.3, §6.4, §8.2, §8.4, §9.3, §10.2, §17 | Day-of-week filter for histogram — new `dayFilter` URL parameter, `#day-filter-select` dropdown in title bar (visible in histogram modes), `histogramDayFilter` module variable, backend passes `dayFilter` to `/api/histogram`. Version bumped to 2.0. |
+| 2.1 | 2026-07-30 | §8.1, §11 | Column metadata sourced exclusively from backend `/api/columns` which reads from `column_metadata` database table — no hardcoded column structures in frontend; backend reads column data from database populated by deye-logger from DeyeCloud API |
