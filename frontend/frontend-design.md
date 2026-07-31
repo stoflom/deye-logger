@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.1
+> **Status:** v2.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor`.
@@ -991,6 +991,11 @@ Summary cards are rendered inside the `#summary-cards` container. They display a
 
 Cards are arranged **horizontally** (side by side) when sufficient horizontal space is available. When the viewport narrows, cards **switch to a vertical arrangement** (stacked, full-width).
 
+Each card displays:
+- **Label:** The metric name (e.g. "Max Grid Power")
+- **Value:** The numeric value followed by its unit with a space separator (e.g. `1245.6 W`, `85 %`). The unit is extracted from column metadata via `extractUnit()`; if no unit is defined, only the bare number is shown.
+- **Timestamp:** The timestamp of the max/average reading (small, muted text)
+
 ### 15.3 Responsive Behavior
 
 The display panel is inside the **single scrollable content area** (`#content-area`). The summary cards are **always at the top** of the scroll pane, and the chart/grid area follows below. On all viewport sizes the entire content area is vertically scrollable.
@@ -1106,6 +1111,17 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 - There is **no inner scroll** on `#split-histogram-scroll`. The single scroll pane is `#content-area`, which contains both the summary cards and all charts. Users scroll the entire content area to view charts below the summary cards.
 - Responsive behavior (scaling, vertical stacking, scroll) applies the same way as other views.
 
+### 15.7 Grid Column Labels
+
+Both the raw data grid and histogram grid display units in column header labels. The `extractUnit()` helper is used to extract the unit from column metadata, consistent with chart axis labels.
+
+| Grid Type | Header Format | Example |
+|-----------|---------------|---------|
+| Raw data grid | `label (unit)` | `Grid Power (W)`, `Battery SOC (%)` |
+| Histogram grid | `label (unit)` | `Grid Power (W)`, `Battery SOC (%)` |
+
+If no unit is defined in the metadata, the label is shown without parentheses (e.g. `Time`). The `device_timestamp` column is always labeled "Time" without a unit.
+
 ---
 
 ## 16. Issues to Consider
@@ -1160,3 +1176,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.10 | 2026-07-29 | §15.6, §8.3 | Correct §15.6 — no inner scroll on `#split-histogram-scroll`; entire content area including summary cards scrolls together via `#content-area` |
 | 2.0 | 2025-07-30 | §2.1, §3.1, §3.3, §6.4, §8.2, §8.4, §9.3, §10.2, §17 | Day-of-week filter for histogram — new `dayFilter` URL parameter, `#day-filter-select` dropdown in title bar (visible in histogram modes), `histogramDayFilter` module variable, backend passes `dayFilter` to `/api/histogram`. Version bumped to 2.0. |
 | 2.1 | 2026-07-30 | §8.1, §11 | Column metadata sourced exclusively from backend `/api/columns` which reads from `column_metadata` database table — no hardcoded column structures in frontend; backend reads column data from database populated by deye-logger from DeyeCloud API |
+| 2.2 | 2026-07-30 | §15.2 | Summary cards and grid column labels display units — summary card values show `value unit` (e.g. `1245.6 W`), grid headers show `label (unit)` (e.g. `Grid Power (W)`) when a unit is defined in column metadata; raw data grid and histogram grid both use `extractUnit()` for consistency with chart axis labels |
