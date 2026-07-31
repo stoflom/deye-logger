@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.0.1";
+const BACKEND_VERSION = "2.2.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -41,60 +41,50 @@ if (!DB_PATH) {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Column labels (single source of truth)
-const COLUMN_LABELS: Record<string, string> = {
-  device_timestamp: "Timestamp",
-  fetch_timestamp: "Fetch Time",
-  inverter_sn: "Inverter SN",
-  daily_energy: "Daily Energy (kWh)",
-  total_energy: "Total Energy (kWh)",
-  current_power: "Current Power (W)",
-  battery_soc: "Battery SOC (%)",
-  battery_voltage: "Battery Voltage (V)",
-  battery_current: "Battery Current (A)",
-  grid_power: "Grid Power (W)",
-  grid_voltage: "Grid Voltage (V)",
-  grid_frequency: "Grid Frequency (Hz)",
-  pv1_voltage: "PV1 Voltage (V)",
-  pv1_current: "PV1 Current (A)",
-  pv1_power: "PV1 Power (W)",
-  pv2_voltage: "PV2 Voltage (V)",
-  pv2_current: "PV2 Current (A)",
-  pv2_power: "PV2 Power (W)",
-  load_power: "Load Power (W)",
-  pv3_voltage: "PV3 Voltage (V)",
-  pv3_current: "PV3 Current (A)",
-  pv3_power: "PV3 Power (W)",
-  total_dc_power: "Total DC Power (W)",
-  total_consumption_power: "Total Consumption Power (W)",
-  cumulative_consumption: "Cumulative Consumption (kWh)",
-  daily_consumption: "Daily Consumption (kWh)",
-  battery_power: "Battery Power (W)",
-  total_charge_energy: "Total Charge Energy (kWh)",
-  total_discharge_energy: "Total Discharge Energy (kWh)",
-  daily_charging_energy: "Daily Charging Energy (kWh)",
-  daily_discharging_energy: "Daily Discharging Energy (kWh)",
-  cumulative_grid_feed_in: "Cumulative Grid Feed-in (kWh)",
-  cumulative_energy_purchased: "Cumulative Energy Purchased (kWh)",
-  daily_grid_feed_in: "Daily Grid Feed-in (kWh)",
-  daily_energy_purchased: "Daily Energy Purchased (kWh)",
-  load_voltage: "Load Voltage (V)",
-  grid_current: "Grid Current (A)",
-  external_ct_power: "External CT Power (W)",
-  battery_rated_capacity: "Battery Rated Capacity (Ah)",
-  battery_temp: "Battery Temp (°C)",
-  dc_temp: "DC Temp (°C)",
-  ac_temp: "AC Temp (°C)",
-  generator_frequency: "Generator Frequency (Hz)",
-  generator_voltage: "Generator Voltage (V)",
-  total_generator_production: "Total Generator Prod. (kWh)",
-  ac_voltage: "AC Voltage (V)",
-  ac_current: "AC Current (A)",
-  rated_power: "Rated Power (W)",
-};
+// Column metadata type — populated from column_metadata table
+interface ColumnRecord {
+  name: string;
+  label: string;
+  unit: string;
+  is_numeric: number;
+}
 
-function buildColumns(): { name: string; label: string }[] {
-  return Object.entries(COLUMN_LABELS).map(([name, label]) => ({ name, label }));
+function buildColumns(): ColumnRecord[] {
+  const db = openDatabase();
+  const rows = db.prepare(
+    `SELECT column_name as name, display_label as label, unit, is_numeric
+     FROM column_metadata ORDER BY sort_order ASC`,
+  ).all() as ColumnRecord[];
+  return rows;
+}
+
+// In-memory cache built from column_metadata
+let _columnCache: ColumnRecord[] | null = null;
+
+function getColumns(): ColumnRecord[] {
+  if (!_columnCache) {
+    _columnCache = buildColumns();
+  }
+  return _columnCache;
+}
+
+function getColumnLabels(): Record<string, string> {
+  const cols = getColumns();
+  const labels: Record<string, string> = {};
+  for (const c of cols) labels[c.name] = c.label;
+  return labels;
+}
+
+function getColumnUnits(): Record<string, string> {
+  const cols = getColumns();
+  const units: Record<string, string> = {};
+  for (const c of cols) units[c.name] = c.unit;
+  return units;
+}
+
+function getColumnNameSet(): Set<string> {
+  const cols = getColumns();
+  return new Set(cols.map((c) => c.name));
 }
 
 // ── SQLite Database (native node:sqlite) ─────────────────────
@@ -111,12 +101,12 @@ function colListFromArray(cols: string[]): string {
   return cols.map((c) => `"${c}"`).join(", ");
 }
 
-// Validate and parse the incoming columns query param against known COLUMN_LABELS
+// Validate and parse the incoming columns query param against known column_metadata entries
 function parseColumnsParam(columnsParam: string | undefined): string[] {
   if (!columnsParam) return [];
   const requested = columnsParam.split(",").map((c) => c.trim()).filter(Boolean);
-  const allowed = Object.keys(COLUMN_LABELS);
-  const valid = requested.filter((c) => allowed.includes(c));
+  const allowed = getColumnNameSet();
+  const valid = requested.filter((c) => allowed.has(c));
   // Always ensure timestamp is present first
   if (!valid.includes("device_timestamp")) valid.unshift("device_timestamp");
   return valid;
@@ -241,7 +231,11 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       return;
     }
 
-    const colList = columns.split(",").map((c: string) => `"${c.trim()}"`).join(", ");
+    // Validate columns against column_metadata
+    const allowed = getColumnNameSet();
+    const splitCols = columns.split(",").map((c: string) => c.trim());
+    const validated = splitCols.filter((c) => allowed.has(c));
+    const colList = validated.map((c: string) => `"${c}"`).join(", ");
     const fromTs = `${from} 00:00:00`;
     const toTs = `${to} 23:59:59`;
 
@@ -334,9 +328,10 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     // Backend only serves data + label + unit.
     // Display fields (color, yAxisID, position) are computed by the frontend.
     const datasets = numericCols.map((col) => {
-      const label = COLUMN_LABELS[col] ?? col;
-      const match = label.match(/\((.+)\)$/);
-      const unit = match ? match[1] : "";
+      const cols = getColumns();
+      const meta = cols.find((c) => c.name === col);
+      const label = meta?.label ?? col;
+      const unit = meta?.unit ?? "";
       const binCount = binMap.size;
 
       const data: number[] = [];
