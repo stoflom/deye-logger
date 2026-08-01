@@ -295,7 +295,7 @@ export function cleanupSplitMode(): void {
 // ------------------------------------------------------------------
 // Destroy all split charts
 // ------------------------------------------------------------------
-async function destroySplitCharts(): Promise<void> {
+function destroySplitCharts(): void {
   for (const chart of histogramSplitChartInstances) {
     chart.destroy();
   }
@@ -310,7 +310,7 @@ export async function showSplitHistogram(): Promise<RenderOk> {
   // (setView handles panel visibility; this just prepares the content)
 
   // Destroy any existing split charts
-  await destroySplitCharts();
+  destroySplitCharts();
 
   // Get selected columns (exclude timestamp)
   const columns = [...appState.selectedColumnNames].filter((c) => c !== "device_timestamp");
