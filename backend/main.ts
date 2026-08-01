@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.2.1";
+const BACKEND_VERSION = "2.2.2";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -414,7 +414,7 @@ async function start() {
 
   app.listen(PORT, HOST, () => {
     console.log("═══════════════════════════════════════════");
-    console.log("  Deye Logger Viewer");
+    console.log(`  Deye Logger Viewer v${BACKEND_VERSION}`);
     console.log(`  http://${HOST}:${PORT}`);
     console.log("═══════════════════════════════════════════\n");
   });
