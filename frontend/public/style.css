@@ -92,6 +92,11 @@ body {
   border-color: #63b3ed;
 }
 
+.controls input[type="date"]:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
 .histogram-control-group select {
   padding: 5px 10px;
   border: 1px solid #718096;
@@ -104,6 +109,11 @@ body {
 
 .histogram-control-group select:hover {
   border-color: #63b3ed;
+}
+
+.histogram-control-group select:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
 }
 
 /* ============================================================
@@ -124,6 +134,11 @@ body {
 .btn-view:hover:not(:disabled) {
   background: #718096;
   color: white;
+}
+
+.btn-view:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
 }
 
 .btn-view:disabled {
@@ -157,6 +172,11 @@ body {
   color: white;
 }
 
+.columns-toggle:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
 .columns-toggle:disabled {
   background: #2d374e;
   color: #4a5568;
@@ -187,6 +207,11 @@ body {
   background: #22543d;
 }
 
+.btn-export:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
 .btn-export:disabled {
   background: #4a5568;
   border-color: #4a5568;
@@ -208,6 +233,11 @@ body {
 .btn-secondary-sm:hover:not(:disabled) {
   background: #718096;
   color: white;
+}
+
+.btn-secondary-sm:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
 }
 
 .btn-secondary-sm:disabled {
@@ -357,6 +387,11 @@ body {
   background: #2b6cb0;
 }
 
+#error-close-btn:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
 /* ============================================================
    INFO VIEW — non-modal info message
    ============================================================ */
@@ -440,6 +475,11 @@ body {
   background: #edf2f7;
 }
 
+.columns-view-actions button:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
 .columns-view-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -461,13 +501,21 @@ body {
   background: #e8edf2;
 }
 
+.columns-view-grid label:focus-within {
+  background: #e8edf2;
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .columns-view-grid label.disabled-label {
   opacity: 0.65;
   cursor: default;
 }
 
-.columns-view-grid input[type="checkbox"] {
-  cursor: pointer;
+.columns-view-grid input[type="checkbox"]:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
 }
 
 /* ============================================================
