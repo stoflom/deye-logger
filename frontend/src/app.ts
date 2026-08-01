@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.2.1";
+export const FRONTEND_VERSION = "2.2.2";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -293,7 +293,8 @@ async function setView(
       columnsToggleBtn.textContent = "\u21BB Load Data";
       columnsToggleBtn.title = "Close panel and load selected data";
       columnsToggleBtn.classList.add("active");
-      enableControlsExcept(["refresh", "export", "viewToggle", "histogramToggle", "split", "binSize", "prevDay", "nextDay", "today"]);
+      // Only columns toggle ("Load Data") is enabled in columns view
+      enableControlsExcept(["dateFrom", "dateTo", "prevDay", "nextDay", "today", "refresh", "viewToggle", "histogramToggle", "exportCsv", "split", "binSize", "dayFilter"]);
       columnsToggleBtn.disabled = false;
       return;
     }
