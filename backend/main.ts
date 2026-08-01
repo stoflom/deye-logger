@@ -394,6 +394,9 @@ app.post("/api/refresh", async (_req: express.Request, res: express.Response) =>
       openDatabase();
     }
 
+    // Invalidate column cache so new columns are picked up
+    _columnCache = null;
+
     res.json({ success, code, output, error: errOutput });
   } catch (err) {
     res.status(500).json({ error: String(err) });
