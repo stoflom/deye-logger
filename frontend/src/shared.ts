@@ -297,35 +297,32 @@ export function enableAllControls(): void {
   ALL_CONTROLS.forEach((el) => setElementDisabled(el, false));
 }
 
-/**
- * Enable all controls except those listed by their variable name key.
- * Used for columns-view where columnsToggleBtn must stay enabled.
- */
-export function enableControlsExcept(exceptKeys: string[]): void {
-  const controlMap: Record<string, HTMLElement | null> = {
-    dateFrom: dateFromInput,
-    dateTo: dateToInput,
-    prevDay: prevDayBtn,
-    nextDay: nextDayBtn,
-    today: todayBtn,
-    refresh: refreshBtn,
-    columnsToggle: columnsToggleBtn,
-    viewToggle: viewToggleBtn,
-    histogramToggle: histogramToggleBtn,
-    exportCsv: exportCsvBtn,
-    binSize: binSizeSelect,
-    dayFilter: dayFilterSelect,
-    split: splitBtn,
-  };
+const CONTROL_KEYS: Record<string, HTMLElement | null> = {
+  dateFrom: dateFromInput,
+  dateTo: dateToInput,
+  prevDay: prevDayBtn,
+  nextDay: nextDayBtn,
+  today: todayBtn,
+  refresh: refreshBtn,
+  columnsToggle: columnsToggleBtn,
+  viewToggle: viewToggleBtn,
+  histogramToggle: histogramToggleBtn,
+  exportCsv: exportCsvBtn,
+  binSize: binSizeSelect,
+  dayFilter: dayFilterSelect,
+  split: splitBtn,
+};
 
-  ALL_CONTROLS.forEach((el) => {
-    const key = Object.entries(controlMap).find(([, v]) => v === el)?.[0];
-    if (key && exceptKeys.includes(key)) {
-      setElementDisabled(el, false);
-    } else {
-      setElementDisabled(el, true);
-    }
-  });
+/**
+ * Disable all controls, then enable only the ones listed by key.
+ * Used for columns-view where only "↻ Load Data" (columnsToggle) is enabled.
+ */
+export function enableOnlyControls(enableKeys: string[]): void {
+  disableAllControls();
+  for (const key of enableKeys) {
+    const el = CONTROL_KEYS[key];
+    if (el) setElementDisabled(el, false);
+  }
 }
 
 // ------------------------------------------------------------------
@@ -419,7 +416,7 @@ export function getUrlState(): ParsedUrlState {
   const view = (rawView as ViewMode) ?? "chart";
   if (!validViews.includes(view)) {
     const today = todayStr();
-    return { view: "chart", dateFrom: appState.dateRangeFrom || today, dateTo: appState.dateRangeTo || today, binSize: "15", isSplit: false };
+    return { view: "chart", dateFrom: appState.dateRangeFrom || today, dateTo: appState.dateRangeTo || today, binSize: "15", isSplit: false, dayFilter: "all" };
   }
 
   const dateFrom = params.get("from") || params.get("date") || appState.dateRangeFrom || todayStr();

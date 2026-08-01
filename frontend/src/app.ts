@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.3.0";
+export const FRONTEND_VERSION = "2.4.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -43,7 +43,7 @@ import {
   hideHistogramPanel,
   disableAllControls,
   enableAllControls,
-  enableControlsExcept,
+  enableOnlyControls,
   isDateRange,
   todayStr,
   updateNavButtonStates,
@@ -293,9 +293,8 @@ async function setView(
       columnsToggleBtn.textContent = "\u21BB Load Data";
       columnsToggleBtn.title = "Close panel and load selected data";
       columnsToggleBtn.classList.add("active");
-      // Only columns toggle ("Load Data") is enabled in columns view
-      enableControlsExcept(["dateFrom", "dateTo", "prevDay", "nextDay", "today", "refresh", "viewToggle", "histogramToggle", "exportCsv", "split", "binSize", "dayFilter"]);
-      columnsToggleBtn.disabled = false;
+      // Only columns toggle ("↻ Load Data") is enabled in columns view
+      enableOnlyControls(["columnsToggle"]);
       return;
     }
 
@@ -431,7 +430,7 @@ async function setView(
     );
 
     errorView.show(message);
-    disableAllControls();
+    enableOnlyControls([]);
     errorViewCloseBtn.disabled = false;
   }
 }
@@ -535,7 +534,7 @@ window.addEventListener("popstate", () => {
     hideAllDataPanels();
     hideSummaryCards();
     errorView.show(historyState.errorMessage ?? "An unknown error occurred.");
-    disableAllControls();
+    enableOnlyControls([]);
     errorViewCloseBtn.disabled = false;
     return;
   }

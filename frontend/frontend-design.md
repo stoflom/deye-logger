@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.3
+> **Status:** v2.4
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -217,9 +217,8 @@ function setView(
 ```
 setView(view, opts?)
   │
-  ├─ STEP 1: disableAllButtons() — debounce protection
-  │     All title-bar controls disabled except:
-  │     • errorViewCloseBtn (if error-view was visible — shouldn't be here)
+  ├─ STEP 1: disableAllControls() — debounce protection
+  │     All title-bar controls disabled (prevents double-clicks during render)
   │
   ├─ STEP 2: hide all content panels, show waiting-view
   │     waitingView.show()
@@ -279,9 +278,7 @@ setView(view, opts?)
   │     ├─ { ok: true } AND opts.columns === true
   │     │     → waitingView.hide()
   │     │     → showPanel("columns")
-  │     │     → enableButtonsExcept(["dateFrom", "dateTo", "prevDay", "nextDay", "today", "refresh", "viewToggle",
-  │     │       "histogramToggle", "export", "split", "binSize", "dayFilter"])
-  │     │     → columnsToggleBtn stays enabled (only control enabled in columns view)
+  │     │     → enableOnlyControls(["columnsToggle"])
   │     │     → NO history push (transient)
   │     │
   │     ├─ { ok: true } AND opts.refresh === true
@@ -295,7 +292,7 @@ setView(view, opts?)
   │     │     │  ├─ → waitingView.hide()
   │     │     │  ├─ → infoView.show(noDataMessage)
   │     │     │  ├─ → showPanel("info")
-  │     │     │  ├─ → enableAllButtons()
+  │     │     │  ├─ → enableAllControls()
   │     │     │  ├─ → NO history push (transient)
   │     │     │  └─ → return (await user action)
   │     │     │
@@ -303,7 +300,7 @@ setView(view, opts?)
   │     │     │  ├─ → waitingView.hide()
   │     │     │  ├─ → infoView.show(noDataMessage)
   │     │     │  ├─ → showPanel("info")
-  │     │     │  ├─ → enableAllButtons()
+  │     │     │  ├─ → enableAllControls()
   │     │     │  ├─ → NO history push (transient)
   │     │     │  └─ → return
   │     │     │
@@ -314,14 +311,14 @@ setView(view, opts?)
   │     │     → showPanel(view) — show appropriate data-view
   │     │     → buildUrlParams() → history.pushState/replaceState
   │     │     → updateButtonLabels(view, split)
-  │     │     → enableAllButtons()
+  │     │     → enableAllControls()
   │     │
   │     └─ catch Error
   │             → waitingView.hide()
   │             → history.pushState({ error: true, view, errorMessage: err.message })
   │             → errorView.show(err.message)
-  │             → disableAllButtons()
-  │             → errorViewCloseBtn stays enabled
+  │             → enableOnlyControls([])
+  │             → errorViewCloseBtn.disabled = false
   │
   └─ STEP 5: updateButtonLabels(view, split)
         exportCsvBtn.visible          ← grid views only
@@ -414,7 +411,7 @@ window.addEventListener("popstate", () => {
     waitingView.hide();
     hideAllDataPanels();
     errorView.show(historyState.errorMessage);
-    disableAllButtons();
+    enableOnlyControls([]);
     errorViewCloseBtn.disabled = false;
     return;
   }
@@ -601,7 +598,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 
 ```
 setView("chart")
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRawDataChartView(updateWaiting)
       → updateWaiting("Fetching raw data…")
@@ -615,14 +612,14 @@ setView("chart")
   → showPanel("raw-data-chart")
   → show summary-cards (add .visible class to #summary-cards)
   → push URL history
-  → enableAllButtons()
+  → enableAllControls()
 ```
 
 ### 10.2 Histogram Data Views
 
 ```
 setView("histogram", { split: true })
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderHistogramView(updateWaiting, { split: true })
       → updateWaiting("Fetching histogram data…")
@@ -638,14 +635,14 @@ setView("histogram", { split: true })
   → showPanel("split-histogram")
   → show summary-cards (add .visible class to #summary-cards)
   → push URL history (?split=1)
-  → enableAllButtons()
+  → enableAllControls()
 ```
 
 ### 10.3 Refresh Flow
 
 ```
 refreshBtn click → setView(appState.activeView, { refresh: true })
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRefreshView(updateWaiting)
       → updateWaiting("Querying Deye Cloud…")
@@ -661,14 +658,14 @@ refreshBtn click → setView(appState.activeView, { refresh: true })
   → hidePanel("waiting")
   → showPanel("raw-data-chart")
   → push URL history
-  → enableAllButtons()
+  → enableAllControls()
 ```
 
 ### 10.4 Columns Flow
 
 ```
 columnsToggleBtn click (open) → setView(appState.activeView, { columns: true })
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderColumnsView(updateWaiting)
       → updateWaiting("Loading column definitions…")
@@ -677,26 +674,24 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
       → return { ok: true }
   → hidePanel("waiting")
   → showPanel("columns")
-  → enableButtonsExcept(["dateFrom", "dateTo", "prevDay", "nextDay", "today", "refresh", "viewToggle",
-  →   "histogramToggle", "export", "split", "binSize", "dayFilter"])
-  → columnsToggleBtn stays enabled (only control enabled in columns view)
+  → enableOnlyControls(["columnsToggle"])
   → NO history push (transient)
 
 User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView)
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRawDataChartView(updateWaiting)  // with appState.selectedColumnNames
   → hidePanel("waiting")
   → showPanel("raw-data-chart")
   → push URL history
-  → enableAllButtons()
+  → enableAllControls()
 ```
 
 ### 10.5 Empty Data Flow (Info View)
 
 ```
 setView("chart")
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRawDataChartView(updateWaiting)
       → updateWaiting("Fetching raw data…")
@@ -707,19 +702,19 @@ setView("chart")
   → waitingView.hide()
   → infoView.show("No data found for 2025-07-20. ...")
   → showPanel("info")
-  → enableAllButtons()
+  → enableAllControls()
   → NO history push (transient)
 
 User clicks Refresh from info-view:
   → setView("chart", { refresh: true })
-  → disableAllButtons()
+  → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRefreshView → POST /api/refresh → success
   → recursive setView("chart")
   → renderRawDataChartView → data now present
   → showPanel("raw-data-chart")
   → push URL history
-  → enableAllButtons()
+  → enableAllControls()
 ```
 
 ---
@@ -811,7 +806,7 @@ setView("chart")
   → setView detects rawDataRows.length === 0
   → infoView.show("No data found for the selected date.")
   → showPanel("info")
-  → enableAllButtons() — user can interact with all controls
+  → enableAllControls() — user can interact with all controls
   → NO history push (info is transient)
 ```
 
@@ -917,7 +912,7 @@ init() (§14.3)
       → fetch data → 0 rows
       → infoView.show(noDataMessage)
       → showPanel("info")
-      → enableAllButtons()
+      → enableAllControls()
       → NO history push
 ```
 
@@ -1066,7 +1061,7 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
   → render/update cards into #summary-cards
   → buildUrlParams() → pushState
   → updateButtonLabels(view, split)
-  → enableAllButtons()
+  → enableAllControls()
 ```
 
 **Key contract for renderers regarding the display panel:**
@@ -1178,3 +1173,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.0 | 2025-07-30 | §2.1, §3.1, §3.3, §6.4, §8.2, §8.4, §9.3, §10.2, §17 | Day-of-week filter for histogram — new `dayFilter` URL parameter, `#day-filter-select` dropdown in title bar (visible in histogram modes), `histogramDayFilter` module variable, backend passes `dayFilter` to `/api/histogram`. Version bumped to 2.0. |
 | 2.1 | 2026-07-30 | §8.1, §11 | Column metadata sourced exclusively from backend `/api/columns` which reads from `column_metadata` database table — no hardcoded column structures in frontend; backend reads column data from database populated by deye-logger from DeyeCloud API |
 | 2.2 | 2026-07-30 | §15.2 | Summary cards and grid column labels display units — summary card values show `value unit` (e.g. `1245.6 W`), grid headers show `label (unit)` (e.g. `Grid Power (W)`) when a unit is defined in column metadata; raw data grid and histogram grid both use `extractUnit()` for consistency with chart axis labels |
+| 2.4 | 2026-08-01 | §6.2, §10.4, §13 | Consistent button-state logic — replaced negative `enableButtonsExcept()` with positive `enableOnlyControls(keys)`; each STEP-4 branch documents its own `enableOnlyControls()` or `enableAllControls()` call; renamed all `disableAllButtons`/`enableAllButtons` to match code `disableAllControls`/`enableAllControls` |
