@@ -21,8 +21,7 @@
   },
   "homepage": "https://github.com/stoflom/deye-logger#readme",
   "devDependencies": {
-    "esbuild": "^0.28.1",
-    "sql.js": "^1.14.1"
+    "esbuild": "^0.28.1"
   },
   "dependencies": {
     "ag-grid-community": "^36.0.1",
