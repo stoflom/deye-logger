@@ -7,10 +7,6 @@
 // Histogram — time-binned averages via backend API
 // ============================================================
 
-import { Chart, registerables } from "chart.js";
-
-Chart.register(...registerables);
-
 import {
   appState,
   histogramChartCanvas,
