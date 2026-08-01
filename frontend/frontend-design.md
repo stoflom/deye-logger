@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.2
+> **Status:** v2.3
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -279,9 +279,9 @@ setView(view, opts?)
   │     ├─ { ok: true } AND opts.columns === true
   │     │     → waitingView.hide()
   │     │     → showPanel("columns")
-  │     │     → enableButtonsExcept(["refresh", "export", "viewToggle",
-  │     │       "histogramToggle", "split", "binSize", "dayFilter", "prevDay", "nextDay", "today"])
-  │     │     → columnsToggleBtn stays enabled (to close)
+  │     │     → enableButtonsExcept(["dateFrom", "dateTo", "prevDay", "nextDay", "today", "refresh", "viewToggle",
+  │     │       "histogramToggle", "export", "split", "binSize", "dayFilter"])
+  │     │     → columnsToggleBtn stays enabled (only control enabled in columns view)
   │     │     → NO history push (transient)
   │     │
   │     ├─ { ok: true } AND opts.refresh === true
@@ -677,8 +677,9 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
       → return { ok: true }
   → hidePanel("waiting")
   → showPanel("columns")
-  → enableButtonsExcept(["refresh", "export", "viewToggle", "histogramToggle", "split", "binSize", "dayFilter"])
-  → columnsToggleBtn stays enabled (to close)
+  → enableButtonsExcept(["dateFrom", "dateTo", "prevDay", "nextDay", "today", "refresh", "viewToggle",
+  →   "histogramToggle", "export", "split", "binSize", "dayFilter"])
+  → columnsToggleBtn stays enabled (only control enabled in columns view)
   → NO history push (transient)
 
 User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView)
