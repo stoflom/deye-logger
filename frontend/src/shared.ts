@@ -312,7 +312,7 @@ export function enableControlsExcept(exceptKeys: string[]): void {
     columnsToggle: columnsToggleBtn,
     viewToggle: viewToggleBtn,
     histogramToggle: histogramToggleBtn,
-    export: exportCsvBtn,
+    exportCsv: exportCsvBtn,
     binSize: binSizeSelect,
     dayFilter: dayFilterSelect,
     split: splitBtn,
