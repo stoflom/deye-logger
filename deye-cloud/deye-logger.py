@@ -4,6 +4,7 @@ import os
 import argparse
 import time
 import sqlite3
+import re
 import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -211,7 +212,6 @@ def _derive_unit(api_field_code: str, db_column: str) -> str:
     #      'DCVoltagePV1' -> ['DC', 'Voltage', 'PV1']
     #      'InverterOutputPowerL1L2' -> ['Inverter', 'Output', 'Power', 'L1L2']
     # Matches: acronyms (consecutive uppercase) followed by lowercase words
-    import re
     words = re.findall(r'[A-Z]+(?=[A-Z][a-z]|[\d\W]|$)|[A-Z]?[a-z]+|[0-9]+', api_field_code)
 
     upper_words = [w.upper() for w in words]
