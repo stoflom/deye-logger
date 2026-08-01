@@ -7,6 +7,8 @@
 // Histogram — time-binned averages via backend API
 // ============================================================
 
+import { Chart, type TooltipItem } from "chart.js";
+
 import {
   appState,
   histogramChartCanvas,
@@ -254,8 +256,8 @@ export async function renderHistogramChart(updateWaiting: (text: string) => void
         },
         tooltip: {
           callbacks: {
-            title: (items) => `Time: ${items[0].label}`,
-            label: (item) => ` ${item.dataset.label}: ${item.formattedValue}`,
+            title: (items: TooltipItem<'bar'>[]) => `Time: ${items[0].label}`,
+            label: (item: TooltipItem<'bar'>) => ` ${item.dataset.label}: ${item.formattedValue}`,
           },
         },
       },
@@ -424,8 +426,8 @@ export async function showSplitHistogram(): Promise<RenderOk> {
               legend: { display: false },
               tooltip: {
                 callbacks: {
-                  title: (items) => `Time: ${items[0].label}`,
-                  label: (item) => ` ${item.dataset.label}: ${item.formattedValue}`,
+                  title: (items: TooltipItem<'bar'>[]) => `Time: ${items[0].label}`,
+                  label: (item: TooltipItem<'bar'>) => ` ${item.dataset.label}: ${item.formattedValue}`,
                 },
               },
             },
