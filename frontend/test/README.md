@@ -51,11 +51,14 @@ Leave the server running — the tests need a live instance.
 ```bash
 cd frontend/test
 python3 test_responsive_display.py
+python3 test_button_states.py
 ```
 
 Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 
 ## What Is Tested
+
+### `test_responsive_display.py` — Layout and rendering
 
 | # | Test | Description |
 |---|------|-------------|
@@ -69,6 +72,22 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 | 8 | Day filter selector | Day filter dropdown (All/Sun/Mon/Tue/Wed/Thu/Fri/Sat) exists and works, default is 'All' |
 | 9 | Histogram controls in histogram modes | Present in both histogram and histogram-grid views |
 | 10 | Single scroll pane structure | `#summary-cards` is a direct child of `#content-area`, scrollable |
+
+### `test_button_states.py` — Button states per view
+
+Verifies button **visibility** (display), **enabled/disabled** (greyed-out), and **text labels** across the six major views per [frontend-design.md §9.3](../frontend-design.md#93-button-specification-table).
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | Chart view | All nav controls enabled; CSV/histogram controls hidden; correct button labels |
+| 2 | Grid view | All nav controls enabled; CSV visible; correct button labels |
+| 3 | Histogram view | Histogram controls visible (bin-size, day-filter, split); CSV hidden; correct labels |
+| 4 | Histogram-grid view | Histogram controls visible; split hidden; CSV visible; correct labels |
+| 5 | Columns select | Only `columnsToggle` ("↻ Load Data") enabled; all others greyed-out |
+| 6 | Error view | All controls greyed-out; error `Close` button enabled |
+| 7 | Chart↔Grid transition | Button labels and CSV visibility toggle correctly on view-toggle |
+| 8 | Chart↔Histogram transition | Histogram controls and button labels toggle correctly |
+| 9 | Status bar label | `#view-label` shows correct text (Chart, Data Grid, Histogram, Histogram Grid) |
 
 ## Troubleshooting
 
