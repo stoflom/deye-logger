@@ -246,7 +246,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       : "";
     const queryArgs: (string | number)[] = [fromTs, toTs];
     if (targetDay !== "all") {
-      queryArgs.push(dayIndex);
+      queryArgs.push(String(dayIndex));
     }
     const colListForQuery = colListFromArray(parsedCols);
     const stmt = db.prepare(
