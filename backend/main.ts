@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.3.0";
+const BACKEND_VERSION = "2.3.1";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -231,11 +231,6 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       return;
     }
 
-    // Validate columns against column_metadata
-    const allowed = getColumnNameSet();
-    const splitCols = columns.split(",").map((c: string) => c.trim());
-    const validated = splitCols.filter((c) => allowed.has(c));
-    const colList = validated.map((c: string) => `"${c}"`).join(", ");
     const fromTs = `${from} 00:00:00`;
     const toTs = `${to} 23:59:59`;
 
@@ -244,24 +239,22 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       res.status(400).json({ error: "No valid columns requested" });
       return;
     }
-    const rows = queryTelemetryBetween(db, parsedCols, fromTs, toTs) as Record<string, unknown>[];
 
-    // Filter rows by day of week if dayFilter is set
-    const filteredRows = dayIndex >= 0
-      ? rows.filter((row) => {
-          const ts = row.device_timestamp;
-          let d: Date | null = null;
-          if (typeof ts === "number") {
-            d = new Date(ts > 1e12 ? ts : ts * 1000);
-          } else if (typeof ts === "string" && ts) {
-            d = new Date(ts);
-            if (isNaN(d.getTime())) d = null;
-          }
-          return d && d.getDay() === dayIndex;
-        })
-      : rows;
+    // Build SQL with optional day-of-week filter pushed into SQLite
+    const dayWhereClause = targetDay !== "all"
+      ? ` AND strftime('%w', device_timestamp) = ?`
+      : "";
+    const queryArgs: (string | number)[] = [fromTs, toTs];
+    if (targetDay !== "all") {
+      queryArgs.push(String(dayIndex));
+    }
+    const colListForQuery = colListFromArray(parsedCols);
+    const stmt = db.prepare(
+      `SELECT ${colListForQuery} FROM inverter_telemetry WHERE device_timestamp >= ? AND device_timestamp <= ?${dayWhereClause} ORDER BY device_timestamp ASC`,
+    );
+    const rows = stmt.all(...queryArgs) as Record<string, unknown>[];
 
-    if (filteredRows.length === 0) {
+    if (rows.length === 0) {
       res.json({ labels: [], datasets: [], maxValues: {} });
       return;
     }
@@ -282,7 +275,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     // Parse timestamps and group into bins
     const binMap = new Map<string, { sum: Record<string, number>; count: number }>();
 
-    for (const row of filteredRows) {
+    for (const row of rows) {
       const ts = row.device_timestamp;
       let d: Date | null = null;
       if (typeof ts === "number") {
