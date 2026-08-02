@@ -153,22 +153,27 @@ export function renderRawDataChart(): void {
     "#97266d",
   ];
 
-  // Step 1: Collect unique units in order of first appearance
-  const unitAxisMap: Record<string, string> = {};
-  const unitPosition: Record<string, string> = {};
-  let leftCount = 0;
-  let rightCount = 0;
-
+  // Step 1: Collect unique units in order of first appearance.
+  // All units are collected first, then axes are split roughly equally
+  // between left and right sides to support more than 4 unique units.
+  const uniqueUnits: string[] = [];
   for (const col of numericCols) {
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.name === col);
     const unit = extractUnit(meta, col);
-    if (!(unit in unitAxisMap)) {
-      const axisId = leftCount < 2 ? `y-${leftCount}` : `yR-${rightCount}`;
-      const position = leftCount < 2 ? "left" : "right";
-      unitAxisMap[unit] = axisId;
-      unitPosition[unit] = position;
-      if (leftCount < 2) leftCount++; else rightCount++;
+    if (unit && !uniqueUnits.includes(unit)) {
+      uniqueUnits.push(unit);
     }
+  }
+
+  const mid = Math.ceil(uniqueUnits.length / 2);
+  const unitAxisMap: Record<string, string> = {};
+  const unitPosition: Record<string, string> = {};
+  for (let i = 0; i < uniqueUnits.length; i++) {
+    const unit = uniqueUnits[i];
+    const position: "left" | "right" = i < mid ? "left" : "right";
+    const idx = position === "left" ? i : i - mid;
+    unitAxisMap[unit] = position === "left" ? `y-${idx}` : `yR-${idx}`;
+    unitPosition[unit] = position;
   }
 
   // Step 2: Build scale configs (always include x)
