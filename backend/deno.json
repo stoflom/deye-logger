@@ -1,7 +1,19 @@
 {
   "tasks": {
     "dev": "deno run -A main.ts",
-    "build": "deno run -A npm:esbuild ../frontend/src/app.ts --bundle --outfile=../frontend/public/app.js --format=esm --target=es2020"
+    "build": "deno run -A npm:esbuild ../frontend/src/app.ts --bundle --outfile=../frontend/public/app.js --format=esm --target=es2020",
+    "lint": "deno lint",
+    "fmt": "deno fmt"
   },
-  "nodeModulesDir": "auto"
+  "nodeModulesDir": "auto",
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-import-prefix",
+        "no-unversioned-import",
+        "require-await",
+        "no-unused-vars"
+      ]
+    }
+  }
 }
