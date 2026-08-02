@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # ==================== CONFIGURATION ====================
-SCRIPT_VERSION = "1.1.0"
+SCRIPT_VERSION = "1.2.0"
 # Major.minor must agree qith deye-cloud-design.md
 # Fallback default: database in the same directory as the script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1113,6 +1113,8 @@ def delete_spurious_records():
 
 
 def main():
+    print("-----------------------------------------------------------")
+    print(f"Deye Cloud Telemetry Loader {SCRIPT_VERSION}")
     parser = argparse.ArgumentParser(
         description="Deye Solar Inverter Logger — fetches telemetry from DeyeCloud into a local SQLite database. "
                     "On each run, detects time gaps in stored data and automatically backfills them "
@@ -1125,6 +1127,8 @@ def main():
                         help="Find spurious records (zero-value resets or incomplete/NULL data from API) and store them for deletion.")
     parser.add_argument("-ds", "--delete-spurious", action="store_true",
                         help="Delete spurious records previously identified by --find-spurious.")
+    parser.add_argument("-m", "--meta", action="store_true",
+                        help="Update column metadata from the DeyeCloud API.")
     parser.add_argument("-db", type=str, default=None,
                         help="Path to the SQLite database (default: deye_solar_data.db in same dir as script, or DB_NAME from .env)")
     args = parser.parse_args()
@@ -1156,8 +1160,9 @@ def main():
         print("Failed to acquire access token.")
         return
 
-    # Populate column metadata from DeyeCloud API
-    populate_column_metadata(token)
+    # Populate column metadata from DeyeCloud API (opt-in via --meta)
+    if args.meta:
+        populate_column_metadata(token)
 
     if args.fetch_since:
         try:
