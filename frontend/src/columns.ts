@@ -109,7 +109,8 @@ export function renderColumnCheckboxes(): void {
     });
 
     label.appendChild(cb);
-    label.appendChild(document.createTextNode(col.label));
+    const displayLabel = col.unit ? `${col.label} (${col.unit})` : col.label;
+    label.appendChild(document.createTextNode(displayLabel));
     grid.appendChild(label);
   });
 
