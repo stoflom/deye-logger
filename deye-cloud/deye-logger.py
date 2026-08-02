@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # ==================== CONFIGURATION ====================
-SCRIPT_VERSION = "1.2.0"
+SCRIPT_VERSION = "1.2.1"
 # Major.minor must agree qith deye-cloud-design.md
 # Fallback default: database in the same directory as the script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -333,7 +333,8 @@ def fetch_measure_points(token: str) -> list:
 def populate_column_metadata(token: str) -> bool:
     """Fetches column metadata from DeyeCloud API and stores in column_metadata table.
 
-    On each run, the table is truncated and re-populated from the latest API data.
+    On each run, known columns are upserted (INSERT OR REPLACE) so that
+    previously-known columns are preserved even if the API returns fewer fields.
     The API returns a flat list of field name strings; labels and units are
     derived from the field codes using _field_code_to_label() and _derive_unit().
 
@@ -376,9 +377,6 @@ def populate_column_metadata(token: str) -> bool:
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Truncate and re-insert
-    cursor.execute("DELETE FROM column_metadata")
-
     # Track stats
     found_from_api = 0
     missing_from_api = 0
@@ -408,7 +406,7 @@ def populate_column_metadata(token: str) -> bool:
             missing_from_api += 1
 
         cursor.execute('''
-            INSERT INTO column_metadata
+            INSERT OR REPLACE INTO column_metadata
             (column_name, display_label, is_numeric, unit, api_field_code, description, sort_order)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (db_column, display_label, is_numeric, unit, api_field_code, description, sort_order))
@@ -421,7 +419,7 @@ def populate_column_metadata(token: str) -> bool:
     ]
     for col_name, label, is_num, unit, api_code, sort_ord in metadata_columns:
         cursor.execute('''
-            INSERT INTO column_metadata
+            INSERT OR REPLACE INTO column_metadata
             (column_name, display_label, is_numeric, unit, api_field_code, description, sort_order)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (col_name, label, is_num, unit, api_code, "", sort_ord))
