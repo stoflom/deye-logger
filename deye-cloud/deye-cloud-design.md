@@ -1,6 +1,6 @@
 # Deye Cloud — Design Document
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 
 ---
 
@@ -317,6 +317,7 @@ usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
 | `-g, --gap` | int | `3` | Min gap minutes to trigger backfill |
 | `-fs, --find-spurious` | flag | — | Detect spurious records |
 | `-ds, --delete-spurious` | flag | — | Delete spurious records |
+| `-m, --meta` | flag | — | Update column metadata from the DeyeCloud API |
 | `-db` | str | script dir | Path to SQLite database |
 
 **Date formats supported** for `--fetch-since`:
@@ -333,7 +334,7 @@ The deye-logger script fetches column metadata from the DeyeCloud API and stores
 
 ### 9.1 Metadata Fetch
 
-On each run, the script calls the DeyeCloud API's measure points endpoint to retrieve the full list of available telemetry columns:
+The script calls the DeyeCloud API's measure points endpoint to retrieve the full list of available telemetry columns:
 
 ```
 GET /v1.0/device/measurePoints
@@ -344,9 +345,19 @@ The response contains field codes and names for all available measure points. Th
 
 ### 9.2 Initialization
 
-If the `column_metadata` table does not exist, the script creates it automatically (using `CREATE TABLE IF NOT EXISTS`). On every run, the table is **replaced** (truncated and re-inserted) from the latest API data to stay in sync with any DeyeCloud API changes.
+If the `column_metadata` table does not exist, the script creates it automatically (using `CREATE TABLE IF NOT EXISTS`).
 
-### 9.3 Field Mapping
+### 9.3 Metadata Update
+
+Column metadata is **not updated on every run**. It is only refreshed when the user explicitly passes the `-m` / `--meta` flag:
+
+```bash
+python deye-logger.py --meta
+```
+
+When `--meta` is used, the table is **replaced** (truncated and re-inserted) from the latest API data to stay in sync with any DeyeCloud API changes. Without the flag, existing metadata is left untouched, avoiding an unnecessary API call on every telemetry fetch.
+
+### 9.4 Field Mapping
 
 The script uses `FIELD_MAP` (DB column → API key names) and `HISTORY_FIELD_MAP` (API key → DB column) to map DeyeCloud API field codes to internal database column names. These mappings are used for:
 
@@ -376,3 +387,4 @@ This section tracks changes to the design document itself. Every modification to
 |---------|------|----------------|-------------|
 | 1.0.0 | 2025-07-28 | All sections | Initial design document — API integration, data model, operational modes |
 | 1.1.0 | 2026-07-30 | §6.3, §8, §9 | Column metadata no longer hardcoded — new `column_metadata` table populated from DeyeCloud API; deye-logger fetches measure points on each run; metadata serves as source of truth for backend `/api/columns` |
+| 1.2.0 | 2026-07-30 | §8, §9 | Metadata update is opt-in via `-m/--meta` flag — no longer fetched on every run, reducing unnecessary API calls |
