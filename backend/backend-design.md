@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v2.2
+> **Status:** v2.3
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -384,6 +384,18 @@ POST /api/refresh
 | `output` | string | stdout from the Python script |
 | `error` | string | stderr from the Python script |
 
+**Concurrency:**
+
+The endpoint maintains an in-flight guard to prevent concurrent refresh requests. If a refresh is already running, subsequent requests are rejected immediately:
+
+```json
+{ "error": "Refresh already in progress" }
+```
+
+| Status Code | Meaning |
+|-------------|---------|
+| `409` | Another refresh is already running |
+
 **Error Response:**
 
 ```json
@@ -399,6 +411,7 @@ All endpoints follow a consistent error response pattern:
 | Status Code | Meaning |
 |-------------|---------|
 | `400` | Missing or invalid query parameters |
+| `409` | Conflict — refresh already in progress |
 | `500` | Server/database error |
 
 Error responses are always:
@@ -516,3 +529,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.0 | 2025-07-30 | §2.2, §2.6, §5.3, §8 | Day-of-week filter for histogram — new `dayFilter` query parameter on `/api/histogram`, version bumped to 2.0.0 |
 | 2.1 | 2025-07-30 | §2.6 | Remove display fields (color, yAxisID, position) from histogram endpoint response to match frontend v1.6 contract — backend only serves raw data + unit; version bumped to 2.0.1 |
 | 2.2 | 2026-07-30 | §1.4, §2.1, §2.6, §4, §5.3 | Column labels no longer hardcoded — backend reads column metadata from `column_metadata` table populated by deye-logger from DeyeCloud API; histogram units from database; column filtering validates against database |
+| 2.3 | 2026-07-30 | §2.7, §3 | In-flight guard on `POST /api/refresh` — concurrent requests rejected with `409 Conflict` to prevent multiple Python subprocesses spawning simultaneously |
