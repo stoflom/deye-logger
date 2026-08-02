@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.3.0";
+const BACKEND_VERSION = "2.3.1";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
