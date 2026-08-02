@@ -188,6 +188,24 @@ cd backend
 deno run -A main.ts --host 0.0.0.0 --port 8090 --db=../deye_solar_data.db
 ```
 
+### Development Tasks
+
+The backend uses Deno tasks for common development workflows. Run from the `backend/` directory:
+
+| Task | Command | Description |
+|------|---------|-------------|
+| `lint` | `deno task lint` | Run Deno linter |
+| `fmt` | `deno task fmt` | Format code with Deno formatter |
+| `dev` | `deno task dev` | Start the server (same as `deno run -A main.ts`) |
+| `build` | `deno task build` | Bundle the frontend with esbuild |
+
+Example:
+```bash
+cd backend
+deno task lint   # lint TypeScript files
+deno task fmt    # format TypeScript files
+```
+
 > **Note:** `start.sh` uses `lsof` to detect and kill any existing instance on the specified port. If `lsof` is unavailable, use `fuser -k <port>/tcp` instead.
 
 ## Scheduled Runs
