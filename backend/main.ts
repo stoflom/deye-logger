@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.2.2";
+const BACKEND_VERSION = "2.3.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -372,8 +372,17 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
   }
 });
 
+// In-flight guard: prevent concurrent refresh requests
+let refreshInProgress = false;
+
 // Refresh database (run deye-logger.py)
 app.post("/api/refresh", async (_req: express.Request, res: express.Response) => {
+  if (refreshInProgress) {
+    res.status(409).json({ error: "Refresh already in progress" });
+    return;
+  }
+
+  refreshInProgress = true;
   try {
     const scriptPath = join(__dirname, "..", "deye-cloud", "deye-logger.py");
     const cmd = new Deno.Command("python3", {
@@ -400,6 +409,8 @@ app.post("/api/refresh", async (_req: express.Request, res: express.Response) =>
     res.json({ success, code, output, error: errOutput });
   } catch (err) {
     res.status(500).json({ error: String(err) });
+  } finally {
+    refreshInProgress = false;
   }
 });
 
