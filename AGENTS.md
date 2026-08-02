@@ -28,3 +28,8 @@ Each application has a **version number** consisting of `major.minor.subminor`:
 
 - Do not loop
 - If confused stop and ask for clarity
+
+## Issues
+
+- Issues are managed with the "gh issue" commands.
+- They must be logged with appropriate labels e.g. bug,enhancement,frontend,backend,deye-cloud.
