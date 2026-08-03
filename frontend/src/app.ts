@@ -420,7 +420,13 @@ async function setView(
     hideAllDataPanels();
     hideSummaryCards();
 
-    const message = err instanceof Error ? err.message : String(err);
+    let message = err instanceof Error ? err.message : String(err);
+
+    // Suggest browser refresh for timeout errors
+    if (/timed out/i.test(message) || /abort/i.test(message)) {
+      message +=
+        "\n\nThis is likely a network timeout. Try clicking the browser's refresh button to retry.";
+    }
 
     // Push error to history
     history.pushState(
@@ -533,7 +539,12 @@ window.addEventListener("popstate", () => {
     waitingView.hide();
     hideAllDataPanels();
     hideSummaryCards();
-    errorView.show(historyState.errorMessage ?? "An unknown error occurred.");
+    let restoredMsg = historyState.errorMessage ?? "An unknown error occurred.";
+    if (/timed out/i.test(restoredMsg) || /abort/i.test(restoredMsg)) {
+      restoredMsg +=
+        "\n\nThis is likely a network timeout. Try clicking the browser's refresh button to retry.";
+    }
+    errorView.show(restoredMsg);
     enableOnlyControls([]);
     errorViewCloseBtn.disabled = false;
     return;
