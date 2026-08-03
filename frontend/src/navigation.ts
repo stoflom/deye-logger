@@ -14,6 +14,7 @@ import {
   todayStr,
   updateNavButtonStates,
 } from "./shared";
+import { prevDayBtn, nextDayBtn, todayBtn } from "./dom-refs";
 
 // ------------------------------------------------------------------
 // Shift both date inputs by delta days
@@ -37,10 +38,10 @@ export function shiftDay(delta: number, onLoad: () => void): void {
 // Wire date pickers and navigation buttons
 // ------------------------------------------------------------------
 export function wireDateNavigation(onLoad: () => void): void {
-  prevDayBtnRef.addEventListener("click", () => shiftDay(-1, onLoad));
-  nextDayBtnRef.addEventListener("click", () => shiftDay(1, onLoad));
+  prevDayBtn.addEventListener("click", () => shiftDay(-1, onLoad));
+  nextDayBtn.addEventListener("click", () => shiftDay(1, onLoad));
 
-  todayBtnRef.addEventListener("click", () => {
+  todayBtn.addEventListener("click", () => {
     const t = todayStr();
     appState.dateRangeFrom = t;
     appState.dateRangeTo = t;
@@ -70,9 +71,3 @@ export function wireDateNavigation(onLoad: () => void): void {
     onLoad();
   });
 }
-
-// Import button refs at end to avoid circular issues
-import { prevDayBtn, nextDayBtn, todayBtn } from "./shared";
-const prevDayBtnRef = prevDayBtn;
-const nextDayBtnRef = nextDayBtn;
-const todayBtnRef = todayBtn;

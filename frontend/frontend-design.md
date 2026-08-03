@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.4
+> **Status:** v2.5
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -42,7 +42,8 @@ The application is a single-page app with three vertical regions:
 
 | File | Responsibility |
 | ------ | ---------------- |
-| `shared.ts` | Global state object, DOM refs, URL parsing, utility helpers |
+| `dom-refs.ts` | DOM element references (isolated to break circular dependencies) |
+| `shared.ts` | Global state object, URL parsing, utility helpers, re-exports DOM refs |
 | `app.ts` | Entry point, `setView()`, button handlers, init, popstate |
 | `chart.ts` | Chart.js line chart rendering, summary cards |
 | `data-grid.ts` | AG Grid rendering (raw data + histogram grid) |
@@ -474,7 +475,26 @@ try {
 | `histogramMaxAverageValues` | `Map \| null` | Transient (render) | Per-metric max average value + timestamp from histogram |
 | `histogramDayFilter` | `string` | URL-stateful (`?dayFilter=X`) | Current day-of-week filter: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
 
-### 8.3 DOM Panel References (`shared.ts`)
+### 8.2.1 DOM References Module (`dom-refs.ts`)
+
+All DOM element references are consolidated in `dom-refs.ts` to break circular dependencies. This module has no internal dependencies and is imported by other modules as needed.
+
+**Import graph:**
+```
+dom-refs.ts (no internal deps)
+    ↑
+shared.ts → dom-refs.ts (re-exports for backward compatibility)
+    ↑
+other modules → shared.ts + dom-refs.ts
+```
+
+**Rules:**
+- `dom-refs.ts` must never import from other application modules
+- `shared.ts` re-exports all DOM refs for backward compatibility
+- New modules should import directly from `dom-refs.ts` when they need DOM refs
+- Existing imports from `shared.ts` continue to work
+
+### 8.3 DOM Panel References (`dom-refs.ts`)
 
 | Variable | DOM ID | Description |
 | ---------- | -------- | ------------- |
@@ -495,7 +515,7 @@ try {
 | `splitHistogramScroll` | `#split-histogram-scroll` | Container for split charts (no inner scroll — single scroll pane on `#content-area`) |
 | `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`) |
 
-### 8.4 DOM Button/Control References (`shared.ts`)
+### 8.4 DOM Button/Control References (`dom-refs.ts`)
 
 | Variable | DOM ID | Description |
 | ---------- | -------- | ------------- |
