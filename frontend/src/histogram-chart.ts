@@ -226,7 +226,7 @@ export async function renderHistogramChart(updateWaiting: (text: string) => void
     data: {
       labels: result.labels,
       datasets: enriched.map((ds) => ({
-        label: ds.label,
+        label: ds.unit ? `${ds.label} (${ds.unit})` : ds.label,
         data: ds.data,
         backgroundColor: ds.color + "80",
         borderColor: ds.color,
@@ -402,7 +402,7 @@ export async function showSplitHistogram(): Promise<RenderOk> {
             labels: result.labels,
             datasets: [
               {
-                label: dataset.label,
+                label: dataset.unit ? `${dataset.label} (${dataset.unit})` : dataset.label,
                 data: dataset.data,
                 backgroundColor: dataset.color + "80",
                 borderColor: dataset.color,

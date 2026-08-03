@@ -209,7 +209,7 @@ export function renderRawDataChart(): void {
     const yAxisId = unitAxisMap[unit] ?? "y-0";
 
     return {
-      label: meta ? meta.label : col,
+      label: unit ? `${meta ? meta.label : col} (${unit})` : meta ? meta.label : col,
       data: appState.rawDataRows.map((row: Record<string, unknown>) => row[col] as number),
       borderColor: palette[i % palette.length],
       backgroundColor: palette[i % palette.length] + "20",
