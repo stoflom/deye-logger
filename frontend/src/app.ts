@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.5.1";
+export const FRONTEND_VERSION = "2.5.2";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -467,8 +467,7 @@ histogramToggleBtn.addEventListener("click", () => {
 // Split/combine toggle (histogram only)
 splitBtn.addEventListener("click", () => {
   if (appState.activeView === "histogram") {
-    const params = new URLSearchParams(window.location.search);
-    const currentSplit = params.get("split") === "1";
+    const currentSplit = isSplitModeActive();
     setView("histogram", { split: !currentSplit });
   }
 });
@@ -476,8 +475,7 @@ splitBtn.addEventListener("click", () => {
 // Bin size change — re-render current histogram view
 binSizeSelect.addEventListener("change", () => {
   if (appState.activeView === "histogram" || appState.activeView === "histogram-grid") {
-    const params = new URLSearchParams(window.location.search);
-    const currentSplit = params.get("split") === "1";
+    const currentSplit = isSplitModeActive();
     setView(appState.activeView, { split: currentSplit });
   }
 });
@@ -485,8 +483,7 @@ binSizeSelect.addEventListener("change", () => {
 // Day filter change — re-render current histogram view
 dayFilterSelect.addEventListener("change", () => {
   if (appState.activeView === "histogram" || appState.activeView === "histogram-grid") {
-    const params = new URLSearchParams(window.location.search);
-    const currentSplit = params.get("split") === "1";
+    const currentSplit = isSplitModeActive();
     setView(appState.activeView, { split: currentSplit });
   }
 });
