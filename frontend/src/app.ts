@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.5.4";
+export const FRONTEND_VERSION = "2.6.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -300,9 +300,7 @@ async function setView(
     if (doRefresh) {
       // --- Refresh view ---
       await renderRefreshView((text) => waitingView.setText(text));
-
-      // Refresh succeeded — recursive call to render actual data view
-      return setView(view, { replace });
+      // Fall through to normal render — no recursive call needed
     }
 
     // --- Normal data render ---
