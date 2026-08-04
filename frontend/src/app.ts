@@ -300,9 +300,7 @@ async function setView(
     if (doRefresh) {
       // --- Refresh view ---
       await renderRefreshView((text) => waitingView.setText(text));
-
-      // Refresh succeeded — recursive call to render actual data view
-      return setView(view, { replace });
+      // Fall through to normal render — no recursive call needed
     }
 
     // --- Normal data render ---
