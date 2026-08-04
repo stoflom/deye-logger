@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.5.3";
+export const FRONTEND_VERSION = "2.5.4";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -213,9 +213,9 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   // Export button — visible only in grid views
   exportCsvBtn.style.display = isAnyGrid ? "" : "none";
 
-  // Histogram toggle button
+  // Histogram toggle button — always active (blue) when visible
   histogramToggleBtn.style.display = "";
-  histogramToggleBtn.classList.toggle("active", isHistogramMode);
+  histogramToggleBtn.classList.toggle("active", true);
 
   if (isHistogramMode) {
     if (view === "histogram") {
@@ -233,13 +233,12 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
     histogramToggleBtn.title = "Show binned average histogram";
   }
 
-  // View toggle button
+  // View toggle button — always active (blue) when visible
+  viewToggleBtn.classList.toggle("active", true);
   if (isHistogramMode) {
-    viewToggleBtn.classList.toggle("active", true);
     viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCA Histogram Grid" : "\uD83D\uDCC8 Histogram Chart";
     viewToggleBtn.title = view === "histogram" ? "Switch to histogram grid" : "Switch to histogram chart";
   } else {
-    viewToggleBtn.classList.toggle("active", isAnyGrid);
     viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Data Grid" : "\uD83D\uDCC8 Chart";
     viewToggleBtn.title = view === "chart" ? "Switch to data grid" : "Switch to chart";
   }
