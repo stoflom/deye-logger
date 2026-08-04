@@ -295,8 +295,7 @@ setView(view, opts?)
   │     │     → NO history push (transient)
   │     │
   │     ├─ { ok: true } AND opts.refresh === true
-  │     │     → refresh succeeded — recursive call:
-  │     │     → setView(view)  // no refresh flag → falls to normal render
+  │     │     → refresh succeeded — fall through to normal render (no recursive call)
   │     │
   │     ├─ { ok: true } (normal data render)
   │     │     → Check for empty data result:
@@ -682,10 +681,8 @@ refreshBtn click → setView(appState.activeView, { refresh: true })
       → updateWaiting("Fetching latest dates…")
       → GET /api/dates → update appState.minAvailableDate, appState.maxAvailableDate
       → return { ok: true }
-  → refresh succeeded — recursive call:
-  → setView(appState.activeView)
-      → showPanel("waiting") → waitingView.show()
-      → renderRawDataChartView(updateWaiting)
+  → refresh succeeded — fall through to normal render:
+  → renderRawDataChartView(updateWaiting)
       → return { ok: true }
   → hidePanel("waiting")
   → showPanel("raw-data-chart")
@@ -742,8 +739,7 @@ User clicks Refresh from info-view:
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRefreshView → POST /api/refresh → success
-  → recursive setView("chart")
-  → renderRawDataChartView → data now present
+  → fall through to renderRawDataChartView → data now present
   → showPanel("raw-data-chart")
   → push URL history
   → enableAllControls()
