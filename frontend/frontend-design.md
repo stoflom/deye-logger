@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.5
+> **Status:** v2.6
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
