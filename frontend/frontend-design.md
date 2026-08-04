@@ -99,11 +99,11 @@ Buttons use the `.active` CSS class (blue background `#3182ce`) to indicate the 
 
 | Button | ID | Active when… |
 | --------- | ----- | --------- |
-| `📋 Data Grid` | `#view-toggle` | In **grid** view (`classList.toggle("active", true)`), in **histogram-grid** view (`isAnyGrid`), or in **any histogram mode** (histogram or histogram-grid) |
-| `📊 Histogram` | `#histogram-btn` | In **histogram mode** (histogram or histogram-grid) |
+| `📋 Data Grid` | `#view-toggle` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
+| `📊 Histogram` | `#histogram-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `☰ Select` | `#columns-toggle` | When the **columns panel is open** |
 
-**Note:** In **chart view** (the default), neither `view-toggle` nor `histogram-btn` is active — both remain grey. This is intentional: chart view is the "neutral" state with no active toggle. Only the destination views (grid, histogram) carry a blue active indicator.
+Both view toggle buttons remain blue regardless of which specific view is active, providing consistent visual feedback that the buttons are enabled and functional.
 
 ---
 
