@@ -78,7 +78,7 @@ export function updateRawDataGrid(): void {
 
 function resizeRawDataGrid(): void {
   if (appState.rawDataGridApi) {
-    setTimeout(() => appState.rawDataGridApi!.sizeColumnsToFit(), 0);
+    requestAnimationFrame(() => appState.rawDataGridApi!.sizeColumnsToFit());
   }
 }
 
@@ -165,6 +165,6 @@ export function updateHistogramGrid(
 
 function resizeHistogramGrid(): void {
   if (histogramGridApi) {
-    setTimeout(() => histogramGridApi!.sizeColumnsToFit(), 0);
+    requestAnimationFrame(() => histogramGridApi!.sizeColumnsToFit());
   }
 }

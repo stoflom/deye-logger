@@ -1,6 +1,6 @@
 {
   "name": "deye-logger",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "Fetches telemetry data from [DeyeCloud](https://deyecloud.com) and stores it in a local SQLite database. Supports realtime data capture, automatic gap detection/backfill, and bulk historical data import.",
   "main": "index.js",
   "scripts": {
