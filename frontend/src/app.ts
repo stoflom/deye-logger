@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.6.0";
+export const FRONTEND_VERSION = "2.6.1";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -589,46 +589,56 @@ async function init(): Promise<void> {
   waitingView.show();
   waitingView.setText("Loading…");
 
-  // Version badge
-  try {
-    const verRes = await fetchWithTimeout("/api/version", 5_000);
-    const ver: { version: string } = await verRes.json();
-    versionBadgeEl.textContent = `FE ${FRONTEND_VERSION} / BE ${ver.version}`;
-  } catch {
-    versionBadgeEl.textContent = `FE ${FRONTEND_VERSION} / BE ?`;
-  }
+  // Fetch metadata in parallel without blocking initial render
+  const metadataPromises = [
+    // Version badge (cosmetic — non-blocking)
+    (async () => {
+      try {
+        const verRes = await fetchWithTimeout("/api/version", 5_000);
+        const ver: { version: string } = await verRes.json();
+        versionBadgeEl.textContent = `FE ${FRONTEND_VERSION} / BE ${ver.version}`;
+      } catch {
+        versionBadgeEl.textContent = `FE ${FRONTEND_VERSION} / BE ?`;
+      }
+    })(),
+    // Column metadata (lazy-loaded in columns view if needed)
+    (async () => {
+      try {
+        if (appState.columnMetadata.length === 0) {
+          const colRes = await fetchWithTimeout("/api/columns", 10_000);
+          appState.columnMetadata = await colRes.json();
+        }
+      } catch {
+        // Continue without column metadata (fallback available)
+      }
+    })(),
+    // Date bounds (load in background while rendering)
+    (async () => {
+      try {
+        const datesRes = await fetchWithTimeout("/api/dates", 10_000);
+        const dates: { min: string; max: string } = await datesRes.json();
+        if (dates.min) {
+          dateFromInput.min = dates.min;
+          dateToInput.min = dates.min;
+          appState.minAvailableDate = dates.min;
+        }
+        if (dates.max) {
+          dateFromInput.max = dates.max;
+          dateToInput.max = dates.max;
+          appState.maxAvailableDate = dates.max;
+        }
+        updateNavButtonStates();
+      } catch {
+        // Continue without date bounds
+      }
+    })(),
+  ];
 
-  // Load column metadata early (required for all UI operations)
-  try {
-    if (appState.columnMetadata.length === 0) {
-      const colRes = await fetchWithTimeout("/api/columns", 10_000);
-      appState.columnMetadata = await colRes.json();
-    }
-  } catch {
-    // Continue without column metadata (fallback available)
-  }
-
-  // Load date bounds
-  try {
-    const datesRes = await fetchWithTimeout("/api/dates", 10_000);
-    const dates: { min: string; max: string } = await datesRes.json();
-    if (dates.min) {
-      dateFromInput.min = dates.min;
-      dateToInput.min = dates.min;
-      appState.minAvailableDate = dates.min;
-    }
-    if (dates.max) {
-      dateFromInput.max = dates.max;
-      dateToInput.max = dates.max;
-      appState.maxAvailableDate = dates.max;
-    }
-    updateNavButtonStates();
-  } catch {
-    // Continue without date bounds
-  }
-
-  // Render initial view from URL
+  // Render initial view from URL immediately — don't wait for metadata
   await setView(urlState.view, { replace: true, split: urlState.isSplit });
+
+  // Load metadata in background after render
+  Promise.allSettled(metadataPromises);
 }
 
 init();
