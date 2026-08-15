@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v2.3
+> **Status:** v2.6
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -560,6 +560,9 @@ The lock file guard is tested by `deye-cloud/test/test_lock_guard.sh` (Python si
 | 1 | Lock file format compatibility — backend reads the same JSON structure |
 | 2 | Concurrent rejection — backend returns `409` when lock file is present with live PID |
 | 3 | Stale lock cleanup — backend auto-removes lock file when PID is dead |
+| 4 | `--force` flag override — backend respects force-clear behavior |
+| 5 | Signal cleanup (SIGTERM) — lock file removed when Python process receives SIGTERM |
+| 6 | Corrupt lock file handling — backend handles invalid JSON gracefully |
 | 7 | Lock file creation — verifies lock file is created in expected location (`deye-cloud/deye_refresh.lock`) |
 
 ### 8.2 Manual Testing
@@ -576,6 +579,9 @@ curl -X POST http://localhost:8090/api/refresh
 # Trigger second refresh while first is running (409)
 curl -X POST http://localhost:8090/api/refresh
 # → { "error": "Refresh already in progress", "lockFile": true, "pid": 12345, "age": 42 }
+
+# Verify lock file path matches expected location
+ls -la ../deye-cloud/deye_refresh.lock
 ```
 
 ---
@@ -594,3 +600,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.3 | 2026-07-30 | §2.7, §3 | In-flight guard on `POST /api/refresh` — concurrent requests rejected with `409 Conflict` to prevent multiple Python subprocesses spawning simultaneously |
 | 2.4 | 2026-07-30 | §2.7, §3 | Lock-file guard on `POST /api/refresh` — shared `deye_refresh.lock` file replaces in-memory flag; includes PID and age in 409 response; backend and Python script both check the lock file |
 | 2.5 | 2026-07-30 | §8 | Lock file guard tests — validates shared lock file format, 409 response with lock details, stale lock auto-cleanup |
+| 2.6 | 2026-07-30 | §8 | Test table updated to list all 7 scenarios; manual testing adds lock file path verification |

@@ -1,6 +1,6 @@
 # Deye Cloud — Design Document
 
-**Version:** 1.3.0
+**Version:** 1.4
 
 ---
 
@@ -82,6 +82,7 @@ The script authenticates with each run using email + SHA-256 hashed password. Th
 | `DEYE_INVERTER_SN` | Yes | — | Inverter serial number |
 | `DEYE_BASE_URL` | No | `https://eu1-developer.deyecloud.com` | API base URL |
 | `DB_NAME` | No | `deye_solar_data.db` (same dir) | Path to SQLite database |
+| `DEYE_SCRIPT_DIR` | No | Project root | Override `SCRIPT_DIR` for testing (defaults to project root) |
 
 ### 3.2 Script Constants
 
@@ -276,10 +277,10 @@ python deye-logger.py [-g MINUTES] [-db PATH] [--force]
    - If present and PID dead → log warning, remove stale lock, continue.
    - If absent → create lock file with PID and start timestamp.
 2. Fetch latest telemetry via `/v1.0/device/latest`.
-2. Save to database (`INSERT OR REPLACE`).
-3. Scan for time gaps > threshold.
-4. For each gap, query history API (grouped by day) and backfill.
-5. Mark each gap as attempted (even if no data returned).
+3. Save to database (`INSERT OR REPLACE`).
+4. Scan for time gaps > threshold.
+5. For each gap, query history API (grouped by day) and backfill.
+6. Mark each gap as attempted (even if no data returned).
 
 ### 7.2 Historical Bulk Import
 
@@ -289,7 +290,7 @@ python deye-logger.py --fetch-since "1 July 2026"
 
 Splits the range into 7-day chunks (API rate limit). Each chunk queries day-by-day, batch-by-batch. Duplicate detection is handled by `INSERT OR IGNORE` via the `device_timestamp` primary key.
 
-### 7.2 Lock File Guard
+### 7.3 Lock File Guard
 
 A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concurrent executions of the script, whether invoked via the backend API or directly (cron, manual).
 
@@ -313,7 +314,7 @@ A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concur
 
 **Cleanup:** The lock file is deleted on normal exit, error exit, and signal handlers (SIGTERM, SIGINT).
 
-### 7.3 Spurious Data Detection
+### 7.4 Spurious Data Detection
 
 ```bash
 python deye-logger.py --find-spurious
@@ -426,6 +427,7 @@ bash deye-cloud/test/test_lock_guard.sh
 | 4 | `--force` flag override | Lock file removed regardless of PID state |
 | 5 | Signal cleanup (SIGTERM) | Lock file removed when process receives SIGTERM |
 | 6 | Corrupt lock file handling | Invalid JSON detected, lock cleaned, proceeds |
+| 7 | Backend lock file format | Lock file created with correct JSON format (`pid`, `started_at`) readable by backend |
 
 ### 12.2 Test Script Structure
 
@@ -447,4 +449,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.1.0 | 2026-07-30 | §6.3, §8, §9 | Column metadata no longer hardcoded — new `column_metadata` table populated from DeyeCloud API; deye-logger fetches measure points on each run; metadata serves as source of truth for backend `/api/columns` |
 | 1.2.0 | 2026-07-30 | §8, §9 | Metadata update is opt-in via `-m/--meta` flag — no longer fetched on every run, reducing unnecessary API calls |
 | 1.3.0 | 2026-07-30 | §7, §8 | Lock-file guard — `deye_refresh.lock` prevents concurrent executions; `--force` flag overrides stale/active locks; cleanup on exit and signals |
-| 1.3.1 | 2026-07-30 | §12 | Lock file guard tests — `deye-cloud/test/test_lock_guard.sh` covers 6 scenarios: acquisition, concurrency, stale detection, --force, signal cleanup, corrupt lock |
+| 1.4 | 2026-07-30 | §3.1, §7.1, §7.2–§7.4, §12 | Design doc corrections: version format (major.minor only), §7.1 step numbering, §7.2–§7.4 section numbering, §3.1 add DEYE_SCRIPT_DIR env var, §12 test count to 7 scenarios |
