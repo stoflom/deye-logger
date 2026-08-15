@@ -408,7 +408,36 @@ The script handles migration automatically in `init_database()`:
 - `requests`
 - `python-dotenv`
 
-## 12. Change Management
+## 12. Testing
+
+### 12.1 Lock File Guard Tests
+
+Tests are located in `deye-cloud/test/test_lock_guard.sh`. Run with:
+
+```bash
+bash deye-cloud/test/test_lock_guard.sh
+```
+
+| Test | Description | Expected |
+| --- | --- | --- |
+| 1 | Lock acquisition on fresh start | Lock file created with valid JSON (`pid`, `started_at`) |
+| 2 | Concurrent execution rejection | Second invocation exits 1 with error message |
+| 3 | Stale lock detection | Dead PID detected, lock cleaned, proceeds |
+| 4 | `--force` flag override | Lock file removed regardless of PID state |
+| 5 | Signal cleanup (SIGTERM) | Lock file removed when process receives SIGTERM |
+| 6 | Corrupt lock file handling | Invalid JSON detected, lock cleaned, proceeds |
+
+### 12.2 Test Script Structure
+
+The test script (`test_lock_guard.sh`) uses temporary Python helper scripts that import the lock management functions from `deye-logger.py` without executing the full data ingestion pipeline. Each test:
+
+1. Sets up the scenario (creates/destroys lock file as needed)
+2. Runs the test invocation
+3. Verifies the expected outcome
+4. Reports pass/fail
+5. Cleans up temporary files
+
+## 13. Change Management
 
 This section tracks changes to the design document itself. Every modification to this document must be recorded below.
 
@@ -418,3 +447,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.1.0 | 2026-07-30 | §6.3, §8, §9 | Column metadata no longer hardcoded — new `column_metadata` table populated from DeyeCloud API; deye-logger fetches measure points on each run; metadata serves as source of truth for backend `/api/columns` |
 | 1.2.0 | 2026-07-30 | §8, §9 | Metadata update is opt-in via `-m/--meta` flag — no longer fetched on every run, reducing unnecessary API calls |
 | 1.3.0 | 2026-07-30 | §7, §8 | Lock-file guard — `deye_refresh.lock` prevents concurrent executions; `--force` flag overrides stale/active locks; cleanup on exit and signals |
+| 1.3.1 | 2026-07-30 | §12 | Lock file guard tests — `deye-cloud/test/test_lock_guard.sh` covers 6 scenarios: acquisition, concurrency, stale detection, --force, signal cleanup, corrupt lock |

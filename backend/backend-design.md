@@ -549,7 +549,38 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
 
 ---
 
-## 8. Change Management
+## 8. Testing
+
+### 8.1 Lock File Guard Tests
+
+The lock file guard is tested by `deye-cloud/test/test_lock_guard.sh` (Python side). Backend lock checks are validated as part of the same test suite, which verifies:
+
+| Test | Backend Relevance |
+| --- | --- |
+| 1 | Lock file format compatibility — backend reads the same JSON structure |
+| 2 | Concurrent rejection — backend returns `409` when lock file is present with live PID |
+| 3 | Stale lock cleanup — backend auto-removes lock file when PID is dead |
+| 7 | Lock file creation — verifies lock file is created in expected location (`deye-cloud/deye_refresh.lock`) |
+
+### 8.2 Manual Testing
+
+To test the backend lock guard manually:
+
+```bash
+# Start backend
+cd backend && deno run -A main.ts --db ../deye_solar_data.db &
+
+# Trigger first refresh (succeeds)
+curl -X POST http://localhost:8090/api/refresh
+
+# Trigger second refresh while first is running (409)
+curl -X POST http://localhost:8090/api/refresh
+# → { "error": "Refresh already in progress", "lockFile": true, "pid": 12345, "age": 42 }
+```
+
+---
+
+## 9. Change Management
 
 This section tracks changes to the design document itself. Every modification to this document must be recorded below.
 
@@ -562,3 +593,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.2 | 2026-07-30 | §1.4, §2.1, §2.6, §4, §5.3 | Column labels no longer hardcoded — backend reads column metadata from `column_metadata` table populated by deye-logger from DeyeCloud API; histogram units from database; column filtering validates against database |
 | 2.3 | 2026-07-30 | §2.7, §3 | In-flight guard on `POST /api/refresh` — concurrent requests rejected with `409 Conflict` to prevent multiple Python subprocesses spawning simultaneously |
 | 2.4 | 2026-07-30 | §2.7, §3 | Lock-file guard on `POST /api/refresh` — shared `deye_refresh.lock` file replaces in-memory flag; includes PID and age in 409 response; backend and Python script both check the lock file |
+| 2.5 | 2026-07-30 | §8 | Lock file guard tests — validates shared lock file format, 409 response with lock details, stale lock auto-cleanup |
