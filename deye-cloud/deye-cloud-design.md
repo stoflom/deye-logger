@@ -1,6 +1,6 @@
 # Deye Cloud — Design Document
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 
 ---
 
@@ -268,10 +268,14 @@ Known migrations: `telemetry_sorted`, `gap_attempts_cleared`, `spurious_records_
 ### 7.1 Normal Operation
 
 ```bash
-python deye-logger.py [-g MINUTES] [-db PATH]
+python deye-logger.py [-g MINUTES] [-db PATH] [--force]
 ```
 
-1. Fetch latest telemetry via `/v1.0/device/latest`.
+1. Check for lock file (`deye_refresh.lock`).
+   - If present and PID alive → exit with error (use `--force` to override).
+   - If present and PID dead → log warning, remove stale lock, continue.
+   - If absent → create lock file with PID and start timestamp.
+2. Fetch latest telemetry via `/v1.0/device/latest`.
 2. Save to database (`INSERT OR REPLACE`).
 3. Scan for time gaps > threshold.
 4. For each gap, query history API (grouped by day) and backfill.
@@ -284,6 +288,30 @@ python deye-logger.py --fetch-since "1 July 2026"
 ```
 
 Splits the range into 7-day chunks (API rate limit). Each chunk queries day-by-day, batch-by-batch. Duplicate detection is handled by `INSERT OR IGNORE` via the `device_timestamp` primary key.
+
+### 7.2 Lock File Guard
+
+A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concurrent executions of the script, whether invoked via the backend API or directly (cron, manual).
+
+**Lock file format** (JSON):
+
+```json
+{
+  "pid": 12345,
+  "started_at": "2026-01-15T10:30:00"
+}
+```
+
+**Behavior:**
+
+| Scenario | Action |
+| --- | --- |
+| Lock file absent | Create lock file, proceed |
+| Lock file present, PID alive | Print error, exit 1 |
+| Lock file present, PID dead | Log warning, remove stale lock, proceed |
+| `--force` flag | Remove lock file (regardless of PID), log warning, proceed |
+
+**Cleanup:** The lock file is deleted on normal exit, error exit, and signal handlers (SIGTERM, SIGINT).
 
 ### 7.3 Spurious Data Detection
 
@@ -308,7 +336,7 @@ Deletes all entries from `inverter_telemetry` where `device_timestamp` exists in
 
 ```
 usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
-                      [-fs] [-ds] [-db DB]
+                      [-fs] [-ds] [-m] [--force] [-db DB]
 ```
 
 | Flag | Type | Default | Description |
@@ -318,6 +346,7 @@ usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
 | `-fs, --find-spurious` | flag | — | Detect spurious records |
 | `-ds, --delete-spurious` | flag | — | Delete spurious records |
 | `-m, --meta` | flag | — | Update column metadata from the DeyeCloud API |
+| `--force` | flag | — | Override lock file (clear stale/active lock) |
 | `-db` | str | script dir | Path to SQLite database |
 
 **Date formats supported** for `--fetch-since`:
@@ -388,3 +417,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.0.0 | 2025-07-28 | All sections | Initial design document — API integration, data model, operational modes |
 | 1.1.0 | 2026-07-30 | §6.3, §8, §9 | Column metadata no longer hardcoded — new `column_metadata` table populated from DeyeCloud API; deye-logger fetches measure points on each run; metadata serves as source of truth for backend `/api/columns` |
 | 1.2.0 | 2026-07-30 | §8, §9 | Metadata update is opt-in via `-m/--meta` flag — no longer fetched on every run, reducing unnecessary API calls |
+| 1.3.0 | 2026-07-30 | §7, §8 | Lock-file guard — `deye_refresh.lock` prevents concurrent executions; `--force` flag overrides stale/active locks; cleanup on exit and signals |
