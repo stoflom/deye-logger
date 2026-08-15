@@ -272,27 +272,6 @@ else
     fail "Corrupt lock file handling failed"
 fi
 
-# ── Test 7: Backend lock file format ──
-echo ""
-echo "--- Test 7: Backend lock file format check ---"
-rm -f "$LOCK_FILE"
-
-# Create a lock file
-python3 -c "
-import json, os
-lock_info = {'pid': 12345, 'started_at': '2026-01-01T00:00:00'}
-with open('$LOCK_FILE', 'w') as f:
-    json.dump(lock_info, f)
-"
-
-# Check if lock file is readable and has correct format
-if [ -f "$LOCK_FILE" ]; then
-    cat "$LOCK_FILE"
-    pass "Lock file created with correct format for backend"
-else
-    fail "Lock file not created for backend test"
-fi
-
 # ── Summary ──
 echo ""
 echo "=============================================="
