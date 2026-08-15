@@ -1,11 +1,12 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.3.1";
+const BACKEND_VERSION = "2.6.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 
 // Parse command-line arguments
 const args = Deno.args;
@@ -365,17 +366,67 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
   }
 });
 
-// In-flight guard: prevent concurrent refresh requests
-let refreshInProgress = false;
+// Lock file guard: prevent concurrent refresh requests
+const LOCK_FILE = join(__dirname, "..", "deye-cloud", "deye_refresh.lock");
+
+interface LockInfo {
+  pid: number;
+  started_at: string;
+}
+
+function _isLocked(): boolean {
+  if (!existsSync(LOCK_FILE)) return false;
+  try {
+    const info: LockInfo = JSON.parse(readFileSync(LOCK_FILE, "utf-8"));
+    // Check if the PID is still alive
+    try {
+      Deno.kill(info.pid, 0);
+      return true;
+    } catch {
+      // Process dead — stale lock, clean up
+      rmSync(LOCK_FILE, { force: true });
+      return false;
+    }
+  } catch {
+    // Corrupt lock file — clean up
+    rmSync(LOCK_FILE, { force: true });
+    return false;
+  }
+}
+
+function _acquireLock(): void {
+  rmSync(LOCK_FILE, { force: true });
+  const info: LockInfo = {
+    pid: Deno.pid,
+    started_at: new Date().toISOString(),
+  };
+  writeFileSync(LOCK_FILE, JSON.stringify(info, null, 2));
+}
+
+function _releaseLock(): void {
+  rmSync(LOCK_FILE, { force: true });
+}
 
 // Refresh database (run deye-logger.py)
 app.post("/api/refresh", async (_req: express.Request, res: express.Response) => {
-  if (refreshInProgress) {
-    res.status(409).json({ error: "Refresh already in progress" });
+  if (_isLocked()) {
+    try {
+      const info: LockInfo = JSON.parse(readFileSync(LOCK_FILE, "utf-8"));
+      const started = new Date(info.started_at).getTime();
+      const age = Math.floor((Date.now() - started) / 1000);
+      res.status(409).json({
+        error: "Refresh already in progress",
+        lockFile: true,
+        pid: info.pid,
+        age,
+      });
+    } catch {
+      res.status(409).json({ error: "Refresh already in progress" });
+    }
     return;
   }
 
-  refreshInProgress = true;
+  _acquireLock();
   try {
     const scriptPath = join(__dirname, "..", "deye-cloud", "deye-logger.py");
     const cmd = new Deno.Command("python3", {
@@ -403,7 +454,7 @@ app.post("/api/refresh", async (_req: express.Request, res: express.Response) =>
   } catch (err) {
     res.status(500).json({ error: String(err) });
   } finally {
-    refreshInProgress = false;
+    _releaseLock();
   }
 });
 

@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v2.3
+> **Status:** v2.6
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -384,17 +384,48 @@ POST /api/refresh
 | `output` | string | stdout from the Python script |
 | `error` | string | stderr from the Python script |
 
-**Concurrency:**
+**Concurrency — Lock File Guard:**
 
-The endpoint maintains an in-flight guard to prevent concurrent refresh requests. If a refresh is already running, subsequent requests are rejected immediately:
+A shared lock file (`deye-cloud/deye_refresh.lock`) prevents concurrent refreshes across both the backend API and direct Python invocations.
+
+**Lock file format** (JSON):
 
 ```json
-{ "error": "Refresh already in progress" }
+{
+  "pid": 12345,
+  "started_at": "2026-01-15T10:30:00"
+}
 ```
 
+**Behavior:**
+
+| Scenario | Action |
+| --- | --- |
+| Lock file absent | Create lock file with PID + timestamp, spawn Python subprocess |
+| Lock file present, PID alive | Return `409` with lock details |
+| Lock file present, PID dead | Log warning, remove stale lock, proceed |
+
+**409 Conflict response:**
+
+```json
+{
+  "error": "Refresh already in progress",
+  "lockFile": true,
+  "pid": 12345,
+  "age": 42
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `error` | string | Human-readable message |
+| `lockFile` | boolean | Always `true` — indicates lock-file guard |
+| `pid` | number | PID of the process holding the lock |
+| `age` | number | Seconds since the refresh started |
+
 | Status Code | Meaning |
-|-------------|---------|
-| `409` | Another refresh is already running |
+|-------------|---------|  
+| `409` | Another refresh is already running (lock file present, PID alive) |
 
 **Error Response:**
 
@@ -518,7 +549,44 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
 
 ---
 
-## 8. Change Management
+## 8. Testing
+
+### 8.1 Lock File Guard Tests
+
+The lock file guard is tested by `deye-cloud/test/test_lock_guard.sh` (Python side). Backend lock checks are validated as part of the same test suite, which verifies:
+
+| Test | Backend Relevance |
+| --- | --- |
+| 1 | Lock file format compatibility — backend reads the same JSON structure |
+| 2 | Concurrent rejection — backend returns `409` when lock file is present with live PID |
+| 3 | Stale lock cleanup — backend auto-removes lock file when PID is dead |
+| 4 | `--force` flag override — backend respects force-clear behavior |
+| 5 | Signal cleanup (SIGTERM) — lock file removed when Python process receives SIGTERM |
+| 6 | Corrupt lock file handling — backend handles invalid JSON gracefully |
+| 7 | Lock file creation — verifies lock file is created in expected location (`deye-cloud/deye_refresh.lock`) |
+
+### 8.2 Manual Testing
+
+To test the backend lock guard manually:
+
+```bash
+# Start backend
+cd backend && deno run -A main.ts --db ../deye_solar_data.db &
+
+# Trigger first refresh (succeeds)
+curl -X POST http://localhost:8090/api/refresh
+
+# Trigger second refresh while first is running (409)
+curl -X POST http://localhost:8090/api/refresh
+# → { "error": "Refresh already in progress", "lockFile": true, "pid": 12345, "age": 42 }
+
+# Verify lock file path matches expected location
+ls -la ../deye-cloud/deye_refresh.lock
+```
+
+---
+
+## 9. Change Management
 
 This section tracks changes to the design document itself. Every modification to this document must be recorded below.
 
@@ -530,3 +598,6 @@ This section tracks changes to the design document itself. Every modification to
 | 2.1 | 2025-07-30 | §2.6 | Remove display fields (color, yAxisID, position) from histogram endpoint response to match frontend v1.6 contract — backend only serves raw data + unit; version bumped to 2.0.1 |
 | 2.2 | 2026-07-30 | §1.4, §2.1, §2.6, §4, §5.3 | Column labels no longer hardcoded — backend reads column metadata from `column_metadata` table populated by deye-logger from DeyeCloud API; histogram units from database; column filtering validates against database |
 | 2.3 | 2026-07-30 | §2.7, §3 | In-flight guard on `POST /api/refresh` — concurrent requests rejected with `409 Conflict` to prevent multiple Python subprocesses spawning simultaneously |
+| 2.4 | 2026-07-30 | §2.7, §3 | Lock-file guard on `POST /api/refresh` — shared `deye_refresh.lock` file replaces in-memory flag; includes PID and age in 409 response; backend and Python script both check the lock file |
+| 2.5 | 2026-07-30 | §8 | Lock file guard tests — validates shared lock file format, 409 response with lock details, stale lock auto-cleanup |
+| 2.6 | 2026-07-30 | §8 | Test table updated to list all 7 scenarios; manual testing adds lock file path verification |

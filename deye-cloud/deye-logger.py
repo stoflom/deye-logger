@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+import sys
 import os
 import argparse
 import time
+import signal
 import sqlite3
 import re
+import json
 import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -15,7 +18,8 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 SCRIPT_VERSION = "1.2.1"
 # Major.minor must agree qith deye-cloud-design.md
 # Fallback default: database in the same directory as the script
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# SCRIPT_DIR can be overridden via DEYE_SCRIPT_DIR env var (useful for testing)
+SCRIPT_DIR = os.environ.get("DEYE_SCRIPT_DIR", os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DB_NAME = os.path.join(SCRIPT_DIR, "deye_solar_data.db")
 APP_ID = os.getenv("DEYE_APP_ID")
 APP_SECRET = os.getenv("DEYE_APP_SECRET")
@@ -24,6 +28,99 @@ DEYE_PASSWORD = os.getenv("DEYE_PASSWORD")
 INVERTER_SN = os.getenv("DEYE_INVERTER_SN")
 BASE_URL = os.getenv("DEYE_BASE_URL", "https://eu1-developer.deyecloud.com")
 GAP_THRESHOLD_MINUTES = 3
+# =======================================================
+
+# ── Lock File Management ──────────────────────────────────
+LOCK_FILE_NAME = "deye_refresh.lock"
+_lock_file_path = None
+_lock_file_fd = None
+
+def _get_lock_file_path():
+    """Resolve lock file path relative to the script directory."""
+    return os.path.join(SCRIPT_DIR, LOCK_FILE_NAME)
+
+def _acquire_lock():
+    """Acquire the lock file. Returns True on success, False if lock is held by a live process."""
+    global _lock_file_path, _lock_file_fd
+    _lock_file_path = _get_lock_file_path()
+
+    if os.path.exists(_lock_file_path):
+        try:
+            with open(_lock_file_path, 'r') as f:
+                info = json.load(f)
+            pid = info.get("pid", -1)
+            started_at = info.get("started_at", "unknown")
+            # Check if the PID is still alive
+            try:
+                os.kill(pid, 0)
+                print(f"ERROR: Refresh already in progress (PID {pid}, started {started_at}). Use --force to override.")
+                return False
+            except ProcessLookupError:
+                print(f"WARNING: Stale lock file found (PID {pid} no longer running). Clearing...")
+                os.remove(_lock_file_path)
+            except PermissionError:
+                # Process exists but we don't have permission — treat as active
+                print(f"ERROR: Refresh already in progress (PID {pid}, started {started_at}). Use --force to override.")
+                return False
+        except (json.JSONDecodeError, IOError):
+            # Corrupt lock file — remove and proceed
+            print("WARNING: Corrupt lock file found. Clearing...")
+            try:
+                os.remove(_lock_file_path)
+            except IOError:
+                pass
+
+    # Write our own lock file
+    lock_info = {
+        "pid": os.getpid(),
+        "started_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+    }
+    _lock_file_fd = open(_lock_file_path, 'w')
+    json.dump(lock_info, _lock_file_fd)
+    _lock_file_fd.flush()
+    return True
+
+def _release_lock():
+    """Release the lock file."""
+    global _lock_file_path, _lock_file_fd
+    try:
+        if _lock_file_fd:
+            _lock_file_fd.close()
+            _lock_file_fd = None
+    except IOError:
+        pass
+    if _lock_file_path and os.path.exists(_lock_file_path):
+        try:
+            os.remove(_lock_file_path)
+        except IOError:
+            pass
+        _lock_file_path = None
+
+def _force_lock():
+    """Force-remove the lock file regardless of process state."""
+    global _lock_file_path
+    _lock_file_path = _get_lock_file_path()
+    if os.path.exists(_lock_file_path):
+        try:
+            with open(_lock_file_path, 'r') as f:
+                info = json.load(f)
+            pid = info.get("pid", -1)
+            print(f"WARNING: Force mode — stale lock cleared (PID {pid}).")
+            os.remove(_lock_file_path)
+        except (json.JSONDecodeError, IOError):
+            print("WARNING: Force mode — corrupt lock cleared.")
+            try:
+                os.remove(_lock_file_path)
+            except IOError:
+                pass
+    _lock_file_path = None
+
+def _lock_cleanup(signum=None, frame=None):
+    """Signal handler to ensure lock file is always cleaned up."""
+    _release_lock()
+    if signum is not None:
+        sys.exit(0)
+
 # =======================================================
 
 if not APP_ID or not APP_SECRET or not DEYE_EMAIL or not DEYE_PASSWORD or not INVERTER_SN:
@@ -1127,6 +1224,8 @@ def main():
                         help="Delete spurious records previously identified by --find-spurious.")
     parser.add_argument("-m", "--meta", action="store_true",
                         help="Update column metadata from the DeyeCloud API.")
+    parser.add_argument("--force", action="store_true",
+                        help="Override lock file — clear stale or active lock and proceed.")
     parser.add_argument("-db", type=str, default=None,
                         help="Path to the SQLite database (default: deye_solar_data.db in same dir as script, or DB_NAME from .env)")
     args = parser.parse_args()
@@ -1142,62 +1241,76 @@ def main():
     else:
         DB_NAME = DEFAULT_DB_NAME
 
-    print(f"Database: {DB_NAME}")
-    init_database()
+    # ── Lock file management ──────────────────────────────────
+    # Register signal handlers before any lock acquisition
+    signal.signal(signal.SIGTERM, _lock_cleanup)
+    signal.signal(signal.SIGINT, _lock_cleanup)
 
-    if args.find_spurious:
-        find_spurious_records()
-        return
-
-    if args.delete_spurious:
-        delete_spurious_records()
-        return
-
-    token = get_access_token()
-    if not token:
-        print("Failed to acquire access token.")
-        return
-
-    # Populate column metadata from DeyeCloud API (opt-in via --meta)
-    if args.meta:
-        populate_column_metadata(token)
-
-    if args.fetch_since:
-        try:
-            since_dt = parse_date(args.fetch_since)
-        except ValueError as e:
-            print(f"Error: {e}")
-            return
-        fetch_since(token, since_dt)
-        return
-
-    print(f"Fetching latest telemetry... (gap threshold: {args.gap} min)")
-    total_new = 0
-    latest = fetch_latest_data(token)
-    if latest:
-        new_entry = save_records([latest])
-        total_new += new_entry
-        if new_entry:
-            print(f"  ✅ Captured telemetry at {latest['device_timestamp']}.")
-            gp = latest.get('grid_power') or 0
-            lp = latest.get('load_power') or 0
-            sp = latest.get('total_dc_power') or 0
-            de = latest.get('daily_energy') or 0
-            te = latest.get('total_energy') or 0
-            ip = latest.get('current_power') or 0
-            print(f"     Grid: {gp:>7.0f} W | Load: {lp:>7.0f} W | Solar: {sp:>7.0f} W")
-            print(f"     Daily: {de:>7.1f} kWh | Total: {te:>7.1f} kWh | Inv: {ip:>7.0f} W")
+    try:
+        if args.force:
+            _force_lock()
         else:
-            print("  ℹ️  No new data - record already exists in database.")
-    else:
-        print("  ❌ No data returned from API.")
+            if not _acquire_lock():
+                sys.exit(1)
 
-    total_new += scan_and_fix_time_gaps(token, args.gap)
+        print(f"Database: {DB_NAME}")
+        init_database()
 
-    if total_new == 0:
-        print("No new data found.")
-    else:
-        print(f"Done. New records inserted: {total_new}")
+        if args.find_spurious:
+            find_spurious_records()
+            return
+
+        if args.delete_spurious:
+            delete_spurious_records()
+            return
+
+        token = get_access_token()
+        if not token:
+            print("Failed to acquire access token.")
+            return
+
+        # Populate column metadata from DeyeCloud API (opt-in via --meta)
+        if args.meta:
+            populate_column_metadata(token)
+
+        if args.fetch_since:
+            try:
+                since_dt = parse_date(args.fetch_since)
+            except ValueError as e:
+                print(f"Error: {e}")
+                return
+            fetch_since(token, since_dt)
+            return
+
+        print(f"Fetching latest telemetry... (gap threshold: {args.gap} min)")
+        total_new = 0
+        latest = fetch_latest_data(token)
+        if latest:
+            new_entry = save_records([latest])
+            total_new += new_entry
+            if new_entry:
+                print(f"  ✅ Captured telemetry at {latest['device_timestamp']}.")
+                gp = latest.get('grid_power') or 0
+                lp = latest.get('load_power') or 0
+                sp = latest.get('total_dc_power') or 0
+                de = latest.get('daily_energy') or 0
+                te = latest.get('total_energy') or 0
+                ip = latest.get('current_power') or 0
+                print(f"     Grid: {gp:>7.0f} W | Load: {lp:>7.0f} W | Solar: {sp:>7.0f} W")
+                print(f"     Daily: {de:>7.1f} kWh | Total: {te:>7.1f} kWh | Inv: {ip:>7.0f} W")
+            else:
+                print("  ℹ️  No new data - record already exists in database.")
+        else:
+            print("  ❌ No data returned from API.")
+
+        total_new += scan_and_fix_time_gaps(token, args.gap)
+
+        if total_new == 0:
+            print("No new data found.")
+        else:
+            print(f"Done. New records inserted: {total_new}")
+    finally:
+        _release_lock()
 
 if __name__ == "__main__":
     main()
