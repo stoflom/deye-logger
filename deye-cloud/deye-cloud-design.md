@@ -292,7 +292,7 @@ Splits the range into 7-day chunks (API rate limit). Each chunk queries day-by-d
 
 ### 7.3 Lock File Guard
 
-A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concurrent executions of the script, whether invoked via the backend API or directly (cron, manual).
+A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concurrent executions of the script, whether invoked directly (cron, manual) or via the backend API (`POST /api/refresh`). Lock management is **exclusively** handled by the Python script — the backend does not participate in lock file operations.
 
 **Lock file format** (JSON):
 
@@ -427,7 +427,6 @@ bash deye-cloud/test/test_lock_guard.sh
 | 4 | `--force` flag override | Lock file removed regardless of PID state |
 | 5 | Signal cleanup (SIGTERM) | Lock file removed when process receives SIGTERM |
 | 6 | Corrupt lock file handling | Invalid JSON detected, lock cleaned, proceeds |
-| 7 | Backend lock file format | Lock file created with correct JSON format (`pid`, `started_at`) readable by backend |
 
 ### 12.2 Test Script Structure
 
@@ -438,6 +437,8 @@ The test script (`test_lock_guard.sh`) uses temporary Python helper scripts that
 3. Verifies the expected outcome
 4. Reports pass/fail
 5. Cleans up temporary files
+
+**Note:** Test 7 (Backend lock file format) was removed — the backend no longer participates in lock file management.
 
 ## 13. Change Management
 
@@ -450,3 +451,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.2.0 | 2026-07-30 | §8, §9 | Metadata update is opt-in via `-m/--meta` flag — no longer fetched on every run, reducing unnecessary API calls |
 | 1.3.0 | 2026-07-30 | §7, §8 | Lock-file guard — `deye_refresh.lock` prevents concurrent executions; `--force` flag overrides stale/active locks; cleanup on exit and signals |
 | 1.4 | 2026-07-30 | §3.1, §7.1, §7.2–§7.4, §12 | Design doc corrections: version format (major.minor only), §7.1 step numbering, §7.2–§7.4 section numbering, §3.1 add DEYE_SCRIPT_DIR env var, §12 test count to 7 scenarios |
+| 1.5 | 2026-08-15 | §7.3, §12 | Remove backend lock file guard — lock management delegated entirely to Python script; removed Test 7 (Backend lock file format) from test table; clarified that backend does not participate in lock operations |

@@ -1,12 +1,11 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.6.0";
+const BACKEND_VERSION = "2.7.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 
 // Parse command-line arguments
 const args = Deno.args;
@@ -366,96 +365,32 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
   }
 });
 
-// Lock file guard: prevent concurrent refresh requests
-const LOCK_FILE = join(__dirname, "..", "deye-cloud", "deye_refresh.lock");
-
-interface LockInfo {
-  pid: number;
-  started_at: string;
-}
-
-function _isLocked(): boolean {
-  if (!existsSync(LOCK_FILE)) return false;
-  try {
-    const info: LockInfo = JSON.parse(readFileSync(LOCK_FILE, "utf-8"));
-    // Check if the PID is still alive
-    try {
-      Deno.kill(info.pid, 0);
-      return true;
-    } catch {
-      // Process dead — stale lock, clean up
-      rmSync(LOCK_FILE, { force: true });
-      return false;
-    }
-  } catch {
-    // Corrupt lock file — clean up
-    rmSync(LOCK_FILE, { force: true });
-    return false;
-  }
-}
-
-function _acquireLock(): void {
-  rmSync(LOCK_FILE, { force: true });
-  const info: LockInfo = {
-    pid: Deno.pid,
-    started_at: new Date().toISOString(),
-  };
-  writeFileSync(LOCK_FILE, JSON.stringify(info, null, 2));
-}
-
-function _releaseLock(): void {
-  rmSync(LOCK_FILE, { force: true });
-}
-
 // Refresh database (run deye-logger.py)
+// Lock management is delegated to the Python script — it owns deye_refresh.lock
 app.post("/api/refresh", async (_req: express.Request, res: express.Response) => {
-  if (_isLocked()) {
-    try {
-      const info: LockInfo = JSON.parse(readFileSync(LOCK_FILE, "utf-8"));
-      const started = new Date(info.started_at).getTime();
-      const age = Math.floor((Date.now() - started) / 1000);
-      res.status(409).json({
-        error: "Refresh already in progress",
-        lockFile: true,
-        pid: info.pid,
-        age,
-      });
-    } catch {
-      res.status(409).json({ error: "Refresh already in progress" });
-    }
-    return;
+  const scriptPath = join(__dirname, "..", "deye-cloud", "deye-logger.py");
+  const cmd = new Deno.Command("python3", {
+    args: [scriptPath],
+    stdin: "null",
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, success, stdout, stderr } = await cmd.output();
+
+  const output = new TextDecoder().decode(stdout);
+  const errOutput = new TextDecoder().decode(stderr);
+
+  // Re-open DB after refresh so new data is visible
+  if (success && db) {
+    db.close();
+    db = null;
+    openDatabase();
   }
 
-  _acquireLock();
-  try {
-    const scriptPath = join(__dirname, "..", "deye-cloud", "deye-logger.py");
-    const cmd = new Deno.Command("python3", {
-      args: [scriptPath],
-      stdin: "null",
-      stdout: "piped",
-      stderr: "piped",
-    });
-    const { code, success, stdout, stderr } = await cmd.output();
+  // Invalidate column cache so new columns are picked up
+  _columnCache = null;
 
-    const output = new TextDecoder().decode(stdout);
-    const errOutput = new TextDecoder().decode(stderr);
-
-    // Re-open DB after refresh so new data is visible
-    if (success && db) {
-      db.close();
-      db = null;
-      openDatabase();
-    }
-
-    // Invalidate column cache so new columns are picked up
-    _columnCache = null;
-
-    res.json({ success, code, output, error: errOutput });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  } finally {
-    _releaseLock();
-  }
+  res.json({ success, code, output, error: errOutput });
 });
 
 // ── Start ────────────────────────────────────────────────────
