@@ -18,7 +18,8 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 SCRIPT_VERSION = "1.2.1"
 # Major.minor must agree qith deye-cloud-design.md
 # Fallback default: database in the same directory as the script
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# SCRIPT_DIR can be overridden via DEYE_SCRIPT_DIR env var (useful for testing)
+SCRIPT_DIR = os.environ.get("DEYE_SCRIPT_DIR", os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DB_NAME = os.path.join(SCRIPT_DIR, "deye_solar_data.db")
 APP_ID = os.getenv("DEYE_APP_ID")
 APP_SECRET = os.getenv("DEYE_APP_SECRET")

@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Lock file lives at deye-cloud/deye_refresh.lock
+# SCRIPT_DIR defaults to ".." (deye-cloud/), can be overridden
+SCRIPT_DIR="${SCRIPT_DIR:-..}"
+SCRIPT_DIR="$(cd "$SCRIPT_DIR" && pwd)"
 LOCK_FILE="$SCRIPT_DIR/deye_refresh.lock"
 DB_FILE="$SCRIPT_DIR/deye_solar_data.db"
+
+# Test scripts directory (this directory, e.g. deye-cloud/test/)
+TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Helper functions
-pass() { echo "✅ PASS: $1"; ((TESTS_PASSED++)); }
-fail() { echo "❌ FAIL: $1"; ((TESTS_FAILED++)); }
-cleanup() { rm -f "$LOCK_FILE" "$DB_FILE"; }
+pass() { echo "✅ PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
+fail() { echo "❌ FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
 # Create a minimal .env for testing
 cat > "$SCRIPT_DIR/.env" << 'ENVEOF'
@@ -30,25 +36,21 @@ echo ""
 echo "--- Test 1: Lock acquisition on fresh start ---"
 rm -f "$LOCK_FILE"
 
-# Create a minimal test script that just acquires and holds lock briefly
-cat > "$SCRIPT_DIR/test_lock_acquire.py" << 'PYEOF'
-import sys
+cat > "$TEST_DIR/test_lock_acquire.py" << PYEOF
+import sys, os, json
 sys.path.insert(0, '.')
-# Import only the lock functions, not the full script
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
-# Simulate what main() does
+os.chdir(os.path.dirname(__file__))
 signal.signal(signal.SIGTERM, _lock_cleanup)
 signal.signal(signal.SIGINT, _lock_cleanup)
 if not _acquire_lock():
     print("FAIL: Could not acquire lock")
     sys.exit(1)
 
-# Verify lock file exists and has correct format
-import json
-import os
-if os.path.exists(LOCK_FILE):
-    with open(LOCK_FILE) as f:
+lock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'deye_refresh.lock')
+if os.path.exists(lock_path):
+    with open(lock_path) as f:
         info = json.load(f)
     if "pid" in info and "started_at" in info:
         print(f"Lock acquired: PID={info['pid']}, started_at={info['started_at']}")
@@ -64,7 +66,7 @@ _release_lock()
 sys.exit(0 if pass_test else 1)
 PYEOF
 
-if python3 "$SCRIPT_DIR/test_lock_acquire.py" 2>&1; then
+if DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_acquire.py" 2>&1; then
     pass "Lock file created with correct JSON format"
 else
     fail "Lock file creation failed"
@@ -75,29 +77,28 @@ echo ""
 echo "--- Test 2: Concurrent execution rejection ---"
 rm -f "$LOCK_FILE"
 
-# Create test script that holds lock
-cat > "$SCRIPT_DIR/test_lock_hold.py" << 'PYEOF'
-import sys
+cat > "$TEST_DIR/test_lock_hold.py" << PYEOF
+import sys, os, signal, time
 sys.path.insert(0, '.')
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
+os.chdir(os.path.dirname(__file__))
 signal.signal(signal.SIGTERM, _lock_cleanup)
 signal.signal(signal.SIGINT, _lock_cleanup)
 if not _acquire_lock():
     sys.exit(1)
 
 # Hold lock for 10 seconds
-import time
 time.sleep(10)
 _release_lock()
 PYEOF
 
-# Create test script that tries to acquire lock
-cat > "$SCRIPT_DIR/test_lock_concurrent.py" << 'PYEOF'
-import sys
+cat > "$TEST_DIR/test_lock_concurrent.py" << PYEOF
+import sys, os, signal
 sys.path.insert(0, '.')
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
+os.chdir(os.path.dirname(__file__))
 signal.signal(signal.SIGTERM, _lock_cleanup)
 signal.signal(signal.SIGINT, _lock_cleanup)
 if not _acquire_lock():
@@ -109,12 +110,12 @@ else:
 PYEOF
 
 # Start holder in background
-python3 "$SCRIPT_DIR/test_lock_hold.py" &
+DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_hold.py" &
 HOLDER_PID=$!
 sleep 1
 
 # Try to acquire in foreground
-if python3 "$SCRIPT_DIR/test_lock_concurrent.py" 2>&1; then
+if DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_concurrent.py" 2>&1; then
     pass "Concurrent execution correctly rejected"
 else
     fail "Concurrent execution was not rejected"
@@ -134,11 +135,12 @@ cat > "$LOCK_FILE" << 'JSONEOF'
 {"pid": 999999, "started_at": "2020-01-01T00:00:00"}
 JSONEOF
 
-cat > "$SCRIPT_DIR/test_lock_stale.py" << 'PYEOF'
-import sys
+cat > "$TEST_DIR/test_lock_stale.py" << PYEOF
+import sys, os, signal
 sys.path.insert(0, '.')
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
+os.chdir(os.path.dirname(__file__))
 signal.signal(signal.SIGTERM, _lock_cleanup)
 signal.signal(signal.SIGINT, _lock_cleanup)
 if not _acquire_lock():
@@ -146,8 +148,8 @@ if not _acquire_lock():
     sys.exit(1)
 else:
     print("Correctly cleared stale lock and acquired new one")
-    import os
-    if os.path.exists(LOCK_FILE):
+    lock_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'deye_refresh.lock')
+    if os.path.exists(lock_path):
         print("Lock file exists after acquiring")
         _release_lock()
         sys.exit(0)
@@ -156,7 +158,7 @@ else:
         sys.exit(1)
 PYEOF
 
-if python3 "$SCRIPT_DIR/test_lock_stale.py" 2>&1; then
+if DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_stale.py" 2>&1; then
     pass "Stale lock correctly detected and cleared"
 else
     fail "Stale lock detection failed"
@@ -175,19 +177,18 @@ with open('$LOCK_FILE', 'w') as f:
     json.dump(lock_info, f)
 "
 
-cat > "$SCRIPT_DIR/test_lock_force.py" << 'PYEOF'
-import sys
+cat > "$TEST_DIR/test_lock_force.py" << PYEOF
+import sys, os
 sys.path.insert(0, '.')
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
-signal.signal(signal.SIGTERM, _lock_cleanup)
-signal.signal(signal.SIGINT, _lock_cleanup)
+os.chdir(os.path.dirname(__file__))
 _force_lock()
 print("Force lock cleared successfully")
 sys.exit(0)
 PYEOF
 
-if python3 "$SCRIPT_DIR/test_lock_force.py" 2>&1; then
+if DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_force.py" 2>&1; then
     if [ ! -f "$LOCK_FILE" ]; then
         pass "Lock file removed by --force"
     else
@@ -202,25 +203,26 @@ echo ""
 echo "--- Test 5: Signal cleanup (SIGTERM) ---"
 rm -f "$LOCK_FILE"
 
-cat > "$SCRIPT_DIR/test_lock_signal.py" << 'PYEOF'
-import sys, signal, time
+cat > "$TEST_DIR/test_lock_signal.py" << PYEOF
+import sys, os, signal
 sys.path.insert(0, '.')
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
+os.chdir(os.path.dirname(__file__))
 signal.signal(signal.SIGTERM, _lock_cleanup)
 if not _acquire_lock():
     sys.exit(1)
 
 # Wait for signal
 print(f"PID {os.getpid()} waiting for SIGTERM...")
-import os
-os.system(f"kill -TERM {os.getpid()}")
+import subprocess
+subprocess.call(["kill", "-TERM", str(os.getpid())])
 # This line should not be reached
 print("FAIL: Should have exited")
 sys.exit(1)
 PYEOF
 
-python3 "$SCRIPT_DIR/test_lock_signal.py" &
+DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_signal.py" &
 SIGNAL_PID=$!
 sleep 1
 
@@ -247,11 +249,12 @@ rm -f "$LOCK_FILE"
 
 echo "this is not json" > "$LOCK_FILE"
 
-cat > "$SCRIPT_DIR/test_lock_corrupt.py" << 'PYEOF'
-import sys
+cat > "$TEST_DIR/test_lock_corrupt.py" << PYEOF
+import sys, os, signal
 sys.path.insert(0, '.')
-exec(open('$SCRIPT_DIR/deye-logger.py').read().split('if __name__')[0])
+exec(open(os.path.join(os.path.dirname(__file__), '..', 'deye-logger.py')).read().split('if __name__')[0])
 
+os.chdir(os.path.dirname(__file__))
 signal.signal(signal.SIGTERM, _lock_cleanup)
 signal.signal(signal.SIGINT, _lock_cleanup)
 if not _acquire_lock():
@@ -263,15 +266,15 @@ else:
     sys.exit(0)
 PYEOF
 
-if python3 "$SCRIPT_DIR/test_lock_corrupt.py" 2>&1; then
+if DEYE_SCRIPT_DIR="$SCRIPT_DIR" python3 "$TEST_DIR/test_lock_corrupt.py" 2>&1; then
     pass "Corrupt lock file correctly handled"
 else
     fail "Corrupt lock file handling failed"
 fi
 
-# ── Test 7: Backend lock check (Deno) ──
+# ── Test 7: Backend lock file format ──
 echo ""
-echo "--- Test 7: Backend lock file check ---"
+echo "--- Test 7: Backend lock file format check ---"
 rm -f "$LOCK_FILE"
 
 # Create a lock file
@@ -282,10 +285,10 @@ with open('$LOCK_FILE', 'w') as f:
     json.dump(lock_info, f)
 "
 
-# Check if lock file is readable by backend
+# Check if lock file is readable and has correct format
 if [ -f "$LOCK_FILE" ]; then
     cat "$LOCK_FILE"
-    pass "Lock file created for backend test"
+    pass "Lock file created with correct format for backend"
 else
     fail "Lock file not created for backend test"
 fi
@@ -297,7 +300,7 @@ echo "Test Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
 echo "=============================================="
 
 # Cleanup
-rm -f "$LOCK_FILE" "$SCRIPT_DIR/.env" "$SCRIPT_DIR/test_lock_*.py"
+rm -f "$LOCK_FILE" "$SCRIPT_DIR/.env" "$TEST_DIR/test_lock_*.py"
 
 if [ $TESTS_FAILED -gt 0 ]; then
     exit 1
