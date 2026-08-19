@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.6
+> **Status:** v2.7
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -165,6 +165,7 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
 | Initial load | Yes (on success) | Sets initial history entry |
 | Refresh success | Yes (on success) | Re-renders current view (dates unchanged) |
+| Refresh failure | — | History pushed *before* refresh so `history.back()` restores pre-refresh state |
 | Open columns panel | **No** | Transient view |
 | Close columns panel | Yes (on success) | Full data re-fetch with new columns |
 | Any render failure | Yes (with `error` marker) | Shows error-view |
@@ -247,6 +248,7 @@ setView(view, opts?)
   │     │       return { ok: true }
   │     │
   │     ├─ opts.refresh === true
+  │     │     → push current view state to history (so `history.back()` restores pre-refresh state on error)
   │     │     → renderRefreshView(updateWaiting)
   │     │       updateWaiting("Querying Deye Cloud…")
   │     │       POST /api/refresh
@@ -296,6 +298,9 @@ setView(view, opts?)
   │     │
   │     ├─ { ok: true } AND opts.refresh === true
   │     │     → refresh succeeded — fall through to normal render (no recursive call)
+  │     │     → (normal render succeeds) → pushState with same URL → show data-view
+  │     │     → (refresh fails / normal render fails) → catch Error → pushState({ error: true }) → show error-view
+  │     │     → User clicks Close → history.back() → pops error entry → pops pre-refresh entry → popstate restores pre-refresh view
   │     │
   │     ├─ { ok: true } (normal data render)
   │     │     → Check for empty data result:
@@ -390,12 +395,33 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 
 ### 7.1 Behavior
 
+#### 7.1.1 Refresh Failure
+
 ```
 setView("chart", { refresh: true })
+  → pushState({ view: "chart", isSplit: false })          ← pre-refresh snapshot
   → waiting-view: "Querying Deye Cloud…"
   → POST /api/refresh → TIMEOUT or 500
   → catch Error
   → pushState({ error: true, view: "chart", errorMessage: "Server error 500" })
+  → show error-view
+  → User clicks Close
+  → history.back()                                       ← pops error entry
+  → history.back()                                       ← pops pre-refresh entry
+  → popstate fires → setView("chart", { replace: true }) ← restores pre-refresh view
+```
+
+**Key invariant:** A pre-refresh state is always pushed to history *before* `renderRefreshView()` runs. This ensures that `history.back()` from the error-view has a valid entry to restore. The refresh operation itself does not change the URL (the same view is re-rendered), so the pre-push and post-refresh URL are identical.
+
+#### 7.1.2 Normal Render Failure (non-refresh)
+
+```
+setView("chart")
+  → renderRawDataChartView()
+      → GET /api/data → TIMEOUT or 500
+      → throw Error
+  → catch Error
+  → pushState({ error: true, view: "chart", errorMessage: "Request timed out" })
   → show error-view
   → User clicks Close
   → history.back()
@@ -580,7 +606,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Prev Day | `prevDayBtn` | `‹` | Always | Action (shift -1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.minAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Next Day | `nextDayBtn` | `›` | Always | Action (shift +1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.maxAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Today | `todayBtn` | `Today` | Always | Action (set to today) | — | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`) |
-| Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })` | Stateless action |
+| Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })`; pushes pre-refresh snapshot to history for error recovery | URL-stateful (pre-refresh snapshot) |
 | Columns Toggle | `columnsToggleBtn` | `☰ Select` (closed) / `↻ Load Data` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (transient) | Stateless (columns persist to localStorage) |
 | View Toggle | `viewToggleBtn` | See labels below | Always | Toggle (within mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Histogram Toggle | `histogramToggleBtn` | See labels below | Always | Toggle (normal↔histogram mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
@@ -675,6 +701,7 @@ setView("histogram", { split: true })
 refreshBtn click → setView(appState.activeView, { refresh: true })
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
+  → pushState({ view: activeView, isSplit: false })     ← pre-refresh snapshot (for error recovery)
   → renderRefreshView(updateWaiting)
       → updateWaiting("Querying Deye Cloud…")
       → POST /api/refresh
@@ -688,6 +715,13 @@ refreshBtn click → setView(appState.activeView, { refresh: true })
   → showPanel("raw-data-chart")
   → push URL history
   → enableAllControls()
+
+Refresh failure path:
+  → renderRefreshView throws Error
+  → catch Error
+  → pushState({ error: true, view, errorMessage })
+  → show error-view
+  → User clicks Close → history.back() → pops error → pops pre-refresh → popstate restores view
 ```
 
 ### 10.4 Columns Flow
@@ -738,6 +772,7 @@ User clicks Refresh from info-view:
   → setView("chart", { refresh: true })
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
+  → pushState({ view: "chart" })                        ← pre-refresh snapshot
   → renderRefreshView → POST /api/refresh → success
   → fall through to renderRawDataChartView → data now present
   → showPanel("raw-data-chart")
@@ -1201,4 +1236,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.0 | 2025-07-30 | §2.1, §3.1, §3.3, §6.4, §8.2, §8.4, §9.3, §10.2, §17 | Day-of-week filter for histogram — new `dayFilter` URL parameter, `#day-filter-select` dropdown in title bar (visible in histogram modes), `histogramDayFilter` module variable, backend passes `dayFilter` to `/api/histogram`. Version bumped to 2.0. |
 | 2.1 | 2026-07-30 | §8.1, §11 | Column metadata sourced exclusively from backend `/api/columns` which reads from `column_metadata` database table — no hardcoded column structures in frontend; backend reads column data from database populated by deye-logger from DeyeCloud API |
 | 2.2 | 2026-07-30 | §15.2 | Summary cards and grid column labels display units — summary card values show `value unit` (e.g. `1245.6 W`), grid headers show `label (unit)` (e.g. `Grid Power (W)`) when a unit is defined in column metadata; raw data grid and histogram grid both use `extractUnit()` for consistency with chart axis labels |
-| 2.4 | 2026-08-01 | §6.2, §10.4, §13 | Consistent button-state logic — replaced negative `enableButtonsExcept()` with positive `enableOnlyControls(keys)`; each STEP-4 branch documents its own `enableOnlyControls()` or `enableAllControls()` call; renamed all `disableAllButtons`/`enableAllButtons` to match code `disableAllControls`/`enableAllControls` |
+| 2.7 | 2026-08-02 | §3.3, §6.2, §7.1, §9.3, §10.3, §10.5 | Fix refresh error recovery — push pre-refresh snapshot to history before `renderRefreshView()` so `history.back()` from error-view restores the previous working state; added §7.1.1 Refresh Failure and §7.1.2 Normal Render Failure flows |
