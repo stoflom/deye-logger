@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.6.1";
+export const FRONTEND_VERSION = "2.7.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -299,6 +299,21 @@ async function setView(
 
     if (doRefresh) {
       // --- Refresh view ---
+      // Push current view state to history BEFORE refresh so that
+      // history.back() from the error view restores the pre-refresh state.
+      const isHistogramModeRefresh = view === "histogram" || view === "histogram-grid";
+      const refreshUrl = buildUrlString(
+        view,
+        appState.dateRangeFrom,
+        appState.dateRangeTo,
+        {
+          binSize: isHistogramModeRefresh ? binSizeSelect.value : undefined,
+          isSplit: false,
+          dayFilter: isHistogramModeRefresh ? dayFilterSelect.value : undefined,
+        },
+      );
+      history.pushState({ view, isSplit: false }, "", refreshUrl);
+
       await renderRefreshView((text) => waitingView.setText(text));
       // Fall through to normal render — no recursive call needed
     }
