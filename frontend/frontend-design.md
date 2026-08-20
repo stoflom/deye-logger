@@ -21,7 +21,7 @@ The application is a single-page app with three vertical regions:
 │  — app title + controls bar              │
 ├──────────────────────────────────────────┤
 │  STATE BAR (always visible, persistent)  │
-│  — row count, version badge, status      │
+│  — row count, view label, version badge  │
 ├──────────────────────────────────────────┤
 │  CONTENT AREA (scrollable, controlled    │
 │  by setView)                             │
@@ -91,6 +91,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Element | ID | Purpose |
 | --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
+| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
 ### 2.3 Button Active State Styling
@@ -115,15 +116,15 @@ These objects define the **page state** and must be pushed to URL history so tha
 
 | Parameter | Values | Source | Used By |
 | ----------- | -------- | -------- | --------- |
-| `view` | `chart`, `grid`, `histogram`, `histogram-grid` | `setView()` | `getStateFromUrl()`, `setView()` |
-| `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getStateFromUrl()` (single day) |
-| `from` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range start) |
-| `to` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range end) |
+| `view` | `chart`, `grid`, `histogram`, `histogram-grid` | `setView()` | `getUrlState()`, `setView()` |
+| `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getUrlState()` (single day) |
+| `from` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range start) |
+| `to` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range end) |
 | `binSize` | `5`, `10`, `15`, `30`, `60` | `#bin-size-select` | `getUrlState()`, histogram fetch |
 | `split` | `1` (presence = true) | Split button | `getUrlState()`, `setView()` |
 | `dayFilter` | `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` | `#day-filter-select` | `getUrlState()`, histogram fetch |
 
-**Serialization rules** (`buildUrlParams()`):
+**Serialization rules** (`buildUrlString()`):
 
 - Single day: `?view=chart&date=2025-07-20`
 - Range: `?view=chart&from=2025-07-18&to=2025-07-20`
@@ -198,8 +199,8 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Error view** | `#error-view` | Render failure — modal with Close button | Yes (`error: true`) |
 | **Info view** | `#info-view` | Data fetch returned zero rows, or general info message | No (transient) |
 | **Columns view** | `#columns-view` | `setView(view, { columns: true })` | No (transient) |
-| **Chart view** | `#chart-view` | `setView("chart")` | Yes |
-| **Grid view** | `#grid-view` | `setView("grid")` | Yes |
+| **Chart view** | `#raw-data-chart-view` | `setView("chart")` | Yes |
+| **Grid view** | `#raw-data-grid-view` | `setView("grid")` | Yes |
 | **Histogram view** | `#histogram-view` | `setView("histogram")` (not split) | Yes |
 | **Histogram grid view** | `#histogram-grid-view` | `setView("histogram-grid")` | Yes |
 | **Split histogram view** | `#split-histogram-view` | `setView("histogram", { split: true })` | Yes (`split=1`) |
@@ -274,11 +275,12 @@ setView(view, opts?)
   │     │       return { ok: true }
   │     │
   │     ├─ view === "histogram" (split from opts or URL)
-  │     │     → renderHistogramView(updateWaiting, { split: true/false })
+  │     │     → non-split: renderHistogramChartView(updateWaiting)
+  │     │     → split:    renderSplitHistogramView(updateWaiting)
   │     │       updateWaiting("Fetching histogram data…")
-  │     │       GET /api/histogram → histogramLastApiResult
+  │     │       GET /api/histogram → histogramLastApiResult (via fetchHistogramData())
   │     │       updateWaiting("Drawing histogram…")
-  │     │       draw combined + split charts
+  │     │       draw combined chart; split mode also draws individual charts
   │     │       return { ok: true }
   │     │
   │     └─ view === "histogram-grid"
@@ -324,12 +326,13 @@ setView(view, opts?)
   │     │     │
   │     │     → (data present — normal path)
   │     │     → waitingView.hide()
-  │     │     → show summary-cards (add .visible class to #summary-cards)
-  │     │     → hide non-data panels (waiting, error, info, columns)
   │     │     → showPanel(view) — show appropriate data-view
-  │     │     → buildUrlParams() → history.pushState/replaceState
+  │     │     → show summary-cards (add .visible class to #summary-cards)
   │     │     → updateButtonLabels(view, split)
+  │     │     → update view label (#view-label)
+  │     │     → buildUrlString() → history.pushState/replaceState
   │     │     → enableAllControls()
+  │     │     → updateNavButtonStates()
   │     │
   │     └─ catch Error
   │             → waitingView.hide()
@@ -456,14 +459,14 @@ window.addEventListener("popstate", () => {
   }
 
   // Normal restoration from URL — no double-push
-  const urlState = getStateFromUrl();
+  const urlState = getUrlState();
   setView(urlState.view, { replace: true, split: urlState.isSplit });
 });
 ```
 
 ### 7.4 Timeout Handling
 
-All `fetch()` calls use an AbortController with a timeout (e.g., 30 seconds for data queries, 120 seconds for refresh):
+All `fetch()` calls use an AbortController with a timeout (e.g., 30 seconds for data queries, 120 seconds for refresh). The `setView` error path (and the popstate error-restore path) appends a hint to timeout messages: *"This is likely a network timeout. Try clicking the browser's refresh button to retry."*:
 
 ```typescript
 const controller = new AbortController();
@@ -473,7 +476,7 @@ try {
   // ...
 } catch (err) {
   if (err.name === "AbortError") {
-    throw new Error("Request timed out — server did not respond in time");
+    throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
   }
   throw err;
 } finally {
@@ -496,7 +499,7 @@ try {
 | `appState.minAvailableDate` | `string` | Transient (session) | Earliest date with data (from `/api/dates`) |
 | `appState.maxAvailableDate` | `string` | Transient (session) | Latest date with data (from `/api/dates`) |
 | `appState.rawDataRows` | `Row[]` | Transient (render) | Fetched raw inverter data rows (chart/grid views) |
-| `appState.binnedDataRows` | `Row[]` | Transient (render) | Transformed histogram bins as rows (histogram-grid view) |
+| `appState.binnedDataRows` | `Row[]` | Transient (render) | Declared but currently unused (reserved) — histogram-grid rows are built locally in the renderer via `histogramResultToRows()` |
 | `appState.rawDataChartInstance` | `Chart \| null` | Transient (render) | Chart.js instance for the raw data line chart |
 | `appState.rawDataGridApi` | `GridApi \| null` | Transient (render) | AG Grid API for the raw data grid |
 | `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid |
@@ -511,7 +514,7 @@ try {
 | `histogramLastApiResult` | `HistogramResponse \| null` | Transient (cache) | Cached histogram API response for split rendering |
 | `histogramLastColumnNames` | `string[]` | Transient (cache) | Column names used in the last histogram API call |
 | `histogramMaxAverageValues` | `Map \| null` | Transient (render) | Per-metric max average value + timestamp from histogram |
-| `histogramDayFilter` | `string` | URL-stateful (`?dayFilter=X`) | Current day-of-week filter: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
+| — | — | — | The day-of-week filter is **not** stored in module state — `fetchHistogramData()` reads `#day-filter-select` directly at fetch time; the URL parameter `?dayFilter=X` is the stateful source |
 
 ### 8.2.1 DOM References Module (`dom-refs.ts`)
 
@@ -536,7 +539,6 @@ other modules → shared.ts + dom-refs.ts
 
 | Variable | DOM ID | Description |
 | ---------- | -------- | ------------- |
-| `contentArea` | `#content-area` | Single scrollable content container (wraps summary cards + content panels) |
 | `waitingViewPanel` | `#waiting-view` | Waiting overlay container |
 | `waitingViewTextEl` | `#waiting-text` | Waiting message text element |
 | `errorViewPanel` | `#error-view` | Error modal overlay container |
@@ -571,6 +573,7 @@ other modules → shared.ts + dom-refs.ts
 | `binSizeSelect` | `#bin-size-select` | Histogram bin size dropdown |
 | `dayFilterSelect` | `#day-filter-select` | Histogram day-of-week filter dropdown |
 | `rowCountEl` | `#row-count` | Row/metric count display |
+| `viewLabelEl` | `#view-label` | Current view name display |
 | `versionBadgeEl` | `#version-badge` | Version string display |
 
 ---
@@ -679,7 +682,7 @@ setView("chart")
 setView("histogram", { split: true })
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
-  → renderHistogramView(updateWaiting, { split: true })
+  → renderSplitHistogramView(updateWaiting)
       → updateWaiting("Fetching histogram data…")
       → GET /api/histogram?from=X&to=Y&columns=...&binMinutes=N&dayFilter=X
       → histogramLastApiResult = response
@@ -790,9 +793,9 @@ User clicks Refresh from info-view:
 | ---------- | -------- | --------- | --------- | --------- |
 | `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label); sourced from `column_metadata` database table via backend |
 | `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
-| `/api/data` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (single day) |
-| `/api/data-range` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (range) |
-| `/api/histogram` | GET | renderHistogramView() | 30s | Time-binned average data |
+| `/api/data` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (single day) |
+| `/api/data-range` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (range) |
+| `/api/histogram` | GET | fetchHistogramData() (histogram renderers) | 30s | Time-binned average data |
 | `/api/refresh` | POST | renderRefreshView() | 120s | Trigger inverter data sync |
 | `/api/version` | GET | init() | 5s | Backend version string |
 
@@ -1040,7 +1043,7 @@ The display panel is the content area shown inside the respective view container
 
 | Sub-section | Purpose | Rendered By |
 |-------------|---------|-------------|
-| **Summary Cards Bar** (`#summary-cards`) | Row count, metric summary, time range, max/average values | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramView`, `renderHistogramGridView`) |
+| **Summary Cards Bar** (`#summary-cards`) | Per-metric max (or max average) value + timestamp | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramChartView`/`renderSplitHistogramView`, `renderHistogramGridView`) |
 | **Chart / Grid Area** | The primary visualisation — Chart.js chart or AG Grid data table | Renderers |
 
 **Order invariant:** Summary cards are **always** rendered above the chart/grid area. The DOM order never changes.
@@ -1072,11 +1075,12 @@ The display panel is inside the **single scrollable content area** (`#content-ar
 When the viewport is narrow and the title bar wraps into multiple rows, less vertical space remains for the content area. The summary cards **reduce their actual layout dimensions** (padding, font-size, gap) via `calc()` multiplied by `--card-scale`. This is NOT `transform: scale()` which would leave invisible layout gaps that overlap the chart area:
 
 - **Wide viewports (> 1200px):** Cards display at full size. The content area is large enough that cards + chart fit without scrolling.
-- **Medium viewports (800–1200px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`. Cards arrange in **3 columns**.
-- **Small viewports (500–800px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards arrange in **2 columns**.
-- **Very small viewports (< 500px):** Cards reach minimum scale (`--card-scale: 0.6`). Stacked full-width arrangement.
+- **Medium viewports (901–1200px):** Cards display at full size; only header padding tightens.
+- **Narrow viewports (601–900px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`. Cards arrange in **3 columns**.
+- **Small viewports (401–600px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards arrange in **2 columns**.
+- **Very small viewports (≤ 400px):** Cards reach minimum scale (`--card-scale: 0.6`). Auto-fit arrangement (effectively single column at typical widths).
 
-The transition between horizontal and vertical card arrangements is triggered by CSS media queries (at `600px`).
+The column-count and scale transitions are triggered by CSS media queries at `900px`, `600px`, and `400px` (see §15.4).
 
 #### 15.3.2 Single Scroll Pane
 
@@ -1129,10 +1133,11 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
   → waitingView.hide()
   → showPanel(view)                    // show chart/grid/histogram/histogram-grid container
   → show #summary-cards (add .visible class)
-  → render/update cards into #summary-cards
-  → buildUrlParams() → pushState
   → updateButtonLabels(view, split)
+  → update #view-label
+  → buildUrlString() → pushState
   → enableAllControls()
+  → updateNavButtonStates()
 ```
 
 **Key contract for renderers regarding the display panel:**
@@ -1245,3 +1250,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.1 | 2026-07-30 | §8.1, §11 | Column metadata sourced exclusively from backend `/api/columns` which reads from `column_metadata` database table — no hardcoded column structures in frontend; backend reads column data from database populated by deye-logger from DeyeCloud API |
 | 2.2 | 2026-07-30 | §15.2 | Summary cards and grid column labels display units — summary card values show `value unit` (e.g. `1245.6 W`), grid headers show `label (unit)` (e.g. `Grid Power (W)`) when a unit is defined in column metadata; raw data grid and histogram grid both use `extractUnit()` for consistency with chart axis labels |
 | 2.7 | 2026-08-02 | §3.3, §6.2, §7.1, §9.3, §10.3, §10.5 | Fix refresh error recovery — push pre-refresh snapshot to history before `renderRefreshView()` so `history.back()` from error-view restores the previous working state; added §7.1.1 Refresh Failure and §7.1.2 Normal Render Failure flows |
+| 2.7 | 2026-08-20 | §1, §2.2, §3.1, §5, §6.2, §7.3, §7.4, §8.1, §8.2, §8.3, §8.4, §10.1, §10.2, §10.4, §11, §14.3, §14.6, §14.7, §15.1, §15.2, §15.3.1, §15.5 | Corrections to match implemented code (no version bump): init renders immediately with background metadata fetches; summary cards spec (one card per numeric column, recreated per render); panel IDs in §5; `#view-label` documented; stale function/variable names (`getUrlState`, `buildUrlString`, renderer names, `histogramDayFilter`, `contentArea`, `binnedDataRows`); §15.3.1 breakpoints aligned with CSS (900/600/400); step 4c ordering incl. `updateNavButtonStates()`; timeout message wording. See issue #46 |
