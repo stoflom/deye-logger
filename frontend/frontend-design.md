@@ -1051,8 +1051,10 @@ Summary cards are rendered inside the `#summary-cards` container. They display a
 
 | View | Cards Shown |
 |------|-------------|
-| `chart` / `grid` | Row count, time range, metric count, per-metric min/max/average (first few metrics) |
-| `histogram` / `histogram-grid` | Bin count, time range, per-metric max average value + timestamp |
+| `chart` / `grid` | One card per numeric column: `Max {label}` + maximum value (with unit) + timestamp of the max reading |
+| `histogram` / `histogram-grid` | One card per metric: `Max Average {label}` + maximum average value (with unit) + timestamp |
+
+Row/bin counts are shown in the status bar (`#row-count`), not in the summary cards. All numeric columns get a card (no cap).
 
 Cards are arranged **horizontally** (side by side) when sufficient horizontal space is available. When the viewport narrows, cards **switch to a vertical arrangement** (stacked, full-width).
 
@@ -1137,7 +1139,7 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 
 | Rule | Detail |
 | ------ | -------- |
-| **Render cards into existing container** | Cards are rendered into `#summary-cards` which is a direct child of `#content-area` (sibling of all content panels). Cards are **updated** (not recreated from scratch) — existing card elements are reused and their content/visibility adjusted. |
+| **Render cards into existing container** | Cards are rendered into `#summary-cards` which is a direct child of `#content-area` (sibling of all content panels). On each data render the container is **cleared and the card elements are recreated** with the current dataset. |
 | **Cards shown/hidden by setView** | `setView` shows `#summary-cards` (via `.visible` class) before entering chart/grid/histogram views, and hides it before entering waiting/error/info/columns views. |
 | **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto` on `#content-area`). |
 | **No panel visibility toggling** | Renderers draw into their container; `setView` controls which content panel is visible (via `.visible` class). |
