@@ -21,7 +21,7 @@ The application is a single-page app with three vertical regions:
 │  — app title + controls bar              │
 ├──────────────────────────────────────────┤
 │  STATE BAR (always visible, persistent)  │
-│  — row count, version badge, status      │
+│  — row count, view label, version badge  │
 ├──────────────────────────────────────────┤
 │  CONTENT AREA (scrollable, controlled    │
 │  by setView)                             │
@@ -91,6 +91,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Element | ID | Purpose |
 | --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
+| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
 ### 2.3 Button Active State Styling
@@ -115,15 +116,15 @@ These objects define the **page state** and must be pushed to URL history so tha
 
 | Parameter | Values | Source | Used By |
 | ----------- | -------- | -------- | --------- |
-| `view` | `chart`, `grid`, `histogram`, `histogram-grid` | `setView()` | `getStateFromUrl()`, `setView()` |
-| `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getStateFromUrl()` (single day) |
-| `from` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range start) |
-| `to` | ISO date string | Date inputs, nav buttons | `getStateFromUrl()` (range end) |
+| `view` | `chart`, `grid`, `histogram`, `histogram-grid` | `setView()` | `getUrlState()`, `setView()` |
+| `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getUrlState()` (single day) |
+| `from` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range start) |
+| `to` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range end) |
 | `binSize` | `5`, `10`, `15`, `30`, `60` | `#bin-size-select` | `getUrlState()`, histogram fetch |
 | `split` | `1` (presence = true) | Split button | `getUrlState()`, `setView()` |
 | `dayFilter` | `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` | `#day-filter-select` | `getUrlState()`, histogram fetch |
 
-**Serialization rules** (`buildUrlParams()`):
+**Serialization rules** (`buildUrlString()`):
 
 - Single day: `?view=chart&date=2025-07-20`
 - Range: `?view=chart&from=2025-07-18&to=2025-07-20`
@@ -198,8 +199,8 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Error view** | `#error-view` | Render failure — modal with Close button | Yes (`error: true`) |
 | **Info view** | `#info-view` | Data fetch returned zero rows, or general info message | No (transient) |
 | **Columns view** | `#columns-view` | `setView(view, { columns: true })` | No (transient) |
-| **Chart view** | `#chart-view` | `setView("chart")` | Yes |
-| **Grid view** | `#grid-view` | `setView("grid")` | Yes |
+| **Chart view** | `#raw-data-chart-view` | `setView("chart")` | Yes |
+| **Grid view** | `#raw-data-grid-view` | `setView("grid")` | Yes |
 | **Histogram view** | `#histogram-view` | `setView("histogram")` (not split) | Yes |
 | **Histogram grid view** | `#histogram-grid-view` | `setView("histogram-grid")` | Yes |
 | **Split histogram view** | `#split-histogram-view` | `setView("histogram", { split: true })` | Yes (`split=1`) |
@@ -243,7 +244,8 @@ setView(view, opts?)
   │     ├─ opts.columns === true
   │     │     → renderColumnsView(updateWaiting)
   │     │       updateWaiting("Loading column definitions…")
-  │     │       appState.columnMetadata already loaded (in init)
+  │     │       appState.columnMetadata loaded in init (background) —
+  │     │       lazy-fetched from /api/columns here if not yet available
   │     │       render checkboxes into columnsViewPanel
   │     │       return { ok: true }
   │     │
@@ -273,11 +275,12 @@ setView(view, opts?)
   │     │       return { ok: true }
   │     │
   │     ├─ view === "histogram" (split from opts or URL)
-  │     │     → renderHistogramView(updateWaiting, { split: true/false })
+  │     │     → non-split: renderHistogramChartView(updateWaiting)
+  │     │     → split:    renderSplitHistogramView(updateWaiting)
   │     │       updateWaiting("Fetching histogram data…")
-  │     │       GET /api/histogram → histogramLastApiResult
+  │     │       GET /api/histogram → histogramLastApiResult (via fetchHistogramData())
   │     │       updateWaiting("Drawing histogram…")
-  │     │       draw combined + split charts
+  │     │       draw combined chart; split mode also draws individual charts
   │     │       return { ok: true }
   │     │
   │     └─ view === "histogram-grid"
@@ -323,12 +326,13 @@ setView(view, opts?)
   │     │     │
   │     │     → (data present — normal path)
   │     │     → waitingView.hide()
-  │     │     → show summary-cards (add .visible class to #summary-cards)
-  │     │     → hide non-data panels (waiting, error, info, columns)
   │     │     → showPanel(view) — show appropriate data-view
-  │     │     → buildUrlParams() → history.pushState/replaceState
+  │     │     → show summary-cards (add .visible class to #summary-cards)
   │     │     → updateButtonLabels(view, split)
+  │     │     → update view label (#view-label)
+  │     │     → buildUrlString() → history.pushState/replaceState
   │     │     → enableAllControls()
+  │     │     → updateNavButtonStates()
   │     │
   │     └─ catch Error
   │             → waitingView.hide()
@@ -455,14 +459,14 @@ window.addEventListener("popstate", () => {
   }
 
   // Normal restoration from URL — no double-push
-  const urlState = getStateFromUrl();
+  const urlState = getUrlState();
   setView(urlState.view, { replace: true, split: urlState.isSplit });
 });
 ```
 
 ### 7.4 Timeout Handling
 
-All `fetch()` calls use an AbortController with a timeout (e.g., 30 seconds for data queries, 120 seconds for refresh):
+All `fetch()` calls use an AbortController with a timeout (e.g., 30 seconds for data queries, 120 seconds for refresh). The `setView` error path (and the popstate error-restore path) appends a hint to timeout messages: *"This is likely a network timeout. Try clicking the browser's refresh button to retry."*:
 
 ```typescript
 const controller = new AbortController();
@@ -472,7 +476,7 @@ try {
   // ...
 } catch (err) {
   if (err.name === "AbortError") {
-    throw new Error("Request timed out — server did not respond in time");
+    throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
   }
   throw err;
 } finally {
@@ -495,7 +499,7 @@ try {
 | `appState.minAvailableDate` | `string` | Transient (session) | Earliest date with data (from `/api/dates`) |
 | `appState.maxAvailableDate` | `string` | Transient (session) | Latest date with data (from `/api/dates`) |
 | `appState.rawDataRows` | `Row[]` | Transient (render) | Fetched raw inverter data rows (chart/grid views) |
-| `appState.binnedDataRows` | `Row[]` | Transient (render) | Transformed histogram bins as rows (histogram-grid view) |
+| `appState.binnedDataRows` | `Row[]` | Transient (render) | Declared but currently unused (reserved) — histogram-grid rows are built locally in the renderer via `histogramResultToRows()` |
 | `appState.rawDataChartInstance` | `Chart \| null` | Transient (render) | Chart.js instance for the raw data line chart |
 | `appState.rawDataGridApi` | `GridApi \| null` | Transient (render) | AG Grid API for the raw data grid |
 | `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid |
@@ -510,7 +514,7 @@ try {
 | `histogramLastApiResult` | `HistogramResponse \| null` | Transient (cache) | Cached histogram API response for split rendering |
 | `histogramLastColumnNames` | `string[]` | Transient (cache) | Column names used in the last histogram API call |
 | `histogramMaxAverageValues` | `Map \| null` | Transient (render) | Per-metric max average value + timestamp from histogram |
-| `histogramDayFilter` | `string` | URL-stateful (`?dayFilter=X`) | Current day-of-week filter: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
+| — | — | — | The day-of-week filter is **not** stored in module state — `fetchHistogramData()` reads `#day-filter-select` directly at fetch time; the URL parameter `?dayFilter=X` is the stateful source |
 
 ### 8.2.1 DOM References Module (`dom-refs.ts`)
 
@@ -535,7 +539,6 @@ other modules → shared.ts + dom-refs.ts
 
 | Variable | DOM ID | Description |
 | ---------- | -------- | ------------- |
-| `contentArea` | `#content-area` | Single scrollable content container (wraps summary cards + content panels) |
 | `waitingViewPanel` | `#waiting-view` | Waiting overlay container |
 | `waitingViewTextEl` | `#waiting-text` | Waiting message text element |
 | `errorViewPanel` | `#error-view` | Error modal overlay container |
@@ -570,6 +573,7 @@ other modules → shared.ts + dom-refs.ts
 | `binSizeSelect` | `#bin-size-select` | Histogram bin size dropdown |
 | `dayFilterSelect` | `#day-filter-select` | Histogram day-of-week filter dropdown |
 | `rowCountEl` | `#row-count` | Row/metric count display |
+| `viewLabelEl` | `#view-label` | Current view name display |
 | `versionBadgeEl` | `#version-badge` | Version string display |
 
 ---
@@ -678,7 +682,7 @@ setView("chart")
 setView("histogram", { split: true })
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
-  → renderHistogramView(updateWaiting, { split: true })
+  → renderSplitHistogramView(updateWaiting)
       → updateWaiting("Fetching histogram data…")
       → GET /api/histogram?from=X&to=Y&columns=...&binMinutes=N&dayFilter=X
       → histogramLastApiResult = response
@@ -732,7 +736,8 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
   → showPanel("waiting") → waitingView.show()
   → renderColumnsView(updateWaiting)
       → updateWaiting("Loading column definitions…")
-      → appState.columnMetadata already populated (loaded in init)
+      → appState.columnMetadata populated by init (background) —
+        lazy-fetched from /api/columns if still empty
       → render checkboxes into columnsViewPanel
       → return { ok: true }
   → hidePanel("waiting")
@@ -788,9 +793,9 @@ User clicks Refresh from info-view:
 | ---------- | -------- | --------- | --------- | --------- |
 | `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label); sourced from `column_metadata` database table via backend |
 | `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
-| `/api/data` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (single day) |
-| `/api/data-range` | GET | renderChartView(), renderGridView() | 30s | Raw data rows (range) |
-| `/api/histogram` | GET | renderHistogramView() | 30s | Time-binned average data |
+| `/api/data` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (single day) |
+| `/api/data-range` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (range) |
+| `/api/histogram` | GET | fetchHistogramData() (histogram renderers) | 30s | Time-binned average data |
 | `/api/refresh` | POST | renderRefreshView() | 120s | Trigger inverter data sync |
 | `/api/version` | GET | init() | 5s | Backend version string |
 
@@ -897,26 +902,28 @@ On initial page load the browser must show visual feedback **before** any async 
 
 ```
 Page loaded
-  → document ready (DOMContentLoaded or module evaluated)
+  → document ready (module evaluated)
+  → Parse URL parameters → appState (view, dates, binSize, dayFilter, split)
   → Synchronously: show waiting-view with text "Loading…"
   → Title bar is already rendered (in HTML) — always visible
   → Status bar is already rendered (in HTML) — always visible (empty state OK)
-  → Concurrent async fetches:
-    ├─ GET /api/version → versionBadgeEl
-    ├─ GET /api/columns → appState.columnMetadata
-    └─ GET /api/dates → min/max available dates, updateNavButtonStates()
-  → All metadata fetched → call setView(view, { replace: true, split })
+  → Immediately: call setView(view, { replace: true, split })
     → setView's step 2: waiting-view already visible → show() is idempotent
     → Normal render path (fetch data, draw chart/grid, etc.)
     → On success: waiting-view hidden, data view shown
     → On error: waiting-view hidden, error-view shown
+  → Concurrent background fetches (fired, NOT awaited — do not block the initial render):
+    ├─ GET /api/version → versionBadgeEl
+    ├─ GET /api/columns → appState.columnMetadata (lazy re-fetched by the columns view if still empty)
+    └─ GET /api/dates → min/max available dates, updateNavButtonStates()
 ```
 
 **Key properties:**
 
 - The waiting-view is shown **synchronously** (no `await`), before any `fetch()` calls. This ensures the user never sees a blank page.
 - Title bar and status bar are **already in the HTML** and rendered immediately by the browser — no JS needed.
-- `setView()`'s step 2 (`waitingView.show()`) is called again after metadata loads. This call is **idempotent** — if the waiting-view is already visible, showing it again is a no-op.
+- The initial `setView()` is called **immediately** — it does not wait for metadata. The three metadata fetches run in the background in parallel with the initial render.
+- `setView()`'s step 2 (`waitingView.show()`) is called again after URL parameters are parsed. This call is **idempotent** — if the waiting-view is already visible, showing it again is a no-op.
 - The waiting-view text during `init()` is the default "Loading…". During `setView()` rendering, it transitions to "Fetching data…", "Drawing chart…", etc.
 
 **Error handling during init:**
@@ -930,10 +937,10 @@ Page loaded
 | ------- | -------- | --------------- | -------- |
 | 1 | Parse URL parameters | No | Sync |
 | 2 | Show waiting-view ("Loading…") | **Yes** | Sync |
-| 3a | Load `/api/version` | Yes (still) | Async |
-| 3b | Load `/api/columns` | Yes (still) | Async |
-| 3c | Load `/api/dates` | Yes (still) | Async |
-| 4 | Call `setView(view, opts)` | Yes (idempotent show) | Async |
+| 3 | Call `setView(view, opts)` — initial render starts immediately | Yes (idempotent show) | Async |
+| 4a | Load `/api/version` (background, non-blocking, in parallel with render) | — | Async |
+| 4b | Load `/api/columns` (background, non-blocking, in parallel with render) | — | Async |
+| 4c | Load `/api/dates` (background, non-blocking, in parallel with render) | — | Async |
 | 5a | Fetch data + render | Yes (updates text) | Async |
 | 5b | Success → hide waiting, show data | No | Async |
 | 5c | Error → hide waiting, show error | No | Async |
@@ -969,8 +976,8 @@ When `init()` (see §14.3) finishes loading metadata and calls `setView()`, the 
 init() (§14.3)
   → parse URL parameters
   → show waiting-view ("Loading…")    ← §14.3 step 2
-  → load /api/version, /api/columns, /api/dates  ← §14.3 step 3
-  → call setView(view, { replace: true, split })  ← §14.3 step 4
+  → call setView(view, { replace: true, split })  ← §14.3 step 3 (immediately)
+  → load /api/version, /api/columns, /api/dates in background  ← §14.3 step 4 (non-blocking)
       → setView step 2: waiting-view.show() (idempotent)
       → fetch data → 0 rows
       → infoView.show(noDataMessage)
@@ -991,14 +998,16 @@ The URL is **not** changed or pushed. The user sees the info message and can:
 init() (§14.3)
   → parse URL parameters
   → show waiting-view ("Loading…")    ← §14.3 step 2
-  → load /api/version → versionBadgeEl
-  → load /api/columns → appState.columnMetadata (ensures columnMetadata available for all UI operations)
-  → load /api/dates → min/max available dates, updateNavButtonStates()
-  → call setView(urlState.view, { replace: true, split: urlState.isSplit })  ← §14.3 step 4
+  → call setView(urlState.view, { replace: true, split: urlState.isSplit })  ← §14.3 step 3 (immediately)
       → Normal render flow (see setView() lifecycle in §10.1–10.3)
       → waiting-view.text updates: "Fetching data…" → "Drawing chart…"
       → Data renders using appState.selectedColumnNames (from localStorage)
-      → Columns panel will have metadata available if user clicks Select
+  → background metadata fetches (non-blocking, in parallel with the render):
+    ├─ /api/version → versionBadgeEl
+    ├─ /api/columns → appState.columnMetadata
+    └─ /api/dates → min/max available dates, updateNavButtonStates()
+      → If column metadata is still not loaded when the user opens the columns panel,
+        renderColumnsView() fetches it lazily
 ```
 
 ---
@@ -1034,7 +1043,7 @@ The display panel is the content area shown inside the respective view container
 
 | Sub-section | Purpose | Rendered By |
 |-------------|---------|-------------|
-| **Summary Cards Bar** (`#summary-cards`) | Row count, metric summary, time range, max/average values | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramView`, `renderHistogramGridView`) |
+| **Summary Cards Bar** (`#summary-cards`) | Per-metric max (or max average) value + timestamp | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramChartView`/`renderSplitHistogramView`, `renderHistogramGridView`) |
 | **Chart / Grid Area** | The primary visualisation — Chart.js chart or AG Grid data table | Renderers |
 
 **Order invariant:** Summary cards are **always** rendered above the chart/grid area. The DOM order never changes.
@@ -1045,8 +1054,10 @@ Summary cards are rendered inside the `#summary-cards` container. They display a
 
 | View | Cards Shown |
 |------|-------------|
-| `chart` / `grid` | Row count, time range, metric count, per-metric min/max/average (first few metrics) |
-| `histogram` / `histogram-grid` | Bin count, time range, per-metric max average value + timestamp |
+| `chart` / `grid` | One card per numeric column: `Max {label}` + maximum value (with unit) + timestamp of the max reading |
+| `histogram` / `histogram-grid` | One card per metric: `Max Average {label}` + maximum average value (with unit) + timestamp |
+
+Row/bin counts are shown in the status bar (`#row-count`), not in the summary cards. All numeric columns get a card (no cap).
 
 Cards are arranged **horizontally** (side by side) when sufficient horizontal space is available. When the viewport narrows, cards **switch to a vertical arrangement** (stacked, full-width).
 
@@ -1064,11 +1075,12 @@ The display panel is inside the **single scrollable content area** (`#content-ar
 When the viewport is narrow and the title bar wraps into multiple rows, less vertical space remains for the content area. The summary cards **reduce their actual layout dimensions** (padding, font-size, gap) via `calc()` multiplied by `--card-scale`. This is NOT `transform: scale()` which would leave invisible layout gaps that overlap the chart area:
 
 - **Wide viewports (> 1200px):** Cards display at full size. The content area is large enough that cards + chart fit without scrolling.
-- **Medium viewports (800–1200px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`. Cards arrange in **3 columns**.
-- **Small viewports (500–800px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards arrange in **2 columns**.
-- **Very small viewports (< 500px):** Cards reach minimum scale (`--card-scale: 0.6`). Stacked full-width arrangement.
+- **Medium viewports (901–1200px):** Cards display at full size; only header padding tightens.
+- **Narrow viewports (601–900px):** Cards shrink proportionally — reduced padding, smaller font sizes, tighter spacing. `--card-scale: 0.85`. Cards arrange in **3 columns**.
+- **Small viewports (401–600px):** Cards reach a further reduced scale (`--card-scale: 0.7`). Cards arrange in **2 columns**.
+- **Very small viewports (≤ 400px):** Cards reach minimum scale (`--card-scale: 0.6`). Auto-fit arrangement (effectively single column at typical widths).
 
-The transition between horizontal and vertical card arrangements is triggered by CSS media queries (at `600px`).
+The column-count and scale transitions are triggered by CSS media queries at `900px`, `600px`, and `400px` (see §15.4).
 
 #### 15.3.2 Single Scroll Pane
 
@@ -1121,17 +1133,18 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
   → waitingView.hide()
   → showPanel(view)                    // show chart/grid/histogram/histogram-grid container
   → show #summary-cards (add .visible class)
-  → render/update cards into #summary-cards
-  → buildUrlParams() → pushState
   → updateButtonLabels(view, split)
+  → update #view-label
+  → buildUrlString() → pushState
   → enableAllControls()
+  → updateNavButtonStates()
 ```
 
 **Key contract for renderers regarding the display panel:**
 
 | Rule | Detail |
 | ------ | -------- |
-| **Render cards into existing container** | Cards are rendered into `#summary-cards` which is a direct child of `#content-area` (sibling of all content panels). Cards are **updated** (not recreated from scratch) — existing card elements are reused and their content/visibility adjusted. |
+| **Render cards into existing container** | Cards are rendered into `#summary-cards` which is a direct child of `#content-area` (sibling of all content panels). On each data render the container is **cleared and the card elements are recreated** with the current dataset. |
 | **Cards shown/hidden by setView** | `setView` shows `#summary-cards` (via `.visible` class) before entering chart/grid/histogram views, and hides it before entering waiting/error/info/columns views. |
 | **No manual scroll control** | Renderers must **not** manipulate scroll position. Scroll behavior is purely CSS-driven (`overflow-y: auto` on `#content-area`). |
 | **No panel visibility toggling** | Renderers draw into their container; `setView` controls which content panel is visible (via `.visible` class). |
@@ -1180,60 +1193,3 @@ Both the raw data grid and histogram grid display units in column header labels.
 | Histogram grid | `label (unit)` | `Grid Power (W)`, `Battery SOC (%)` |
 
 If no unit is defined in the metadata, the label is shown without parentheses (e.g. `Time`). The `device_timestamp` column is always labeled "Time" without a unit.
-
----
-
-## 16. Issues to Consider
-
-### 16.1 cleanupSplitMode() DOM Manipulation
-
-**Current behavior:** `cleanupSplitMode()` calls `splitHistogramView.classList.remove("visible")` inside `histogram-chart.ts`.
-
-**Design conflict:** §6.3 says "No DOM panel toggling — Renderers only draw into their target containers; setView controls panel visibility."
-
-**Risk:** `cleanupSplitMode()` is called from inside `setView` before the render path. `setView` already calls `hideAllDataPanels()` in step 2, which hides `splitHistogramView`. So the class removal in `cleanupSplitMode()` is redundant — it operates on an already-hidden panel. **No functional change needed.** The class removal is a no-op that could be safely removed, but doing so risks breaking if the call order in `setView` ever changes.
-
-**Recommendation:** Keep current behavior. The redundant class removal is harmless and acts as defensive cleanup. If future work removes the call from `setView`, `cleanupSplitMode()` already handles visibility correctly.
-
-### 16.2 Chart.js Instance Destruction Timing
-
-**Current behavior:** `cleanupSplitMode()` destroys Chart.js instances (`histogramSplitChartInstances`) before `setView` hides the panel in step 2.
-
-**Design conflict:** §6.3 says renderers should not manipulate DOM visibility. `cleanupSplitMode()` destroys canvas-backed charts that may still be visible.
-
-**Risk:** Destroying Chart.js instances while the canvas is still rendered could cause a brief visual flicker (blank canvas) before `setView` hides the panel in step 2.
-
-**Mitigation:** `setView` step 2 calls `waitingView.show()` which overlays the canvas. The waiting-view has `position: fixed` and `z-index: 1000`, so it visually covers the canvas before `cleanupSplitMode()` runs in step 3. **No flicker observed.**
-
-**Recommendation:** Keep current behavior. The waiting-view overlay prevents visible flicker. If future work changes the z-index or timing, consider deferring chart destruction to after `hideAllDataPanels()`.
-
-### 16.3 updateNavButtonStates() in renderRefreshView
-
-**Current behavior:** `renderRefreshView()` calls `updateNavButtonStates()` after fetching new date bounds, before the recursive `setView` call.
-
-**Design conflict:** §6.3 says "No button enable/disable — setView controls button state exclusively."
-
-**Risk:** `updateNavButtonStates()` sets `prevDayBtn.disabled` and `nextDayBtn.disabled`. This is a button-state mutation inside a renderer.
-
-**Mitigation:** The recursive `setView` call re-enables all controls in step 4c, which includes calling `updateNavButtonStates()`. So the call in `renderRefreshView` is redundant. **Removing it is safe** as long as `setView` always calls `updateNavButtonStates()` in step 4c.
-
-**Recommendation:** Currently removed from `renderRefreshView` in favor of `setView` handling it. Monitor for any edge cases where date bounds update but `setView` doesn't run (e.g., error path after successful refresh).
-
----
-
-## 17. Change Management
-
-This section tracks changes to the design document itself. Every modification to this document must be recorded below.
-
-| Version | Date | Section Changed | Description |
-| --------- | ------ | ---------------- | ------------- |
-| 1.5 | 2025-07-28 | §1, §2, §3, §6, §8, §9, §10, §15 | Initial — full SPA architecture, URL state, setView lifecycle, responsive layout |
-| 1.6 | 2025-07-28 | §4, §11 | Moved histogram display concerns (color, axis assignment, yAxisID, position) from backend to frontend — backend only serves data + unit; frontend computes display fields locally |
-| 1.7 | 2025-07-28 | §15.3.1, §15.4, style.css | Summary cards use 3 columns at 800–1200px and 2 columns at 500–800px instead of 2 columns and stacked layout — prevents cards from growing to 100% horizontal width on small displays |
-| 1.8 | 2025-07-28 | §14.3, §14.6, §14.7 | Init procedure: show waiting-view synchronously before metadata fetches (title bar, status bar, and waiting-view all visible immediately), then recursively call setView() after metadata loaded — eliminates blank-page period during init |
-| 1.9 | 2026-07-29 | §9.3, §15.4 | Fix viewport breakpoints in 15.4 (actual CSS: 900px/600px/400px) and button emoji in 9.3 (use 📋 for Data Grid/Raw Chart/Raw Grid); remove non-existent Refresh `⟳ Fetching…` alternate text |
-| 1.10 | 2026-07-29 | §15.6, §8.3 | Correct §15.6 — no inner scroll on `#split-histogram-scroll`; entire content area including summary cards scrolls together via `#content-area` |
-| 2.0 | 2025-07-30 | §2.1, §3.1, §3.3, §6.4, §8.2, §8.4, §9.3, §10.2, §17 | Day-of-week filter for histogram — new `dayFilter` URL parameter, `#day-filter-select` dropdown in title bar (visible in histogram modes), `histogramDayFilter` module variable, backend passes `dayFilter` to `/api/histogram`. Version bumped to 2.0. |
-| 2.1 | 2026-07-30 | §8.1, §11 | Column metadata sourced exclusively from backend `/api/columns` which reads from `column_metadata` database table — no hardcoded column structures in frontend; backend reads column data from database populated by deye-logger from DeyeCloud API |
-| 2.2 | 2026-07-30 | §15.2 | Summary cards and grid column labels display units — summary card values show `value unit` (e.g. `1245.6 W`), grid headers show `label (unit)` (e.g. `Grid Power (W)`) when a unit is defined in column metadata; raw data grid and histogram grid both use `extractUnit()` for consistency with chart axis labels |
-| 2.7 | 2026-08-02 | §3.3, §6.2, §7.1, §9.3, §10.3, §10.5 | Fix refresh error recovery — push pre-refresh snapshot to history before `renderRefreshView()` so `history.back()` from error-view restores the previous working state; added §7.1.1 Refresh Failure and §7.1.2 Normal Render Failure flows |
