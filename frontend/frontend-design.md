@@ -243,7 +243,8 @@ setView(view, opts?)
   │     ├─ opts.columns === true
   │     │     → renderColumnsView(updateWaiting)
   │     │       updateWaiting("Loading column definitions…")
-  │     │       appState.columnMetadata already loaded (in init)
+  │     │       appState.columnMetadata loaded in init (background) —
+  │     │       lazy-fetched from /api/columns here if not yet available
   │     │       render checkboxes into columnsViewPanel
   │     │       return { ok: true }
   │     │
@@ -732,7 +733,8 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
   → showPanel("waiting") → waitingView.show()
   → renderColumnsView(updateWaiting)
       → updateWaiting("Loading column definitions…")
-      → appState.columnMetadata already populated (loaded in init)
+      → appState.columnMetadata populated by init (background) —
+        lazy-fetched from /api/columns if still empty
       → render checkboxes into columnsViewPanel
       → return { ok: true }
   → hidePanel("waiting")
@@ -897,26 +899,28 @@ On initial page load the browser must show visual feedback **before** any async 
 
 ```
 Page loaded
-  → document ready (DOMContentLoaded or module evaluated)
+  → document ready (module evaluated)
+  → Parse URL parameters → appState (view, dates, binSize, dayFilter, split)
   → Synchronously: show waiting-view with text "Loading…"
   → Title bar is already rendered (in HTML) — always visible
   → Status bar is already rendered (in HTML) — always visible (empty state OK)
-  → Concurrent async fetches:
-    ├─ GET /api/version → versionBadgeEl
-    ├─ GET /api/columns → appState.columnMetadata
-    └─ GET /api/dates → min/max available dates, updateNavButtonStates()
-  → All metadata fetched → call setView(view, { replace: true, split })
+  → Immediately: call setView(view, { replace: true, split })
     → setView's step 2: waiting-view already visible → show() is idempotent
     → Normal render path (fetch data, draw chart/grid, etc.)
     → On success: waiting-view hidden, data view shown
     → On error: waiting-view hidden, error-view shown
+  → Concurrent background fetches (fired, NOT awaited — do not block the initial render):
+    ├─ GET /api/version → versionBadgeEl
+    ├─ GET /api/columns → appState.columnMetadata (lazy re-fetched by the columns view if still empty)
+    └─ GET /api/dates → min/max available dates, updateNavButtonStates()
 ```
 
 **Key properties:**
 
 - The waiting-view is shown **synchronously** (no `await`), before any `fetch()` calls. This ensures the user never sees a blank page.
 - Title bar and status bar are **already in the HTML** and rendered immediately by the browser — no JS needed.
-- `setView()`'s step 2 (`waitingView.show()`) is called again after metadata loads. This call is **idempotent** — if the waiting-view is already visible, showing it again is a no-op.
+- The initial `setView()` is called **immediately** — it does not wait for metadata. The three metadata fetches run in the background in parallel with the initial render.
+- `setView()`'s step 2 (`waitingView.show()`) is called again after URL parameters are parsed. This call is **idempotent** — if the waiting-view is already visible, showing it again is a no-op.
 - The waiting-view text during `init()` is the default "Loading…". During `setView()` rendering, it transitions to "Fetching data…", "Drawing chart…", etc.
 
 **Error handling during init:**
@@ -930,10 +934,10 @@ Page loaded
 | ------- | -------- | --------------- | -------- |
 | 1 | Parse URL parameters | No | Sync |
 | 2 | Show waiting-view ("Loading…") | **Yes** | Sync |
-| 3a | Load `/api/version` | Yes (still) | Async |
-| 3b | Load `/api/columns` | Yes (still) | Async |
-| 3c | Load `/api/dates` | Yes (still) | Async |
-| 4 | Call `setView(view, opts)` | Yes (idempotent show) | Async |
+| 3 | Call `setView(view, opts)` — initial render starts immediately | Yes (idempotent show) | Async |
+| 4a | Load `/api/version` (background, non-blocking, in parallel with render) | — | Async |
+| 4b | Load `/api/columns` (background, non-blocking, in parallel with render) | — | Async |
+| 4c | Load `/api/dates` (background, non-blocking, in parallel with render) | — | Async |
 | 5a | Fetch data + render | Yes (updates text) | Async |
 | 5b | Success → hide waiting, show data | No | Async |
 | 5c | Error → hide waiting, show error | No | Async |
@@ -969,8 +973,8 @@ When `init()` (see §14.3) finishes loading metadata and calls `setView()`, the 
 init() (§14.3)
   → parse URL parameters
   → show waiting-view ("Loading…")    ← §14.3 step 2
-  → load /api/version, /api/columns, /api/dates  ← §14.3 step 3
-  → call setView(view, { replace: true, split })  ← §14.3 step 4
+  → call setView(view, { replace: true, split })  ← §14.3 step 3 (immediately)
+  → load /api/version, /api/columns, /api/dates in background  ← §14.3 step 4 (non-blocking)
       → setView step 2: waiting-view.show() (idempotent)
       → fetch data → 0 rows
       → infoView.show(noDataMessage)
@@ -991,14 +995,16 @@ The URL is **not** changed or pushed. The user sees the info message and can:
 init() (§14.3)
   → parse URL parameters
   → show waiting-view ("Loading…")    ← §14.3 step 2
-  → load /api/version → versionBadgeEl
-  → load /api/columns → appState.columnMetadata (ensures columnMetadata available for all UI operations)
-  → load /api/dates → min/max available dates, updateNavButtonStates()
-  → call setView(urlState.view, { replace: true, split: urlState.isSplit })  ← §14.3 step 4
+  → call setView(urlState.view, { replace: true, split: urlState.isSplit })  ← §14.3 step 3 (immediately)
       → Normal render flow (see setView() lifecycle in §10.1–10.3)
       → waiting-view.text updates: "Fetching data…" → "Drawing chart…"
       → Data renders using appState.selectedColumnNames (from localStorage)
-      → Columns panel will have metadata available if user clicks Select
+  → background metadata fetches (non-blocking, in parallel with the render):
+    ├─ /api/version → versionBadgeEl
+    ├─ /api/columns → appState.columnMetadata
+    └─ /api/dates → min/max available dates, updateNavButtonStates()
+      → If column metadata is still not loaded when the user opens the columns panel,
+        renderColumnsView() fetches it lazily
 ```
 
 ---
