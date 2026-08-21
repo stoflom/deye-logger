@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.7.0";
+export const FRONTEND_VERSION = "2.8.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -67,7 +67,7 @@ import { wireDateNavigation } from "./navigation";
 interface SetViewOptions {
   replace?: boolean;   // use replaceState instead of pushState (default: false)
   refresh?: boolean;   // transient — trigger backend refresh before rendering
-  columns?: boolean;   // transient — show columns selection panel
+  columns?: boolean;   // show columns selection panel (pushes history entry with columns marker)
   split?: boolean;     // URL-param — split histogram mode
 }
 
@@ -283,7 +283,8 @@ async function setView(
   try {
     // STEP 3: Determine render path from flags + state
     if (showColumns) {
-      // --- Columns view (transient — no history push) ---
+      // --- Columns view (stateful — pushes history entry so browser back
+      //     returns to the previous data view instead of leaving the app) ---
       await renderColumnsView((text) => waitingView.setText(text));
 
       // STEP 4a: Columns success
@@ -294,6 +295,12 @@ async function setView(
       columnsToggleBtn.classList.add("active");
       // Only columns toggle ("↻ Load Data") is enabled in columns view
       enableOnlyControls(["columnsToggle"]);
+
+      // Push columns entry — URL unchanged (panel is not bookmarkable),
+      // payload carries the columns marker for fast popstate restoration.
+      const columnsUrl = window.location.pathname + window.location.search;
+      const columnsHistoryMethod = replace ? history.replaceState : history.pushState;
+      columnsHistoryMethod.call(history, { view, isSplit: false, columns: true }, "", columnsUrl);
       return;
     }
 
@@ -541,7 +548,13 @@ errorViewCloseBtn.addEventListener("click", () => {
 // Handle browser back/forward
 // ------------------------------------------------------------------
 window.addEventListener("popstate", () => {
-  const historyState = history.state as { error?: boolean; errorMessage?: string; view?: string } | null;
+  const historyState = history.state as { error?: boolean; errorMessage?: string; view?: string; columns?: boolean } | null;
+
+  if (historyState?.columns) {
+    // Restore columns panel from history state — no data fetch
+    setView((historyState.view as ViewMode) ?? appState.activeView, { columns: true, replace: true });
+    return;
+  }
 
   if (historyState?.error) {
     // Restore error-view from history state
