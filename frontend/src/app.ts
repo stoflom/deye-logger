@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.8.0";
+export const FRONTEND_VERSION = "2.8.1";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -303,6 +303,13 @@ async function setView(
       columnsHistoryMethod.call(history, { view, isSplit: false, columns: true }, "", columnsUrl);
       return;
     }
+
+    // Reset columns toggle button — it may still show "↻ Load Data" (active)
+    // if the columns panel was closed via browser back (popstate restores the
+    // data view directly, bypassing the columnsToggleBtn click handler). #48
+    columnsToggleBtn.textContent = "\u2630 Select";
+    columnsToggleBtn.title = "Select columns to display";
+    columnsToggleBtn.classList.remove("active");
 
     if (doRefresh) {
       // --- Refresh view ---
