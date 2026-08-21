@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.7
+> **Status:** v2.8
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -142,12 +142,13 @@ These objects define the **page state** and must be pushed to URL history so tha
 | `isSplit` | boolean | Whether histogram is in split mode (redundant with URL but available for fast popstate) |
 | `error` | boolean | Whether this is an error-state entry |
 | `errorMessage` | string | Error message to restore if `error=true` |
+| `columns` | boolean | Whether this entry shows the columns selection panel (URL unchanged — panel is not bookmarkable) |
 
 The history state payload supplements the URL — the URL is the authoritative source (bookmarkable), the payload is for fast popstate restoration.
 
 ### 3.3 State Push Points
 
-**URL is pushed only on successful render completion.** Errors also push (with `error=true` marker). Transient views (columns panel, refresh-in-progress) do **not** push history.
+**URL is pushed only on successful render completion.** Errors also push (with `error=true` marker). Transient views (info panel, refresh-in-progress) do **not** push history. Opening the columns panel **does** push a history entry: the current URL is kept unchanged, but the payload carries a `columns: true` marker so browser back/forward can restore the panel (v2.8 — fixes #47).
 
 ```
 Event → setView(view, opts) → renderAsync() → success → pushState → show data-view
@@ -164,10 +165,11 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | Split/Combine toggle | Yes (on success) | `split=1` in URL |
 | `popstate` (browser back/forward) | No (`replace`) | Restores view without double-push |
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
+| `popstate` → columns state | No (`replace`) | Detects `{ columns: true }` marker — re-shows columns panel |
 | Initial load | Yes (on success) | Sets initial history entry |
 | Refresh success | Yes (on success) | Re-renders current view (dates unchanged) |
 | Refresh failure | — | History pushed *before* refresh so `history.back()` restores pre-refresh state |
-| Open columns panel | **No** | Transient view |
+| Open columns panel | **Yes** | Same URL, payload `{ columns: true }` — browser back returns to previous data view |
 | Close columns panel | Yes (on success) | Full data re-fetch with new columns |
 | Any render failure | Yes (with `error` marker) | Shows error-view |
 
@@ -198,7 +200,7 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Waiting view** | `#waiting-view` | `setView()` step 2 — always shown first | No |
 | **Error view** | `#error-view` | Render failure — modal with Close button | Yes (`error: true`) |
 | **Info view** | `#info-view` | Data fetch returned zero rows, or general info message | No (transient) |
-| **Columns view** | `#columns-view` | `setView(view, { columns: true })` | No (transient) |
+| **Columns view** | `#columns-view` | `setView(view, { columns: true })` | Yes (`columns: true` marker, URL unchanged) |
 | **Chart view** | `#raw-data-chart-view` | `setView("chart")` | Yes |
 | **Grid view** | `#raw-data-grid-view` | `setView("grid")` | Yes |
 | **Histogram view** | `#histogram-view` | `setView("histogram")` (not split) | Yes |
@@ -217,7 +219,7 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 interface SetViewOptions {
   replace?: boolean;      // use replaceState instead of pushState (default: false)
   refresh?: boolean;      // transient — trigger backend refresh before rendering
-  columns?: boolean;      // transient — show columns selection panel
+  columns?: boolean;      // show columns selection panel (pushes history entry with columns marker)
   split?: boolean;        // URL-param — split histogram mode
 }
 
@@ -297,7 +299,8 @@ setView(view, opts?)
   │     │     → waitingView.hide()
   │     │     → showPanel("columns")
   │     │     → enableOnlyControls(["columnsToggle"])
-  │     │     → NO history push (transient)
+  │     │     → pushState({ view, isSplit: false, columns: true }) with current URL unchanged
+  │     │       (replaceState when called with replace: true, e.g. from popstate)
   │     │
   │     ├─ { ok: true } AND opts.refresh === true
   │     │     → refresh succeeded — fall through to normal render (no recursive call)
@@ -384,11 +387,12 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | Date nav buttons/pickers | Date change | — | `setView(appState.activeView)` — re-render with new dates |
 | `popstate` | Browser back/forward | `{ replace: true, split: urlState.isSplit }` | Restores from URL state |
 | `popstate` → error | Error state detected | — | Shows error-view directly (no render) |
+| `popstate` → columns | `{ columns: true }` marker detected | `{ columns: true, replace: true }` | Re-shows columns panel (no data fetch) |
 | `binSizeSelect` change | Bin size dropdown | `split` from URL | Re-renders current histogram view |
 | `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram view |
 | `splitBtn` click | Split/combine toggle | `{ split: !histogramIsSplitMode }` | Toggles split mode |
 | `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
-| `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Transient — no history push |
+| `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Pushes history entry with `columns: true` marker (URL unchanged) |
 | `columnsToggleBtn` click (close) | Close columns panel | — | `setView(appState.activeView)` — full re-fetch |
 | `errorViewCloseBtn` click | Dismiss error | — | `history.back()` — popstate recreates previous |
 | `exportCsvBtn` click | CSV export | — | Stateless — `gridApi.exportDataAsCsv()` |
@@ -446,7 +450,13 @@ setView("chart")
 
 ```typescript
 window.addEventListener("popstate", () => {
-  const historyState = history.state as { error?: boolean; errorMessage?: string } | null;
+  const historyState = history.state as { error?: boolean; errorMessage?: string; columns?: boolean; view?: string } | null;
+
+  if (historyState?.columns) {
+    // Restore columns panel from history state — no data fetch
+    setView(historyState.view ?? appState.activeView, { columns: true, replace: true });
+    return;
+  }
 
   if (historyState?.error) {
     // Restore error-view from history state
@@ -611,7 +621,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Next Day | `nextDayBtn` | `›` | Always | Action (shift +1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.maxAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Today | `todayBtn` | `Today` | Always | Action (set to today) | — | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`) |
 | Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })`; pushes pre-refresh snapshot to history for error recovery | URL-stateful (pre-refresh snapshot) |
-| Columns Toggle | `columnsToggleBtn` | `☰ Select` (closed) / `↻ Load Data` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (transient) | Stateless (columns persist to localStorage) |
+| Columns Toggle | `columnsToggleBtn` | `☰ Select` (closed) / `↻ Load Data` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (opening pushes history entry) | Stateless (columns persist to localStorage) |
 | View Toggle | `viewToggleBtn` | See labels below | Always | Toggle (within mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Histogram Toggle | `histogramToggleBtn` | See labels below | Always | Toggle (normal↔histogram mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | CSV Export | `exportCsvBtn` | `⬇ CSV` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
@@ -743,7 +753,10 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
   → hidePanel("waiting")
   → showPanel("columns")
   → enableOnlyControls(["columnsToggle"])
-  → NO history push (transient)
+  → pushState({ view, isSplit: false, columns: true }) with current URL unchanged
+
+Browser back from columns panel → pops columns entry → popstate on previous data-view entry
+  → setView(previous view, { replace: true }) — restores data view (fixes #47)
 
 User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView)
   → disableAllControls()
