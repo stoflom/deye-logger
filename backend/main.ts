@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "3.0.0";
+const BACKEND_VERSION = "3.1.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -379,6 +379,18 @@ function parseCutoffParam(raw: string | undefined, table: Record<number, number>
 
 interface StatSample { ms: number; day: string; v: number; ts: string }
 
+// Direct data percentile with linear interpolation (type-7, NumPy default).
+// `sorted` must be ascending; `p` in percent (0–100).
+function percentileType7(sorted: number[], p: number): number {
+  const n = sorted.length;
+  if (n === 0) return 0;
+  if (n === 1) return sorted[0];
+  const r = (n - 1) * (p / 100);
+  const lo = Math.floor(r);
+  const hi = Math.min(lo + 1, n - 1);
+  return sorted[lo] + (r - lo) * (sorted[hi] - sorted[lo]);
+}
+
 // Average per-day duration (minutes) where test(v) is true.
 // An interval between two consecutive samples counts only when BOTH samples
 // qualify. Intervals crossing midnight are split and attributed to the start
@@ -494,8 +506,13 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
       for (const s of samples) sq += (s.v - mean) ** 2;
       const stdDev = n > 1 ? Math.sqrt(sq / n) : 0;
 
-      const highThreshold = mean + HIGH_CUTOFF_Z[highCutoff] * stdDev;
-      const lowThreshold = mean - LOW_CUTOFF_Z[lowCutoff] * stdDev;
+      // Percentage-unit columns (e.g. SOC) use the direct data percentile as
+      // threshold — mean ± z·σ can leave the 0–100% bounds (design §2.7).
+      const isPct = (m.unit ?? "") === "%";
+      const sorted = samples.map((s) => s.v).sort((a, b) => a - b);
+      const highThreshold = isPct ? percentileType7(sorted, highCutoff) : mean + HIGH_CUTOFF_Z[highCutoff] * stdDev;
+      const lowThreshold = isPct ? percentileType7(sorted, lowCutoff) : mean - LOW_CUTOFF_Z[lowCutoff] * stdDev;
+      const method = isPct ? "percentile" : "mean-sigma";
 
       stats.push({
         column: col,
@@ -506,8 +523,8 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
         stdDev,
         max: { value: max, timestamp: maxTs },
         min: { value: min, timestamp: minTs },
-        high: { cutoff: highCutoff, threshold: highThreshold, avgDailyMinutes: avgDailyMinutes(samples, (v) => v > highThreshold) },
-        low: { cutoff: lowCutoff, threshold: lowThreshold, avgDailyMinutes: avgDailyMinutes(samples, (v) => v < lowThreshold) },
+        high: { cutoff: highCutoff, threshold: highThreshold, avgDailyMinutes: avgDailyMinutes(samples, (v) => v > highThreshold), method },
+        low: { cutoff: lowCutoff, threshold: lowThreshold, avgDailyMinutes: avgDailyMinutes(samples, (v) => v < lowThreshold), method },
       });
     }
 

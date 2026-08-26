@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v3.1
+> **Status:** v3.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -1366,8 +1366,10 @@ Every card and every stat row carries a **tooltip explaining its content** (cust
 | Mean row | `Arithmetic mean of all N samples in the selected date range.` |
 | Max row | `Maximum value observed; shown with the date-time of its first occurrence.` |
 | Min row | `Minimum value observed; shown with the date-time of its first occurrence.` |
-| High row | `Average time per day the value was above the high threshold (mean + z·σ). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no high readings count as 0.` |
-| Low row | `Average time per day the value was below the low threshold (mean − z·σ). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no low readings count as 0.` |
+| High row | `Average time per day the value was above the high threshold ({method}). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no high readings count as 0.` |
+| Low row | `Average time per day the value was below the low threshold ({method}). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no low readings count as 0.` |
+
+`{method}` echoes the response `high.method` / `low.method` (backend design §2.7): `mean + z·σ` for ordinary units, `the direct {cutoff}th percentile of the data (percentage-unit column)` when `method === "percentile"` (e.g. SOC — `mean + z·σ` can leave the 0–100% bounds).
 
 Placeholders are filled from the response data and current date range at render time. Tooltips must also be keyboard-accessible (rows are focusable, `:focus-visible` shows the same tooltip as hover).
 
@@ -1404,3 +1406,4 @@ This section tracks changes to the design document itself. Every modification to
 |---------|------|----------------|-------------|
 | 3.0 | 2026-08-26 | §1–§16, new | New Stats view — per-column stat cards (mean, max/min + first occurrence, high/low average daily durations) computed by new backend `GET /api/stats`; new `#stats-btn`, `#high-cutoff-select`, `#low-cutoff-select` controls; day filter now shared with stats view; status bar always shows selected-range day count (`#range-days`); CSS tooltips on all stat cards; new `stats` view mode in setView/URL state |
 | 3.1 | 2026-08-26 | §16.1, §16.5 | Stat cards get a per-measurement accent color (`--stat-accent`: 3px top border + header text) using a shared `CHART_PALETTE` moved to `shared.ts` so stats and chart colors match; cutoff abbreviation in card sub-lines changes from `(95th pct)` to `(95%)` (#55) |
+| 3.2 | 2026-08-26 | §16.2 | High/low row tooltips echo the response `method` field: percentage-unit columns (e.g. SOC) use the direct data percentile as threshold instead of `mean ± z·σ` (backend design v3.1, #56) |
