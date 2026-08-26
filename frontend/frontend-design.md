@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v3.0
+> **Status:** v3.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -44,7 +44,7 @@ The application is a single-page app with three vertical regions:
 | File | Responsibility |
 | ------ | ---------------- |
 | `dom-refs.ts` | DOM element references (isolated to break circular dependencies) |
-| `shared.ts` | Global state object, URL parsing, utility helpers, re-exports DOM refs |
+| `shared.ts` | Global state object, URL parsing, utility helpers, shared chart palette (`CHART_PALETTE`), re-exports DOM refs |
 | `app.ts` | Entry point, `setView()`, button handlers, init, popstate |
 | `chart.ts` | Chart.js line chart rendering, summary cards |
 | `data-grid.ts` | AG Grid rendering (raw data + histogram grid) |
@@ -1345,14 +1345,16 @@ Each card (one per entry in the `/api/stats` response `stats` array, in request 
 | **Mean** | `mean` + unit | `Average 123.4 W` |
 | **Max** | `max.value` + unit, with `max.timestamp` (first occurrence) on a second line (small, muted) | `Max 5.12 kW` / `2025-07-22 13:30` |
 | **Min** | `min.value` + unit, with `min.timestamp` (first occurrence) on a second line (small, muted) | `Min -310 W` / `2025-07-20 01:05` |
-| **High avg duration** | `high.avgDailyMinutes` per day + threshold + cutoff | `High 42.5 min/day` / `> 1.24 kW (95th pct)` |
-| **Low avg duration** | `low.avgDailyMinutes` per day + threshold + cutoff | `Low 6 min/day` / `< -997.8 W (5th pct)` |
+| **High avg duration** | `high.avgDailyMinutes` per day + threshold + cutoff | `High 42.5 min/day` / `> 1.24 kW (95%)` |
+| **Low avg duration** | `low.avgDailyMinutes` per day + threshold + cutoff | `Low 6 min/day` / `< -997.8 W (5%)` |
 
 Formatting rules:
 
 - Units come from the response (`unit`, `""` if none); number formatting reuses the existing value/unit helpers (`extractUnit()`-style spacing, up to 2 decimals, unit-aware magnitude where already applied to other views).
-- Threshold rows are secondary/muted text and echo the *effective* cutoff used (from the response `high.cutoff` / `low.cutoff`), so the card always describes exactly what the backend computed — even after a popstate restore with URL-supplied cutoffs.
+- Threshold rows are secondary/muted text and echo the *effective* cutoff used (from the response `high.cutoff` / `low.cutoff`), so the card always describes exactly what the backend computed — even after a popstate restore with URL-supplied cutoffs. The cutoff is rendered as a percent, e.g. `(95%)`, not `(95th pct)`.
 - The card grid is recreated from scratch on every render (same contract as `#summary-cards`: clear container, rebuild elements).
+
+**Per-measurement accent color:** each stat card carries the same accent color its measurement uses in the line chart, so the grid is not monochrome (the summary cards pattern). The palette is a single shared 16-color array (`CHART_PALETTE`, moved from `chart.ts` into `shared.ts`; `chart.ts` imports it) and cycles in dataset order (`CHART_PALETTE[i % CHART_PALETTE.length]`). The accent is applied via a `--stat-accent` CSS variable on the card: it colors the card's 3px top border and the header text; all other card text keeps the neutral palette.
 
 ### 16.2 Card Tooltips
 
@@ -1386,9 +1388,9 @@ The stats card grid follows the same CSS grid approach as the summary cards (aut
 
 ### 16.5 Renderer
 
-`renderStatsView(updateWaiting)` (new module `stats-view.ts` or added to an existing view module) owns:
+`renderStatsView(updateWaiting)` (module `stats-view.ts`) owns:
 
-- Building the card DOM (one element tree per stat object)
+- Building the card DOM (one element tree per stat object), including the `--stat-accent` variable from `CHART_PALETTE` (§16.1)
 - Populating tooltip attributes (§16.2)
 - No panel visibility, button state, or history manipulation (setView contract, §6.3)
 
@@ -1401,3 +1403,4 @@ This section tracks changes to the design document itself. Every modification to
 | Version | Date | Section Changed | Description |
 |---------|------|----------------|-------------|
 | 3.0 | 2026-08-26 | §1–§16, new | New Stats view — per-column stat cards (mean, max/min + first occurrence, high/low average daily durations) computed by new backend `GET /api/stats`; new `#stats-btn`, `#high-cutoff-select`, `#low-cutoff-select` controls; day filter now shared with stats view; status bar always shows selected-range day count (`#range-days`); CSS tooltips on all stat cards; new `stats` view mode in setView/URL state |
+| 3.1 | 2026-08-26 | §16.1, §16.5 | Stat cards get a per-measurement accent color (`--stat-accent`: 3px top border + header text) using a shared `CHART_PALETTE` moved to `shared.ts` so stats and chart colors match; cutoff abbreviation in card sub-lines changes from `(95th pct)` to `(95%)` (#55) |

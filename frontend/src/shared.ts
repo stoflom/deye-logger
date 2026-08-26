@@ -123,6 +123,17 @@ export function resetCustomDefaultColumns(): void {
 // ------------------------------------------------------------------
 // Global application state
 // ------------------------------------------------------------------
+// Shared 16-color chart palette (design §16.1). Used by chart.ts for
+// line-chart datasets and by stats-view.ts for stat-card accents; cycle
+// as CHART_PALETTE[i % CHART_PALETTE.length] so a measurement always
+// keeps the same color across views.
+export const CHART_PALETTE: string[] = [
+  "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
+  "#dd6b20", "#319795", "#d53f8c", "#2b6cb0", "#c53030",
+  "#276749", "#b7791f", "#6b46c1", "#c05621", "#285e61",
+  "#97266d",
+];
+
 export const appState = {
   columnMetadata: [] as ColumnMeta[],
   selectedColumnNames: getInitialSelectedColumns(),

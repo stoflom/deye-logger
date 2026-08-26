@@ -24,6 +24,7 @@ import {
   RenderOk,
   StatsEntry,
   StatsResponse,
+  CHART_PALETTE,
 } from "./shared";
 
 // ------------------------------------------------------------------
@@ -73,7 +74,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Row element with tooltip; optional secondary (muted) line */
+
 function statRow(
   tooltip: string,
   main: string,
@@ -89,8 +90,10 @@ function statRow(
 
 // ------------------------------------------------------------------
 // Card builder — one card per stats entry (design §16.1 / §16.2)
+// `index` selects the per-measurement accent color (same cycle order
+// as the line-chart datasets, so colors match across views).
 // ------------------------------------------------------------------
-function buildStatCard(entry: StatsEntry): HTMLElement {
+function buildStatCard(entry: StatsEntry, index: number): HTMLElement {
   const { label, unit, count, mean, max, min, high, low } = entry;
   const from = appState.dateRangeFrom;
   const to = appState.dateRangeTo;
@@ -100,6 +103,7 @@ function buildStatCard(entry: StatsEntry): HTMLElement {
 
   const card = el("div", "stat-card");
   card.tabIndex = 0;
+  card.style.setProperty("--stat-accent", CHART_PALETTE[index % CHART_PALETTE.length]);
   card.dataset.tooltip = `Statistics for ${label} ${rangeDesc}${dayDesc} — ${count} samples`;
 
   const header = el("div", "stat-card-header", label);
@@ -134,7 +138,7 @@ function buildStatCard(entry: StatsEntry): HTMLElement {
         `Threshold: ${withUnit(high.threshold, unit)} at the ${ordinal(high.cutoff)} percentile. ` +
         `Days with samples but no high readings count as 0.`,
       `High ${fmtMinutes(high.avgDailyMinutes)}`,
-      `> ${withUnit(high.threshold, unit)} (${ordinal(high.cutoff)} pct)`,
+      `> ${withUnit(high.threshold, unit)} (${high.cutoff}%)`,
     ),
   );
 
@@ -144,7 +148,7 @@ function buildStatCard(entry: StatsEntry): HTMLElement {
         `Threshold: ${withUnit(low.threshold, unit)} at the ${ordinal(low.cutoff)} percentile. ` +
         `Days with samples but no low readings count as 0.`,
       `Low ${fmtMinutes(low.avgDailyMinutes)}`,
-      `< ${withUnit(low.threshold, unit)} (${ordinal(low.cutoff)} pct)`,
+      `< ${withUnit(low.threshold, unit)} (${low.cutoff}%)`,
     ),
   );
 
@@ -179,6 +183,7 @@ export async function renderStatsView(
   appState.statsResult = result;
 
   updateWaiting("Building stat cards…");
+  // map passes (entry, index) — accent color cycles per index
   statsViewPanel.replaceChildren(...result.stats.map(buildStatCard));
   rowCountEl.textContent = result.stats.length === 1
     ? "1 column"

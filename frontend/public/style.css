@@ -605,6 +605,8 @@ body {
   position: relative;
   background: #f7fafc;
   border: 1px solid #e2e8f0;
+  /* Per-measurement accent — set inline as --stat-accent (design §16.1) */
+  border-top: 3px solid var(--stat-accent, #cbd5e0);
   border-radius: 8px;
   padding: calc(12px * var(--card-scale, 1));
   min-width: 0;
@@ -619,7 +621,7 @@ body {
 .stat-card-header {
   font-weight: 700;
   font-size: calc(13px * var(--card-scale, 1));
-  color: #2d374e;
+  color: var(--stat-accent, #2d374e);
   margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
