@@ -21,7 +21,7 @@ export interface ColumnMeta {
   unit: string;
 }
 
-export type ViewMode = "chart" | "grid" | "histogram" | "histogram-grid" | "stats";
+export type ViewMode = "chart" | "grid" | "histogram" | "histogram-grid" | "stats" | "stats-grid";
 
 // ------------------------------------------------------------------
 // Stats API types (GET /api/stats)
@@ -480,7 +480,7 @@ export interface ParsedUrlState {
 export function getUrlState(): ParsedUrlState {
   const params = new URLSearchParams(window.location.search);
 
-  const validViews: ViewMode[] = ["chart", "grid", "histogram", "histogram-grid", "stats"];
+  const validViews: ViewMode[] = ["chart", "grid", "histogram", "histogram-grid", "stats", "stats-grid"];
   const validHighCutoffs = ["50", "75", "90", "95", "99"];
   const validLowCutoffs = ["1", "5", "10", "25", "50"];
   const rawView = params.get("view");

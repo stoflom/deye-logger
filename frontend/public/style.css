@@ -649,6 +649,52 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Stats grid variant (design §16.6) — table layout inside #stats-view */
+.stats-view.stats-grid-mode {
+  display: block;
+  overflow-x: auto;
+}
+
+.stats-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(13px * var(--card-scale, 1));
+}
+
+.stats-grid-table th,
+.stats-grid-table td {
+  position: relative; /* anchor for CSS tooltips */
+  padding: calc(6px * var(--card-scale, 1)) calc(10px * var(--card-scale, 1));
+  border-bottom: 1px solid #e2e8f0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stats-grid-table th {
+  background: #edf2f7;
+  color: #2d374e;
+  font-size: calc(11px * var(--card-scale, 1));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stats-grid-table td {
+  color: #2d374e;
+}
+
+.stats-grid-table td.stats-grid-name {
+  text-align: left;
+  font-weight: 700;
+  color: var(--stat-accent, #2d374e);
+}
+
+.stats-grid-table tr[tabindex]:focus-visible,
+.stats-grid-table td:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: -2px;
+}
+
 /* ============================================================
    CSS TOOLTIPS — data-tooltip rendered via ::after, no JS
    Shown on hover and on keyboard focus (:focus-visible).

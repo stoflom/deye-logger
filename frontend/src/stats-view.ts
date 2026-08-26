@@ -163,10 +163,91 @@ function buildStatCard(entry: StatsEntry, index: number): HTMLElement {
 }
 
 // ------------------------------------------------------------------
-// renderStatsView — fetch + build (design §16.5)
+// Stats grid variant — table layout (design §16.6)
+// Rows = measurements, columns = statistics.
+// ------------------------------------------------------------------
+function buildStatsGrid(result: StatsResponse): HTMLElement {
+  const { stats } = result;
+  const from = appState.dateRangeFrom;
+  const to = appState.dateRangeTo;
+  const rangeDesc = isDateRange() ? `over ${from} to ${to}` : `over ${from}`;
+  const dayName = WEEKDAY_NAMES[dayFilterSelect.value];
+  const dayDesc = dayName ? `, weekdays only: ${dayName}` : "";
+
+  const table = el("table", "stats-grid-table");
+
+  const headers: [string, string][] = [
+    ["Measurement", "Statistics per measurement over the selected range"],
+    ["Samples", "Number of non-null samples in the range"],
+    ["Average", "Arithmetic mean of all samples in the selected date range."],
+    ["Max", "Maximum value observed."],
+    ["Max first seen", "Date-time of the first occurrence of the maximum."],
+    ["Min", "Minimum value observed."],
+    ["Min first seen", "Date-time of the first occurrence of the minimum."],
+    ["High min/day", "Average time per day above the high threshold."],
+    ["Low min/day", "Average time per day below the low threshold."],
+  ];
+  const thead = el("thead");
+  const htr = el("tr");
+  for (const [text, tip] of headers) {
+    const th = el("th");
+    th.textContent = text;
+    th.dataset.tooltip = tip;
+    htr.appendChild(th);
+  }
+  thead.appendChild(htr);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  stats.forEach((entry, i) => {
+    const { label, unit, count, mean, max, min, high, low } = entry;
+    const tr = el("tr");
+    tr.tabIndex = 0;
+    tr.style.setProperty("--stat-accent", CHART_PALETTE[i % CHART_PALETTE.length]);
+
+    const nameTd = el("td", "stats-grid-name");
+    nameTd.textContent = label;
+    nameTd.dataset.tooltip = `Statistics for ${label} ${rangeDesc}${dayDesc} — ${count} samples`;
+    tr.appendChild(nameTd);
+
+    const plain = (text: string) => {
+      const td = el("td", "stats-grid-num");
+      td.textContent = text;
+      tr.appendChild(td);
+    };
+    plain(String(count));
+    plain(withUnit(mean, unit));
+    plain(withUnit(max.value, unit));
+    plain(fmtTs(max.timestamp));
+    plain(withUnit(min.value, unit));
+    plain(fmtTs(min.timestamp));
+
+    const dur = (t: StatsEntry["high"], sign: string) => {
+      const td = el("td", "stats-grid-num");
+      td.appendChild(el("span", "stat-row-main", fmtMinutes(t.avgDailyMinutes)));
+      td.appendChild(el("span", "stat-row-sub", `${sign} ${withUnit(t.threshold, unit)} (${t.cutoff}%)`));
+      td.dataset.tooltip =
+        `Average time per day the value was ${sign === ">" ? "above the high" : "below the low"} ` +
+        `threshold (${methodDesc(t)}). ` +
+        `Threshold: ${withUnit(t.threshold, unit)} at the ${ordinal(t.cutoff)} percentile. ` +
+        `Days with samples but no readings on that side count as 0.`;
+      tr.appendChild(td);
+    };
+    dur(high, ">");
+    dur(low, "<");
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+// ------------------------------------------------------------------
+// renderStatsView — fetch + build (design §16.5 / §16.6)
 // ------------------------------------------------------------------
 export async function renderStatsView(
   updateWaiting: (text: string) => void,
+  asGrid: boolean = false,
 ): Promise<RenderOk> {
   updateWaiting("Fetching statistics…");
 
@@ -189,9 +270,14 @@ export async function renderStatsView(
   const result = (await res.json()) as StatsResponse;
   appState.statsResult = result;
 
-  updateWaiting("Building stat cards…");
-  // map passes (entry, index) — accent color cycles per index
-  statsViewPanel.replaceChildren(...result.stats.map(buildStatCard));
+  updateWaiting(asGrid ? "Building stats grid…" : "Building stat cards…");
+  statsViewPanel.classList.toggle("stats-grid-mode", asGrid);
+  if (asGrid) {
+    statsViewPanel.replaceChildren(buildStatsGrid(result));
+  } else {
+    // map passes (entry, index) — accent color cycles per index
+    statsViewPanel.replaceChildren(...result.stats.map(buildStatCard));
+  }
   rowCountEl.textContent = result.stats.length === 1
     ? "1 column"
     : `${result.stats.length} columns`;

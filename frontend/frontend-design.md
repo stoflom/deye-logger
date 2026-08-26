@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v3.3
+> **Status:** v4.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -124,7 +124,7 @@ These objects define the **page state** and must be pushed to URL history so tha
 
 | Parameter | Values | Source | Used By |
 | ----------- | -------- | -------- | --------- |
-| `view` | `chart`, `grid`, `histogram`, `histogram-grid`, `stats` | `setView()` | `getUrlState()`, `setView()` |
+| `view` | `chart`, `grid`, `histogram`, `histogram-grid`, `stats`, `stats-grid` | `setView()` | `getUrlState()`, `setView()` |
 | `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getUrlState()` (single day) |
 | `from` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range start) |
 | `to` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range end) |
@@ -142,6 +142,7 @@ These objects define the **page state** and must be pushed to URL history so tha
 - Histogram split: `?view=histogram&date=2025-07-20&split=1`
 - Histogram with day filter: `?view=histogram&date=2025-07-20&dayFilter=mon`
 - Stats view: `?view=stats&date=2025-07-20&highCutoff=90&lowCutoff=10&dayFilter=sun`
+- Stats grid variant: `?view=stats-grid&date=2025-07-20` (same params, table layout instead of cards)
 - Default `binSize=15` is omitted from URL
 - Default `dayFilter=all` is omitted from URL
 - Default `highCutoff=95` and `lowCutoff=5` are omitted from URL
@@ -221,8 +222,9 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Histogram grid view** | `#histogram-grid-view` | `setView("histogram-grid")` | Yes |
 | **Split histogram view** | `#split-histogram-view` | `setView("histogram", { split: true })` | Yes (`split=1`) |
 | **Stats view** | `#stats-view` | `setView("stats")` | Yes |
+| **Stats grid view** | `#stats-view` (same panel, table layout) | `setView("stats-grid")` | Yes |
 
-**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, split-histogram, stats }` is visible. `setView` enforces this.
+**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, split-histogram, stats }` is visible (`stats-grid` reuses the `stats` panel). `setView` enforces this.
 
 ---
 
@@ -378,9 +380,9 @@ setView(view, opts?)
   │
   └─ STEP 5: updateButtonLabels(view, split)
         exportCsvBtn.visible          ← grid views only
-        histogramToggleBtn.visible    ← all views except stats
+        histogramToggleBtn.visible    ← all views except stats views
         histogramToggleBtn.text/title  ← contextual label
-        viewToggleBtn.visible          ← all views except stats
+        viewToggleBtn.visible          ← all views (stats: toggles stats ↔ stats-grid)
         viewToggleBtn.text/title       ← contextual label
         statsBtn.text/title            ← contextual label (see §9.3)
         splitBtn.visible               ← histogram view only
@@ -552,7 +554,7 @@ try {
 | `appState.rawDataChartInstance` | `Chart \| null` | Transient (render) | Chart.js instance for the raw data line chart |
 | `appState.rawDataGridApi` | `GridApi \| null` | Transient (render) | AG Grid API for the raw data grid |
 | `appState.statsResult` | `StatsResponse \| null` | Transient (render) | Last `/api/stats` response (per-column stat objects) for the stats view |
-| `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid, stats |
+| `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid, stats, stats-grid |
 
 ### 8.2 Histogram Module Variables (`histogram-chart.ts`)
 
@@ -646,8 +648,10 @@ chart  ←─viewToggle─→  grid
   ▼                       ▼
   stats            histogram ←─viewToggle─→ histogram-grid
    │
-   └──statsBtn──→ chart   (no grid/histogram counterpart of stats;
-                          viewToggle and histogramBtn are hidden in stats view)
+   ├──viewToggle──→ stats-grid   (table layout; same data, §16.6)
+   │
+   └──statsBtn──→ chart          (histogramBtn is hidden in stats views;
+                                 viewToggle toggles stats ↔ stats-grid)
 ```
 
 ### 9.2 Histogram Sub-Mode (split)
@@ -686,9 +690,9 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | `appState.activeView` | Button Text | Button Title | Action |
 | ---------------------- | ------------ | ------------- | -------- |
 | `chart` / `grid` / `histogram` / `histogram-grid` | `📈 Stats` | "Show per-column statistics for the selected range" | `setView("stats")` |
-| `stats` | `📊 Back to Chart` | "Return to the chart view" | `setView("chart")` |
+| `stats` / `stats-grid` | `📊 Back to Chart` | "Return to the chart view" | `setView("chart")` |
 
-In the stats view, `viewToggleBtn` and `histogramToggleBtn` are **hidden** (stats has no grid/histogram counterpart). Date nav, refresh, columns toggle, day filter, and both cutoff selects remain visible.
+In the stats views, `histogramToggleBtn` is **hidden** (stats has no histogram counterpart), but `viewToggleBtn` is visible and toggles `stats` ↔ `stats-grid`. Date nav, refresh, columns toggle, day filter, and both cutoff selects remain visible.
 
 #### View Toggle Button Labels (`viewToggleBtn`)
 
@@ -698,6 +702,8 @@ In the stats view, `viewToggleBtn` and `histogramToggleBtn` are **hidden** (stat
 | `grid` | `📈 Chart` | "Switch back to the chart" | `chart` |
 | `histogram` | `📋 Grid` | "Show the histogram data as a grid" | `histogram-grid` |
 | `histogram-grid` | `📈 Histogram Chart` | "Switch back to the histogram chart" | `histogram` |
+| `stats` | `📋 Grid` | "Show the statistics as a grid (table)" | `stats-grid` |
+| `stats-grid` | `📈 Stats Cards` | "Back to the statistics cards" | `stats` |
 
 #### Histogram Toggle Button Labels (`histogramToggleBtn`)
 
@@ -1398,6 +1404,24 @@ The stats card grid follows the same CSS grid approach as the summary cards (aut
 - Populating tooltip attributes (§16.2)
 - No panel visibility, button state, or history manipulation (setView contract, §6.3)
 
+### 16.6 Stats Grid Variant (`stats-grid`)
+
+A table layout of the same `/api/stats` data, toggled via `viewToggleBtn` (`?view=stats-grid`). Rows are measurements; columns are statistics. It reuses the `#stats-view` panel (plain HTML table, `.stats-grid-table`), the same fetch, the same day filter and cutoff controls, and the same accent color per row (first column text + row hover tint from `CHART_PALETTE`).
+
+| Column | Content | Header tooltip |
+| -------- | ------- | -------------- |
+| Measurement | `label` (accent color) | "Statistics per measurement over the selected range" |
+| Samples | `count` | "Number of non-null samples in the range" |
+| Average | `mean` + unit | §16.2 mean-row text |
+| Max | `max.value` + unit | §16.2 max-row text |
+| Max first seen | `max.timestamp` (ISO, seconds omitted) | "Date-time of the first occurrence of the maximum" |
+| Min | `min.value` + unit | §16.2 min-row text |
+| Min first seen | `min.timestamp` | "Date-time of the first occurrence of the minimum" |
+| High min/day | `high.avgDailyMinutes` + sub `> {threshold} {unit} ({cutoff}%)` | §16.2 high-row text |
+| Low min/day | `low.avgDailyMinutes` + sub `< {threshold} {unit} ({cutoff}%)` | §16.2 low-row text |
+
+Cell tooltips: the High/Low cells carry the §16.2 high/low tooltips (method-aware); the Measurement cell carries the card-level tooltip ("Statistics for {label} … — N samples"). Rows are keyboard-focusable with the same CSS tooltip behavior as the cards. Empty range → same info-view message as the card view.
+
 ---
 
 ## 17. Change Management
@@ -1410,3 +1434,4 @@ This section tracks changes to the design document itself. Every modification to
 | 3.1 | 2026-08-26 | §16.1, §16.5 | Stat cards get a per-measurement accent color (`--stat-accent`: 3px top border + header text) using a shared `CHART_PALETTE` moved to `shared.ts` so stats and chart colors match; cutoff abbreviation in card sub-lines changes from `(95th pct)` to `(95%)` (#55) |
 | 3.2 | 2026-08-26 | §16.2 | High/low row tooltips echo the response `method` field: percentage-unit columns (e.g. SOC) use the direct data percentile as threshold instead of `mean ± z·σ` (backend design v3.1, #56) |
 | 3.3 | 2026-08-26 | §2.1, §2.3, §6.x button tables | Title-bar buttons compacted: horizontal padding `8px 16px` → `8px 10px`; grid button labels shortened — `📋 Data Grid` and `📊 Histogram Grid` both become `📋 Grid`, tooltips clarify which graph's data the grid shows (chart data / histogram binned averages) (#57) |
+| 4.0 | 2026-08-26 | §3.1, §8.1, §9.1, §9.3, new §16.6 | New `stats-grid` view mode — table variant of the Stats view (rows = measurements, columns = statistics: samples, average, max/min + first-occurrence, high/low min-day), toggled via `viewToggleBtn` in the stats views; `?view=stats-grid` URL state (#58) |
