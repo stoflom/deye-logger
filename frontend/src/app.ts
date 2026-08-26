@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "2.8.1";
+export const FRONTEND_VERSION = "3.0.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -23,8 +23,16 @@ import {
   columnsToggleBtn,
   viewToggleBtn,
   histogramToggleBtn,
+  statsBtn,
   binSizeSelect,
   dayFilterSelect,
+  highCutoffSelect,
+  lowCutoffSelect,
+  showDayFilterGroup,
+  hideDayFilterGroup,
+  showStatsCutoffs,
+  hideStatsCutoffs,
+  updateRangeDays,
   exportCsvBtn,
   splitBtn,
   versionBadgeEl,
@@ -58,6 +66,7 @@ import {
 import { renderRawDataChart, updateSummaryCards } from "./chart";
 import { initRawDataGrid, updateRawDataGrid, initHistogramGrid, updateHistogramGrid, getHistogramGridApi, buildHistogramGridCols } from "./data-grid";
 import { renderHistogramChart, histogramMaxAverageValues, fetchHistogramData, showSplitHistogram, isSplitModeActive, cleanupSplitMode, histogramResultToRows } from "./histogram-chart";
+import { renderStatsView } from "./stats-view";
 import { renderColumnCheckboxes } from "./columns";
 import { wireDateNavigation } from "./navigation";
 
@@ -209,12 +218,13 @@ async function renderRefreshView(updateWaiting: (text: string) => void): Promise
 function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   const isAnyGrid = view === "grid" || view === "histogram-grid";
   const isHistogramMode = view === "histogram" || view === "histogram-grid";
+  const isStats = view === "stats";
 
   // Export button — visible only in grid views
   exportCsvBtn.style.display = isAnyGrid ? "" : "none";
 
-  // Histogram toggle button — always active (blue) when visible
-  histogramToggleBtn.style.display = "";
+  // Histogram toggle button — hidden in stats view (no counterpart)
+  histogramToggleBtn.style.display = isStats ? "none" : "";
   histogramToggleBtn.classList.toggle("active", true);
 
   if (isHistogramMode) {
@@ -233,8 +243,18 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
     histogramToggleBtn.title = "Show binned average histogram";
   }
 
-  // View toggle button — always active (blue) when visible
+  // View toggle button — hidden in stats view (no counterpart)
+  viewToggleBtn.style.display = isStats ? "none" : "";
   viewToggleBtn.classList.toggle("active", true);
+
+  // Stats toggle button — always visible
+  if (isStats) {
+    statsBtn.textContent = "\uD83D\uDCCA Back to Chart";
+    statsBtn.title = "Return to the chart view";
+  } else {
+    statsBtn.textContent = "\uD83D\uDCC8 Stats";
+    statsBtn.title = "Show per-column statistics for the selected range";
+  }
   if (isHistogramMode) {
     viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCA Histogram Grid" : "\uD83D\uDCC8 Histogram Chart";
     viewToggleBtn.title = view === "histogram" ? "Switch to histogram grid" : "Switch to histogram chart";
@@ -248,11 +268,21 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   splitBtn.textContent = isSplit ? "Combine" : "Split";
   splitBtn.title = isSplit ? "Combine columns into single chart" : "Split columns into individual charts";
 
-  // Histogram controls — visible in histogram modes
+  // Title-bar control groups
   if (isHistogramMode) {
     showHistogramPanel();
   } else {
     hideHistogramPanel();
+  }
+  if (isHistogramMode || isStats) {
+    showDayFilterGroup();
+  } else {
+    hideDayFilterGroup();
+  }
+  if (isStats) {
+    showStatsCutoffs();
+  } else {
+    hideStatsCutoffs();
   }
 
   // Update bin size from state
@@ -316,6 +346,7 @@ async function setView(
       // Push current view state to history BEFORE refresh so that
       // history.back() from the error view restores the pre-refresh state.
       const isHistogramModeRefresh = view === "histogram" || view === "histogram-grid";
+      const isStatsRefresh = view === "stats";
       const refreshUrl = buildUrlString(
         view,
         appState.dateRangeFrom,
@@ -323,7 +354,9 @@ async function setView(
         {
           binSize: isHistogramModeRefresh ? binSizeSelect.value : undefined,
           isSplit: false,
-          dayFilter: isHistogramModeRefresh ? dayFilterSelect.value : undefined,
+          dayFilter: isHistogramModeRefresh || isStatsRefresh ? dayFilterSelect.value : undefined,
+          highCutoff: isStatsRefresh ? highCutoffSelect.value : undefined,
+          lowCutoff: isStatsRefresh ? lowCutoffSelect.value : undefined,
         },
       );
       history.pushState({ view, isSplit: false }, "", refreshUrl);
@@ -334,6 +367,7 @@ async function setView(
 
     // --- Normal data render ---
     const isHistogramMode = view === "histogram" || view === "histogram-grid";
+    const isStats = view === "stats";
     const split = optSplit ?? false;
 
     // Sync date inputs with state
@@ -362,20 +396,25 @@ async function setView(
       } else {
         await renderHistogramChartView((text) => waitingView.setText(text));
       }
+    } else if (view === "stats") {
+      await renderStatsView((text) => waitingView.setText(text));
     }
 
     // Check for empty data — show info-view instead of data view
     const isEmptyRawData = (view === "chart" || view === "grid") && appState.rawDataRows.length === 0;
     const isEmptyHistogram = isHistogramMode && (histogramMaxAverageValues?.size ?? 0) === 0;
+    const isEmptyStats = isStats && (appState.statsResult?.stats.length ?? 0) === 0;
 
-    if (isEmptyRawData || isEmptyHistogram) {
+    if (isEmptyRawData || isEmptyHistogram || isEmptyStats) {
       // Build contextual no-data message
       const range = isDateRange();
       const from = appState.dateRangeFrom;
       const to = appState.dateRangeTo;
 
       let message: string;
-      if (isEmptyHistogram) {
+      if (isEmptyStats) {
+        message = "No statistics available for the selected date range. Click <strong>Refresh</strong> to sync from the inverter, or select a different date range.";
+      } else if (isEmptyHistogram) {
         message = "No histogram data available for the selected date range. Click <strong>Refresh</strong> to sync from the inverter, or select a different date.";
       } else if (range) {
         message = `No data found for <strong>${from}</strong> to <strong>${to}</strong>. Click <strong>Refresh</strong> to sync from the inverter, or select a different date range.`;
@@ -406,9 +445,12 @@ async function setView(
       showPanel("split-histogram");
     } else if (view === "histogram") {
       showPanel("histogram");
+    } else if (view === "stats") {
+      showPanel("stats");
     }
 
-    showSummaryCards();
+    // Summary cards bar is hidden in stats view — the stat cards ARE the content
+    if (!isStats) showSummaryCards();
 
     // STEP 5: Update button labels and visibility
     updateButtonLabels(view, split);
@@ -419,8 +461,12 @@ async function setView(
       grid: "Data Grid",
       histogram: "Histogram",
       "histogram-grid": "Histogram Grid",
+      stats: "Stats",
     };
     viewLabelEl.textContent = viewLabels[view] ?? view;
+
+    // Status-bar day count for the selected range
+    updateRangeDays();
 
     // Push URL history
     const url = buildUrlString(
@@ -430,7 +476,9 @@ async function setView(
       {
         binSize: isHistogramMode ? binSizeSelect.value : undefined,
         isSplit: split,
-        dayFilter: isHistogramMode ? dayFilterSelect.value : undefined,
+        dayFilter: isHistogramMode || isStats ? dayFilterSelect.value : undefined,
+        highCutoff: isStats ? highCutoffSelect.value : undefined,
+        lowCutoff: isStats ? lowCutoffSelect.value : undefined,
       },
     );
     const historyMethod = replace ? history.replaceState : history.pushState;
@@ -483,10 +531,20 @@ viewToggleBtn.addEventListener("click", () => {
 // Histogram toggle: normal mode <-> histogram mode
 histogramToggleBtn.addEventListener("click", () => {
   const v = appState.activeView;
+  if (v === "stats") return; // hidden in stats view
   if (v === "chart" || v === "histogram") {
     setView(v === "chart" ? "histogram" : "chart");
   } else {
     setView(v === "grid" ? "histogram-grid" : "grid");
+  }
+});
+
+// Stats toggle: stats <-> chart (no grid/histogram counterpart)
+statsBtn.addEventListener("click", () => {
+  if (appState.activeView === "stats") {
+    setView("chart");
+  } else {
+    setView("stats");
   }
 });
 
@@ -506,12 +564,22 @@ binSizeSelect.addEventListener("change", () => {
   }
 });
 
-// Day filter change — re-render current histogram view
+// Day filter change — re-render current histogram or stats view
 dayFilterSelect.addEventListener("change", () => {
-  if (appState.activeView === "histogram" || appState.activeView === "histogram-grid") {
-    const currentSplit = isSplitModeActive();
-    setView(appState.activeView, { split: currentSplit });
+  const v = appState.activeView;
+  if (v === "histogram" || v === "histogram-grid") {
+    setView(v, { split: isSplitModeActive() });
+  } else if (v === "stats") {
+    setView("stats");
   }
+});
+
+// Cutoff changes — re-render stats view with new thresholds
+highCutoffSelect.addEventListener("change", () => {
+  if (appState.activeView === "stats") setView("stats");
+});
+lowCutoffSelect.addEventListener("change", () => {
+  if (appState.activeView === "stats") setView("stats");
 });
 
 // CSV export — stateless action
@@ -591,6 +659,12 @@ window.addEventListener("popstate", () => {
   if (urlState.dayFilter) {
     dayFilterSelect.value = urlState.dayFilter;
   }
+  if (urlState.highCutoff) {
+    highCutoffSelect.value = urlState.highCutoff;
+  }
+  if (urlState.lowCutoff) {
+    lowCutoffSelect.value = urlState.lowCutoff;
+  }
   updateNavButtonStates();
 
   setView(urlState.view, { replace: true, split: urlState.isSplit });
@@ -617,6 +691,12 @@ async function init(): Promise<void> {
   }
   if (urlState.dayFilter) {
     dayFilterSelect.value = urlState.dayFilter;
+  }
+  if (urlState.highCutoff) {
+    highCutoffSelect.value = urlState.highCutoff;
+  }
+  if (urlState.lowCutoff) {
+    lowCutoffSelect.value = urlState.lowCutoff;
   }
 
   // Show waiting-view synchronously before any async work — eliminates blank page.

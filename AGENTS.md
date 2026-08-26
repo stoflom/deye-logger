@@ -4,7 +4,7 @@
 
 - **All changes must be done in a `dev` branch.**
 - The `dev` branch is **NEVER** to be pushed to `origin`.
-- When development is finished, changes must be **merged into the `master` branch**.
+- When development is finished (tested by the user), changes must be **merged into the `master` branch**.
 - The `master` branch is then **pushed to `origin`**.
 
 ## Design Documents
@@ -33,3 +33,7 @@ Each application has a **version number** consisting of `major.minor.subminor`:
 
 - Issues are managed with the "gh issue" commands.
 - They must be logged with appropriate labels e.g. bug,enhancement,frontend,backend,deye-cloud.
+
+## Testing
+
+- All tests are to be integrated into the suite under frontend/test or backend/test for future regression testing.

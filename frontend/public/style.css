@@ -588,6 +588,92 @@ body {
 }
 
 /* ============================================================
+   STATS VIEW — per-column stat cards (design §16)
+   Grid of cards; same --card-scale responsive scaling as
+   the summary cards. Cards keep equal heights within a row.
+   ============================================================ */
+.stats-view.visible {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: calc(12px * var(--card-scale, 1));
+  padding: calc(12px * var(--card-scale, 1)) calc(24px * var(--card-scale, 1));
+  align-items: stretch;
+  align-content: start;
+}
+
+.stat-card {
+  position: relative;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: calc(12px * var(--card-scale, 1));
+  min-width: 0;
+}
+
+.stat-card:focus-visible,
+.stat-row:focus-visible {
+  outline: 2px solid #63b3ed;
+  outline-offset: 2px;
+}
+
+.stat-card-header {
+  font-weight: 700;
+  font-size: calc(13px * var(--card-scale, 1));
+  color: #2d374e;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-row {
+  position: relative;
+  padding: 4px 0;
+  border-top: 1px solid #edf2f7;
+}
+
+.stat-row-main {
+  display: block;
+  font-weight: 600;
+  font-size: calc(13px * var(--card-scale, 1));
+  color: #2d374e;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-row-sub {
+  display: block;
+  font-size: calc(11px * var(--card-scale, 1));
+  color: #718096;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   CSS TOOLTIPS — data-tooltip rendered via ::after, no JS
+   Shown on hover and on keyboard focus (:focus-visible).
+   ============================================================ */
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a202c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: normal;
+  width: max-content;
+  max-width: 280px;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* ============================================================
    CONTENT PANELS — mutual exclusion (inside scrollable area)
    min-height: 300px forces #content-area to scroll when
    title bar wraps and vertical space is tight.
@@ -724,6 +810,7 @@ body {
   }
   /* Shrink cards with actual dimension reduction (not transform) */
   .summary-cards { --card-scale: 0.85; }
+  .stats-view { --card-scale: 0.85; }
   .raw-data-chart-view, .histogram-view { padding: 10px 12px; }
   /* Three-column compact cards */
   .summary-cards.visible { grid-template-columns: repeat(3, 1fr); }
@@ -743,6 +830,7 @@ body {
   }
   /* Shrink cards further with actual dimension reduction */
   .summary-cards { --card-scale: 0.7; }
+  .stats-view { --card-scale: 0.7; }
   .summary-card { padding: calc(12px * var(--card-scale, 1)); }
   .raw-data-chart-view, .histogram-view { padding: 8px; }
   .split-histogram-view { padding: 8px 12px 12px; }
@@ -754,6 +842,7 @@ body {
 @media (max-width: 400px) {
   /* Minimum scale for very narrow screens */
   .summary-cards { --card-scale: 0.6; }
+  .stats-view { --card-scale: 0.6; }
   .summary-card { padding: calc(12px * var(--card-scale, 1)); }
   .header h1 { font-size: 14px; }
   .error-content { padding: 16px; }

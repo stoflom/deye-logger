@@ -21,7 +21,33 @@ export interface ColumnMeta {
   unit: string;
 }
 
-export type ViewMode = "chart" | "grid" | "histogram" | "histogram-grid";
+export type ViewMode = "chart" | "grid" | "histogram" | "histogram-grid" | "stats";
+
+// ------------------------------------------------------------------
+// Stats API types (GET /api/stats)
+// ------------------------------------------------------------------
+export interface StatsThreshold {
+  cutoff: number;
+  threshold: number;
+  avgDailyMinutes: number;
+}
+
+export interface StatsEntry {
+  column: string;
+  label: string;
+  unit: string;
+  count: number;
+  mean: number;
+  stdDev: number;
+  max: { value: number; timestamp: string };
+  min: { value: number; timestamp: string };
+  high: StatsThreshold;
+  low: StatsThreshold;
+}
+
+export interface StatsResponse {
+  stats: StatsEntry[];
+}
 
 // ------------------------------------------------------------------
 // Persistence helpers — localStorage
@@ -106,6 +132,7 @@ export const appState = {
   maxAvailableDate: "",
   rawDataRows: [] as Array<Record<string, unknown>>,
   binnedDataRows: [] as Array<Record<string, unknown>>,
+  statsResult: null as StatsResponse | null,
   rawDataGridApi: null as GridApi | null,
   rawDataChartInstance: null as Chart | null,
   activeView: "chart" as ViewMode,
@@ -145,6 +172,13 @@ export const {
   histogramGridView,
   splitHistogramView,
   splitHistogramScroll,
+  statsViewPanel,
+  statsBtn,
+  highCutoffSelect,
+  lowCutoffSelect,
+  dayFilterGroup,
+  statsCutoffs,
+  rangeDaysEl,
   rawDataGridContainer,
   histogramGridContainer,
   rawDataChartCanvas,
@@ -210,6 +244,7 @@ const ALL_PANELS = [
   histogramView,
   histogramGridView,
   splitHistogramView,
+  statsViewPanel,
 ];
 
 const PANEL_ID_MAP: Record<string, HTMLElement> = {
@@ -222,6 +257,7 @@ const PANEL_ID_MAP: Record<string, HTMLElement> = {
   histogram: histogramView,
   "histogram-grid": histogramGridView,
   "split-histogram": splitHistogramView,
+  stats: statsViewPanel,
 };
 
 /** Hide all content panels and show only the specified one */
@@ -241,6 +277,7 @@ export function hideAllDataPanels(): void {
     histogramView,
     histogramGridView,
     splitHistogramView,
+    statsViewPanel,
   ].forEach((panel) => panel.classList.remove("visible"));
 }
 
@@ -261,6 +298,9 @@ const ALL_CONTROLS: (HTMLElement | null)[] = [
   binSizeSelect,
   dayFilterSelect,
   splitBtn,
+  statsBtn,
+  highCutoffSelect,
+  lowCutoffSelect,
 ];
 
 function setElementDisabled(el: HTMLElement | null, disabled: boolean): void {
@@ -294,6 +334,9 @@ const CONTROL_KEYS: Record<string, HTMLElement | null> = {
   binSize: binSizeSelect,
   dayFilter: dayFilterSelect,
   split: splitBtn,
+  stats: statsBtn,
+  highCutoff: highCutoffSelect,
+  lowCutoff: lowCutoffSelect,
 };
 
 /**
@@ -330,6 +373,22 @@ export function hideHistogramPanel(): void {
   histogramControls.style.display = "none";
 }
 
+export function showDayFilterGroup(): void {
+  dayFilterGroup.style.display = "";
+}
+
+export function hideDayFilterGroup(): void {
+  dayFilterGroup.style.display = "none";
+}
+
+export function showStatsCutoffs(): void {
+  statsCutoffs.style.display = "";
+}
+
+export function hideStatsCutoffs(): void {
+  statsCutoffs.style.display = "none";
+}
+
 // ------------------------------------------------------------------
 // Utility helpers
 // ------------------------------------------------------------------
@@ -340,6 +399,18 @@ export function fmtNum(v: unknown): string {
 
 export function isDateRange(): boolean {
   return appState.dateRangeFrom !== appState.dateRangeTo;
+}
+
+/**
+ * Update the status-bar day count for the selected date range.
+ * Inclusive calendar-day count; fractional days count as whole days.
+ * Called on every successful render (setView STEP 5).
+ */
+export function updateRangeDays(): void {
+  const from = new Date(`${appState.dateRangeFrom}T00:00:00`);
+  const to = new Date(`${appState.dateRangeTo}T00:00:00`);
+  const days = Math.ceil((to.getTime() - from.getTime()) / 86_400_000) + 1;
+  rangeDaysEl.textContent = days === 1 ? "1 day" : `${days} days`;
 }
 
 export function todayStr(): string {
@@ -389,17 +460,21 @@ export interface ParsedUrlState {
   binSize: string;
   isSplit: boolean;
   dayFilter: string;
+  highCutoff: string;
+  lowCutoff: string;
 }
 
 export function getUrlState(): ParsedUrlState {
   const params = new URLSearchParams(window.location.search);
 
-  const validViews: ViewMode[] = ["chart", "grid", "histogram", "histogram-grid"];
+  const validViews: ViewMode[] = ["chart", "grid", "histogram", "histogram-grid", "stats"];
+  const validHighCutoffs = ["50", "75", "90", "95", "99"];
+  const validLowCutoffs = ["1", "5", "10", "25", "50"];
   const rawView = params.get("view");
   const view = (rawView as ViewMode) ?? "chart";
   if (!validViews.includes(view)) {
     const today = todayStr();
-    return { view: "chart", dateFrom: appState.dateRangeFrom || today, dateTo: appState.dateRangeTo || today, binSize: "15", isSplit: false, dayFilter: "all" };
+    return { view: "chart", dateFrom: appState.dateRangeFrom || today, dateTo: appState.dateRangeTo || today, binSize: "15", isSplit: false, dayFilter: "all", highCutoff: "95", lowCutoff: "5" };
   }
 
   const dateFrom = params.get("from") || params.get("date") || appState.dateRangeFrom || todayStr();
@@ -407,15 +482,19 @@ export function getUrlState(): ParsedUrlState {
   const binSize = params.get("binSize") || "15";
   const isSplit = params.get("split") === "1";
   const dayFilter = params.get("dayFilter") || "all";
+  const rawHigh = params.get("highCutoff") ?? "";
+  const rawLow = params.get("lowCutoff") ?? "";
+  const highCutoff = validHighCutoffs.includes(rawHigh) ? rawHigh : "95";
+  const lowCutoff = validLowCutoffs.includes(rawLow) ? rawLow : "5";
 
-  return { view, dateFrom, dateTo, binSize, isSplit, dayFilter };
+  return { view, dateFrom, dateTo, binSize, isSplit, dayFilter, highCutoff, lowCutoff };
 }
 
 export function buildUrlString(
   view: string,
   from: string,
   to: string,
-  opts?: { binSize?: string; isSplit?: boolean; dayFilter?: string },
+  opts?: { binSize?: string; isSplit?: boolean; dayFilter?: string; highCutoff?: string; lowCutoff?: string },
 ): string {
   const params = new URLSearchParams();
   params.set("view", view);
@@ -439,6 +518,17 @@ export function buildUrlString(
   const dayFilter = opts?.dayFilter;
   if (dayFilter && dayFilter !== "all") {
     params.set("dayFilter", dayFilter);
+  }
+
+  // Defaults (95/5) are omitted from the URL
+  const highCutoff = opts?.highCutoff;
+  if (highCutoff && highCutoff !== "95") {
+    params.set("highCutoff", highCutoff);
+  }
+
+  const lowCutoff = opts?.lowCutoff;
+  if (lowCutoff && lowCutoff !== "5") {
+    params.set("lowCutoff", lowCutoff);
   }
 
   const query = params.toString();
