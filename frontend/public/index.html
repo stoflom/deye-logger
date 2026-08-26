@@ -30,9 +30,10 @@
       <button class="columns-toggle" id="columns-toggle" title="Select columns to display">☰ Select</button>
       <button class="btn-view" id="view-toggle" title="Switch between view modes">📋 Data Grid</button>
       <button class="btn-view" id="histogram-btn" title="Show binned average histogram">📊 Histogram</button>
+      <button class="btn-view" id="stats-btn" title="Show per-column statistics for the selected range">📈 Stats</button>
       <button class="btn-export" id="export-btn" style="display:none" title="Export data as CSV">⬇ CSV</button>
 
-      <!-- Histogram controls — visible only in histogram modes -->
+      <!-- Histogram controls — visible only in histogram modes (bin size + split) -->
       <div class="histogram-controls" id="histogram-controls" style="display:none">
         <div class="histogram-control-group">
           <label for="bin-size-select">Bin size</label>
@@ -44,6 +45,11 @@
             <option value="60">1 hour</option>
           </select>
         </div>
+        <button class="btn-view" id="split-btn" title="Split into individual charts">Split</button>
+      </div>
+
+      <!-- Day filter — visible in histogram modes AND stats view -->
+      <div class="histogram-controls" id="day-filter-group" style="display:none">
         <div class="histogram-control-group">
           <label for="day-filter-select">Day</label>
           <select id="day-filter-select">
@@ -57,7 +63,30 @@
             <option value="sat">Sat</option>
           </select>
         </div>
-        <button class="btn-view" id="split-btn" title="Split into individual charts">Split</button>
+      </div>
+
+      <!-- Stats cutoffs — visible only in the Stats view -->
+      <div class="histogram-controls" id="stats-cutoffs" style="display:none">
+        <div class="histogram-control-group">
+          <label for="high-cutoff-select">High</label>
+          <select id="high-cutoff-select">
+            <option value="50">50th</option>
+            <option value="75">75th</option>
+            <option value="90">90th</option>
+            <option value="95" selected>95th</option>
+            <option value="99">99th</option>
+          </select>
+        </div>
+        <div class="histogram-control-group">
+          <label for="low-cutoff-select">Low</label>
+          <select id="low-cutoff-select">
+            <option value="1">1st</option>
+            <option value="5" selected>5th</option>
+            <option value="10">10th</option>
+            <option value="25">25th</option>
+            <option value="50">50th</option>
+          </select>
+        </div>
       </div>
     </div>
   </div>
@@ -69,6 +98,8 @@
     <span id="row-count"></span>
     <span class="status-separator">|</span>
     <span id="view-label"></span>
+    <span class="status-separator">|</span>
+    <span id="range-days"></span>
     <span id="version-badge" style="margin-left: auto;"></span>
   </div>
 
@@ -142,6 +173,9 @@
         <!-- Individual histogram canvases go here -->
       </div>
     </div>
+
+    <!-- Stats view — grid of per-column stat cards -->
+    <div id="stats-view" class="content-panel stats-view"></div>
 
   </div>
 

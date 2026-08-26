@@ -32,10 +32,13 @@ export const refreshBtn = getRequiredEl<HTMLButtonElement>("refresh-btn", "#refr
 export const columnsToggleBtn = getRequiredEl<HTMLButtonElement>("columns-toggle", "#columns-toggle");
 export const viewToggleBtn = getRequiredEl<HTMLButtonElement>("view-toggle", "#view-toggle");
 export const histogramToggleBtn = getRequiredEl<HTMLButtonElement>("histogram-btn", "#histogram-btn");
+export const statsBtn = getRequiredEl<HTMLButtonElement>("stats-btn", "#stats-btn");
 export const exportCsvBtn = getRequiredEl<HTMLButtonElement>("export-btn", "#export-btn");
 export const splitBtn = getRequiredEl<HTMLButtonElement>("split-btn", "#split-btn");
 export const binSizeSelect = getRequiredEl<HTMLSelectElement>("bin-size-select", "#bin-size-select");
 export const dayFilterSelect = getRequiredEl<HTMLSelectElement>("day-filter-select", "#day-filter-select");
+export const highCutoffSelect = getRequiredEl<HTMLSelectElement>("high-cutoff-select", "#high-cutoff-select");
+export const lowCutoffSelect = getRequiredEl<HTMLSelectElement>("low-cutoff-select", "#low-cutoff-select");
 
 // --- Panels ---
 export const waitingViewPanel = getRequiredEl<HTMLElement>("waiting-view", "#waiting-view");
@@ -48,6 +51,8 @@ export const infoViewMessageEl = getRequiredEl<HTMLElement>("info-message", "#in
 export const columnsViewPanel = getRequiredEl<HTMLElement>("columns-view", "#columns-view");
 export const columnsViewInner = getRequiredEl<HTMLElement>("columns-view-inner", "#columns-view-inner");
 export const histogramControls = getRequiredEl<HTMLElement>("histogram-controls", "#histogram-controls");
+export const dayFilterGroup = getRequiredEl<HTMLElement>("day-filter-group", "#day-filter-group");
+export const statsCutoffs = getRequiredEl<HTMLElement>("stats-cutoffs", "#stats-cutoffs");
 export const summaryCardsPanel = getRequiredEl<HTMLElement>("summary-cards", "#summary-cards");
 
 // --- Data views ---
@@ -57,6 +62,7 @@ export const histogramView = getRequiredEl<HTMLElement>("histogram-view", "#hist
 export const histogramGridView = getRequiredEl<HTMLElement>("histogram-grid-view", "#histogram-grid-view");
 export const splitHistogramView = getRequiredEl<HTMLElement>("split-histogram-view", "#split-histogram-view");
 export const splitHistogramScroll = getRequiredEl<HTMLElement>("split-histogram-scroll", "#split-histogram-scroll");
+export const statsViewPanel = getRequiredEl<HTMLElement>("stats-view", "#stats-view");
 
 // --- Grid containers ---
 export const rawDataGridContainer = getRequiredEl<HTMLElement>("grid-container", "#grid-container");
@@ -70,3 +76,4 @@ export const histogramChartCanvas = getRequiredEl<HTMLCanvasElement>("histogram-
 export const rowCountEl = getRequiredEl<HTMLElement>("row-count", "#row-count");
 export const versionBadgeEl = getRequiredEl<HTMLElement>("version-badge", "#version-badge");
 export const viewLabelEl = getRequiredEl<HTMLElement>("view-label", "#view-label");
+export const rangeDaysEl = getRequiredEl<HTMLElement>("range-days", "#range-days");
