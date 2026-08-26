@@ -71,8 +71,8 @@ EXPECTED_STATES = {
         "today": {"enabled": True, "visible": True},
         "refresh": {"enabled": True, "visible": True},
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
-        # View toggle: shows "📋 Data Grid" when in chart
-        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Data Grid"},
+        # View toggle: shows "📋 Grid" when in chart (design v3.3)
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
         # Histogram toggle: shows "📊 Histogram" when in chart
         "histogramToggle": {"enabled": True, "visible": True, "text": "📊 Histogram"},
         # Export: hidden in non-grid views
@@ -91,8 +91,8 @@ EXPECTED_STATES = {
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
         # View toggle: shows "📈 Chart" when in grid
         "viewToggle": {"enabled": True, "visible": True, "text": "📈 Chart"},
-        # Histogram toggle: shows "📊 Histogram Grid" when in grid
-        "histogramToggle": {"enabled": True, "visible": True, "text": "📊 Histogram Grid"},
+        # Histogram toggle: shows "📋 Grid" when in grid (design v3.3)
+        "histogramToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
         # Export: visible in grid views
         "exportCsv": {"enabled": True, "visible": True},
         "split": {"enabled": True, "visible": False},
@@ -105,8 +105,8 @@ EXPECTED_STATES = {
         "today": {"enabled": True, "visible": True},
         "refresh": {"enabled": True, "visible": True},
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
-        # View toggle: shows "📊 Histogram Grid" when in histogram
-        "viewToggle": {"enabled": True, "visible": True, "text": "📊 Histogram Grid"},
+        # View toggle: shows "📋 Grid" when in histogram (design v3.3)
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
         # Histogram toggle: shows "📋 Raw Chart" when in histogram
         "histogramToggle": {"enabled": True, "visible": True, "text": "📋 Raw Chart"},
         # Export: hidden in histogram views
@@ -468,8 +468,17 @@ def test_button_transition_chart_to_grid(tester):
     # Start in chart view
     navigate_to_view(tester, "chart")
     view_text = get_button_text(tester, "view-toggle")
-    assert view_text == "📋 Data Grid", f"Expected '📋 Data Grid', got '{view_text}'"
+    assert view_text == "📋 Grid", f"Expected '📋 Grid', got '{view_text}'"
     print(f"  ✓ Chart: view-toggle text = '{view_text}'")
+
+    # #57: tooltip clarifies grid shows the chart's data; compact padding
+    view_title = tester.find_element(By.ID, "view-toggle").get_attribute("title")
+    assert view_title == "Show the chart data as a grid", f"view-toggle title (got '{view_title}')"
+    padding = tester.execute_script(
+        "return getComputedStyle(document.getElementById('view-toggle')).paddingLeft;"
+    )
+    assert padding == "10px", f"compact horizontal padding 10px (got {padding})"
+    print(f"  ✓ #57: tooltip='{view_title}', paddingLeft={padding}")
 
     # Toggle to grid
     view_toggle_btn = tester.find_element(By.ID, "view-toggle")
@@ -493,7 +502,7 @@ def test_button_transition_chart_to_grid(tester):
     time.sleep(0.5)
 
     view_text = get_button_text(tester, "view-toggle")
-    assert view_text == "📋 Data Grid", f"Expected '📋 Data Grid', got '{view_text}'"
+    assert view_text == "📋 Grid", f"Expected '📋 Grid', got '{view_text}'"
     print(f"  ✓ Chart: view-toggle text = '{view_text}' (after toggle back)")
 
     # CSV should now be hidden
