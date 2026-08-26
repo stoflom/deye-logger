@@ -263,6 +263,15 @@ def main():
         # High/Low cells carry method-aware tooltips
         hi_tip = cells[7].get_attribute("data-tooltip") or ""
         t.check("high threshold" in hi_tip and "percentile" in hi_tip, f"high cell tooltip (got '{hi_tip[:60]}…')")
+        # #59: cutoff change in stats-grid keeps the grid variant
+        tester.select_dropdown_option(By.ID, "high-cutoff-select", "value=90")
+        try:
+            tester.wait_for_url_contains("highCutoff=90", timeout=15)
+        except Exception:
+            pass
+        t.check("view=stats-grid" in tester.get_url() and "highCutoff=90" in tester.get_url(),
+                f"cutoff change keeps stats-grid in URL (got {tester.get_url()})")
+        t.check(visible(tester, ".stats-grid-table"), "stats table re-rendered (not cards)")
         # Toggle back to cards
         vt.click()
         try:
