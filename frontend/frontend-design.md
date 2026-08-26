@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v4.0
+> **Status:** v4.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -34,7 +34,7 @@ The application is a single-page app with three vertical regions:
 │  │ • info-view (non-modal info msg)   │ │
 │  │ • columns-view (selection panel)   │ │
 │  │ • data-view (chart/grid/histogram) │ │
-│  │ • stats-view (per-column stat cards)│ │
+│  │ • stats-view (stat cards / stats table) │ │
 │  └────────────────────────────────────┘ │
 └──────────────────────────────────────────┘
 ```
@@ -44,15 +44,18 @@ The application is a single-page app with three vertical regions:
 | File | Responsibility |
 | ------ | ---------------- |
 | `dom-refs.ts` | DOM element references (isolated to break circular dependencies) |
-| `shared.ts` | Global state object, URL parsing, utility helpers, shared chart palette (`CHART_PALETTE`), re-exports DOM refs |
+| `shared.ts` | Global state object, URL parsing, utility helpers, shared chart palette (`CHART_PALETTE`), stats API types, re-exports DOM refs |
 | `app.ts` | Entry point, `setView()`, button handlers, init, popstate |
 | `chart.ts` | Chart.js line chart rendering, summary cards |
 | `data-grid.ts` | AG Grid rendering (raw data + histogram grid) |
 | `histogram-chart.ts` | Histogram bar chart, split-mode charts, data fetching |
+| `stats-view.ts` | Stats view renderer — stat cards (§16.1) and stats-grid table (§16.6), CSS tooltips (§16.2) |
 | `navigation.ts` | Date navigation (prev/next/today/date-picker) |
 | `columns.ts` | Column selection panel, checkbox rendering |
 | `index.html` | DOM skeleton |
-| `style.css` | All styling |
+| `style.css` | All styling (stat cards, stats grid table, CSS tooltips) |
+
+Source files are bundled by **esbuild** (`npm run build` → `public/app.js`, ESM, single entry `src/app.ts`); the served `app.js` is a build artifact and is gitignored. Browser tests live in `test/` (Selenium + Firefox; `test_stats_view.py` covers the Stats view, design §16).
 
 ---
 
@@ -98,7 +101,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Element | ID | Purpose |
 | --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
-| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid / Stats |
+| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid / Stats / Stats Grid |
 | Range days | `#range-days` | Always visible. Shows the number of days in the selected date range as "N days" (or "1 day"). Count = number of calendar days from `from` to `to` inclusive; any fractional day (e.g. a partial first/last day of the range relative to available data) is **counted as a whole day** (`Math.ceil`). Updated whenever the date range changes, independent of the active view |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
@@ -241,7 +244,7 @@ interface SetViewOptions {
 }
 
 function setView(
-  view: "chart" | "grid" | "histogram" | "histogram-grid" | "stats",
+  view: "chart" | "grid" | "histogram" | "histogram-grid" | "stats" | "stats-grid",
   opts?: SetViewOptions,
 ): Promise<void>
 ```
@@ -310,8 +313,8 @@ setView(view, opts?)
   │             init/update histogram AG Grid
   │             return { ok: true }
   │     │
-  │     └─ view === "stats"
-  │             → renderStatsView(updateWaiting)
+  │     └─ view === "stats" / "stats-grid"
+  │             → renderStatsView(updateWaiting, view === "stats-grid")
   │             updateWaiting("Fetching statistics…")
   │             GET /api/stats?from&to&columns&dayFilter&highCutoff&lowCutoff
   │               → appState.statsResult (per-column stat objects, see §16)
@@ -429,8 +432,8 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | `popstate` → columns | `{ columns: true }` marker detected | `{ columns: true, replace: true }` | Re-shows columns panel (no data fetch) |
 | `binSizeSelect` change | Bin size dropdown | `split` from URL | Re-renders current histogram view |
 | `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram or stats view |
-| `highCutoffSelect` / `lowCutoffSelect` change | Cutoff dropdowns (stats view) | — | `setView("stats")` — re-renders with new thresholds |
-| `statsBtn` click | Stats view button | — | In stats view → `setView("chart")`; otherwise → `setView("stats")` |
+| `highCutoffSelect` / `lowCutoffSelect` change | Cutoff dropdowns (stats views) | — | `setView(current)` (stats or stats-grid) — re-renders with new thresholds |
+| `statsBtn` click | Stats view button | — | In stats views → `setView("chart")`; otherwise → `setView("stats")` |
 | `splitBtn` click | Split/combine toggle | `{ split: !histogramIsSplitMode }` | Toggles split mode |
 | `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
 | `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Pushes history entry with `columns: true` marker (URL unchanged) |
@@ -605,7 +608,7 @@ other modules → shared.ts + dom-refs.ts
 | `histogramGridView` | `#histogram-grid-view` | Histogram grid table container |
 | `splitHistogramView` | `#split-histogram-view` | Split histogram container |
 | `splitHistogramScroll` | `#split-histogram-scroll` | Container for split charts (no inner scroll — single scroll pane on `#content-area`) |
-| `statsViewPanel` | `#stats-view` | Stats view container — grid of per-column stat cards (direct child of `#content-area`) |
+| `statsViewPanel` | `#stats-view` | Stats view container — stat cards (stats) or stats table (stats-grid, `.stats-grid-mode`) (direct child of `#content-area`) |
 | `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`; **hidden** in stats view) |
 
 ### 8.4 DOM Button/Control References (`dom-refs.ts`)
@@ -625,6 +628,9 @@ other modules → shared.ts + dom-refs.ts
 | `splitBtn` | `#split-btn` | Split/combine histogram button |
 | `binSizeSelect` | `#bin-size-select` | Histogram bin size dropdown |
 | `dayFilterSelect` | `#day-filter-select` | Day-of-week filter dropdown (histogram modes and stats view) |
+| `histogramControls` | `#histogram-controls` | Histogram-only control group (bin size + split) |
+| `dayFilterGroup` | `#day-filter-group` | Day-filter control group (visible in histogram modes **and** stats views) |
+| `statsCutoffs` | `#stats-cutoffs` | Stats high/low cutoff group (stats views only) |
 | `highCutoffSelect` | `#high-cutoff-select` | Stats high-threshold percentile dropdown (stats view only) |
 | `lowCutoffSelect` | `#low-cutoff-select` | Stats low-threshold percentile dropdown (stats view only) |
 | `statsBtn` | `#stats-btn` | Stats view toggle button |
@@ -855,25 +861,26 @@ User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView
 #### 10.5 Stats View Data Flow
 
 ```
-statsBtn click → setView("stats")
+statsBtn click → setView("stats")          (viewToggle in stats → setView("stats-grid"))
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
-  → renderStatsView(updateWaiting)
+  → renderStatsView(updateWaiting, asGrid)
       → updateWaiting("Fetching statistics…")
       → GET /api/stats?from=X&to=Y&columns=...&dayFilter=X&highCutoff=N&lowCutoff=M
       → appState.statsResult = response
-      → updateWaiting("Building stat cards…")
-      → clear #stats-view, build one stat card per entry in response.stats (§16)
+      → updateWaiting("Building stat cards…" | "Building stats grid…")
+      → clear #stats-view, build stat cards (§16.1) or stats table (§16.6);
+        stats-grid toggles the .stats-grid-mode class on the panel
       → return { ok: true }
   → setView detects response.stats.length === 0 → info-view (transient)
   → otherwise: waitingView.hide()
-  → showPanel("stats")            ← #stats-view
-  → hide #summary-cards           ← stats cards ARE the content
-  → push URL history (?view=stats[&dayFilter][&highCutoff][&lowCutoff])
+  → showPanel("stats")            ← #stats-view (both variants)
+  → hide #summary-cards           ← stat cards/table ARE the content
+  → push URL history (?view=stats|stats-grid[&dayFilter][&highCutoff][&lowCutoff])
   → enableAllControls()
   → updateRangeDays()
 
-cutoff/dayFilter change while in stats view → setView("stats")
+cutoff/dayFilter change while in a stats view → setView(current stats view)
   → same flow with the new parameter values (URL carries them)
 ```
 
@@ -1322,7 +1329,7 @@ If no unit is defined in the metadata, the label is shown without parentheses (e
 
 ## 16. Stats View
 
-The Stats view (`setView("stats")`) replaces the chart/grid area with a grid of **stat cards** — one per selected numeric column. All computation is done by the backend (`GET /api/stats`); the frontend only formats and renders the response. The summary-cards bar (`#summary-cards`) is **hidden** in this view — the stat cards *are* the view content.
+The Stats view (`setView("stats")`) replaces the chart/grid area with a grid of **stat cards** — one per selected numeric column. The `stats-grid` variant (`setView("stats-grid")`, §16.6) shows the same data as a table. All computation is done by the backend (`GET /api/stats`); the frontend only formats and renders the response. The summary-cards bar (`#summary-cards`) is **hidden** in these views — the stat cards/table *are* the view content.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -1435,3 +1442,4 @@ This section tracks changes to the design document itself. Every modification to
 | 3.2 | 2026-08-26 | §16.2 | High/low row tooltips echo the response `method` field: percentage-unit columns (e.g. SOC) use the direct data percentile as threshold instead of `mean ± z·σ` (backend design v3.1, #56) |
 | 3.3 | 2026-08-26 | §2.1, §2.3, §6.x button tables | Title-bar buttons compacted: horizontal padding `8px 16px` → `8px 10px`; grid button labels shortened — `📋 Data Grid` and `📊 Histogram Grid` both become `📋 Grid`, tooltips clarify which graph's data the grid shows (chart data / histogram binned averages) (#57) |
 | 4.0 | 2026-08-26 | §3.1, §8.1, §9.1, §9.3, new §16.6 | New `stats-grid` view mode — table variant of the Stats view (rows = measurements, columns = statistics: samples, average, max/min + first-occurrence, high/low min-day), toggled via `viewToggleBtn` in the stats views; `?view=stats-grid` URL state (#58) |
+| 4.1 | 2026-08-26 | §1.1, §2.2, §6.1, §7, §8.3, §8.4, §10.5 | Design review against implementation (#59): added `stats-view.ts` to source files + esbuild/test notes; status-bar label list gains Stats Grid; `setView` union and `renderStatsView(updateWaiting, asGrid)` signatures updated; DOM refs table gains `histogramControls`/`dayFilterGroup`/`statsCutoffs`; stats flow reflects both variants; fixed stats-grid cutoff/dayFilter re-render handlers (kept current stats view) |

@@ -575,17 +575,19 @@ dayFilterSelect.addEventListener("change", () => {
   const v = appState.activeView;
   if (v === "histogram" || v === "histogram-grid") {
     setView(v, { split: isSplitModeActive() });
-  } else if (v === "stats") {
-    setView("stats");
+  } else if (v === "stats" || v === "stats-grid") {
+    setView(v);
   }
 });
 
-// Cutoff changes — re-render stats view with new thresholds
+// Cutoff changes — re-render current stats view with new thresholds
 highCutoffSelect.addEventListener("change", () => {
-  if (appState.activeView === "stats") setView("stats");
+  const v = appState.activeView;
+  if (v === "stats" || v === "stats-grid") setView(v);
 });
 lowCutoffSelect.addEventListener("change", () => {
-  if (appState.activeView === "stats") setView("stats");
+  const v = appState.activeView;
+  if (v === "stats" || v === "stats-grid") setView(v);
 });
 
 // CSV export — stateless action
