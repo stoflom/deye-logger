@@ -109,6 +109,24 @@ def main():
             subs = tester.find_elements(By.CSS_SELECTOR, ".stat-card:first-child .stat-row-sub")
             t.check(len(subs) == 4, f"max/min/high/low sub-lines present (got {len(subs)})")
 
+        # #55: per-measurement accent colors + percent cutoffs
+        accents = tester.execute_script(
+            "return Array.from(document.querySelectorAll('.stat-card'))"
+            ".map(c => getComputedStyle(c).borderTopColor);"
+        )
+        t.check(
+            len(accents) >= 2 and accents[0] != accents[1],
+            f"stat cards carry distinct accent colors (got {accents[:3]})",
+        )
+        header_color = tester.execute_script(
+            "const h = document.querySelector('.stat-card .stat-card-header');"
+            "return h ? getComputedStyle(h).color : null;"
+        )
+        t.check(header_color == accents[0] if accents else False, f"header text uses accent color (got {header_color})")
+
+        high_sub = tester.find_element(By.CSS_SELECTOR, ".stat-card:first-child .stat-row:nth-child(5) .stat-row-sub").text
+        t.check("pct" not in high_sub and "%" in high_sub, f"high sub-line uses percent, not 'pct' (got '{high_sub}')")
+
         # Control visibility in stats view
         t.check(not visible(tester, "#view-toggle"), "view-toggle hidden in stats view")
         t.check(not visible(tester, "#histogram-btn"), "histogram-btn hidden in stats view")
