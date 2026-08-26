@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "2.7.0";
+const BACKEND_VERSION = "3.0.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -107,6 +107,7 @@ function parseColumnsParam(columnsParam: string | undefined): string[] {
   const requested = columnsParam.split(",").map((c) => c.trim()).filter(Boolean);
   const allowed = getColumnNameSet();
   const valid = requested.filter((c) => allowed.has(c));
+  if (valid.length === 0) return [];   // no valid columns → 400
   // Always ensure timestamp is present first
   if (!valid.includes("device_timestamp")) valid.unshift("device_timestamp");
   return valid;
@@ -360,6 +361,157 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     }
 
     res.json({ labels, datasets, maxValues });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Stats — per-column statistics over a date range ─────────
+// Percentile → one-tailed standard-normal deviate z (design §2.7)
+const HIGH_CUTOFF_Z: Record<number, number> = { 50: 0, 75: 0.674, 90: 1.282, 95: 1.645, 99: 2.326 };
+const LOW_CUTOFF_Z: Record<number, number> = { 1: 2.326, 5: 1.645, 10: 1.282, 25: 0.674, 50: 0 };
+
+// Parse a cutoff param against its allowed table; invalid → default
+function parseCutoffParam(raw: string | undefined, table: Record<number, number>, defaultValue: number): number {
+  const n = parseInt(raw ?? "", 10);
+  return table[n] !== undefined ? n : defaultValue;
+}
+
+interface StatSample { ms: number; day: string; v: number; ts: string }
+
+// Average per-day duration (minutes) where test(v) is true.
+// An interval between two consecutive samples counts only when BOTH samples
+// qualify. Intervals crossing midnight are split and attributed to the start
+// and end day. Averaged over days that have ≥1 sample (zero-duration days
+// stay in the denominator).
+function avgDailyMinutes(samples: StatSample[], test: (v: number) => boolean): number {
+  const daysWithSamples = new Set(samples.map((s) => s.day));
+  if (daysWithSamples.size === 0) return 0;
+
+  const perDay = new Map<string, number>();
+  const add = (day: string, ms: number) => perDay.set(day, (perDay.get(day) ?? 0) + ms);
+
+  for (let i = 0; i + 1 < samples.length; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+    if (!test(a.v) || !test(b.v)) continue;
+    if (a.day === b.day) {
+      add(a.day, b.ms - a.ms);
+    } else {
+      // Split at midnight of day a (DST-aware via hour=24 normalization)
+      const [y, m, d] = a.day.split("-").map(Number);
+      const endOfDayA = new Date(y, m - 1, d, 24, 0, 0, 0).getTime();
+      if (endOfDayA > a.ms) add(a.day, endOfDayA - a.ms);
+      const [y2, m2, d2] = b.day.split("-").map(Number);
+      const startOfDayB = new Date(y2, m2 - 1, d2).getTime();
+      if (b.ms > startOfDayB) add(b.day, b.ms - startOfDayB);
+    }
+  }
+
+  let total = 0;
+  for (const day of daysWithSamples) total += perDay.get(day) ?? 0;
+  return Math.round((total / daysWithSamples.size / 60000) * 10) / 10;
+}
+
+app.get("/api/stats", async (req: express.Request, res: express.Response) => {
+  try {
+    const db = openDatabase();
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    const columns = req.query.columns as string;
+
+    if (!from || !to || !columns) {
+      res.status(400).json({ error: "Missing 'from', 'to', and 'columns' query params" });
+      return;
+    }
+
+    const parsedCols = parseColumnsParam(columns);
+    if (parsedCols.length === 0) {
+      res.status(400).json({ error: "No valid columns requested" });
+      return;
+    }
+
+    const dayFilter = (req.query.dayFilter as string)?.toLowerCase() ?? "all";
+    const validDays = ["all", "sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const targetDay = validDays.includes(dayFilter) ? dayFilter : "all";
+    const dayIndex = targetDay === "all" ? -1 : ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(targetDay);
+
+    const highCutoff = parseCutoffParam(req.query.highCutoff as string, HIGH_CUTOFF_Z, 95);
+    const lowCutoff = parseCutoffParam(req.query.lowCutoff as string, LOW_CUTOFF_Z, 5);
+
+    const fromTs = `${from} 00:00:00`;
+    const toTs = `${to} 23:59:59`;
+
+    // Day-of-week filter pushed into SQLite (same pattern as /api/histogram)
+    const dayWhereClause = targetDay !== "all"
+      ? ` AND strftime('%w', device_timestamp) = ?`
+      : "";
+    const queryArgs: (string | number)[] = [fromTs, toTs];
+    if (targetDay !== "all") queryArgs.push(String(dayIndex));
+
+    const stmt = db.prepare(
+      `SELECT ${colListFromArray(parsedCols)} FROM inverter_telemetry
+       WHERE device_timestamp >= ? AND device_timestamp <= ?${dayWhereClause}
+       ORDER BY device_timestamp ASC`,
+    );
+    const rows = stmt.all(...queryArgs) as Record<string, unknown>[];
+
+    if (rows.length === 0) {
+      res.json({ stats: [] });
+      return;
+    }
+
+    const meta = getColumns();
+    const stats: Record<string, unknown>[] = [];
+
+    for (const col of parsedCols) {
+      const m = meta.find((c) => c.name === col);
+      if (!m || !m.is_numeric) continue;
+
+      // Collect non-null samples in timestamp order
+      const samples: StatSample[] = [];
+      for (const row of rows) {
+        const v = row[col];
+        if (typeof v !== "number" || Number.isNaN(v)) continue;
+        const ts = row.device_timestamp as string;
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) continue;
+        samples.push({ ms: d.getTime(), day: ts.slice(0, 10), v, ts });
+      }
+      const n = samples.length;
+      if (n === 0) continue;
+
+      let sum = 0;
+      let max = -Infinity, maxTs = "";
+      let min = Infinity, minTs = "";
+      for (const s of samples) {
+        sum += s.v;
+        if (s.v > max) { max = s.v; maxTs = s.ts; }   // strict > keeps first occurrence
+        if (s.v < min) { min = s.v; minTs = s.ts; }
+      }
+      const mean = sum / n;
+      let sq = 0;
+      for (const s of samples) sq += (s.v - mean) ** 2;
+      const stdDev = n > 1 ? Math.sqrt(sq / n) : 0;
+
+      const highThreshold = mean + HIGH_CUTOFF_Z[highCutoff] * stdDev;
+      const lowThreshold = mean - LOW_CUTOFF_Z[lowCutoff] * stdDev;
+
+      stats.push({
+        column: col,
+        label: m.label,
+        unit: m.unit ?? "",
+        count: n,
+        mean,
+        stdDev,
+        max: { value: max, timestamp: maxTs },
+        min: { value: min, timestamp: minTs },
+        high: { cutoff: highCutoff, threshold: highThreshold, avgDailyMinutes: avgDailyMinutes(samples, (v) => v > highThreshold) },
+        low: { cutoff: lowCutoff, threshold: lowThreshold, avgDailyMinutes: avgDailyMinutes(samples, (v) => v < lowThreshold) },
+      });
+    }
+
+    res.json({ stats });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

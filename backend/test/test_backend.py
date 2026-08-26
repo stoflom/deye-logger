@@ -21,13 +21,15 @@ import os
 import sqlite3
 import time
 import json
+import math
 import subprocess
 import signal
 import argparse
 import re
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from urllib.request import urlopen, Request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 # ── Configuration ───────────────────────────────────────────────────
 DB_PATH = "/tmp/deye_test_data.db"
@@ -201,8 +203,8 @@ def create_test_database(db_path: str) -> None:
 
 # ── HTTP Helpers ────────────────────────────────────────────────────
 
-def http_get(path: str, params: dict = None) -> dict:
-    """Make a GET request to the API and return the JSON response."""
+def http_get(path: str, params: dict = None) -> tuple:
+    """Make a GET request to the API and return (status_code, JSON response)."""
     url = f"{BASE_URL}{path}"
     if params:
         query = urlencode(params)
@@ -211,7 +213,13 @@ def http_get(path: str, params: dict = None) -> dict:
     try:
         req = Request(url)
         with urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read().decode())
+            return resp.status, json.loads(resp.read().decode())
+    except HTTPError as e:
+        # Non-2xx: return status so tests can assert on it
+        try:
+            return e.code, json.loads(e.read().decode())
+        except Exception:
+            return e.code, {"error": str(e)}
     except URLError as e:
         raise ConnectionError(f"Failed to connect to {url}: {e}")
     except Exception as e:
@@ -253,7 +261,8 @@ class TestResult:
 def test_version(t: TestResult) -> None:
     """Test GET /api/version returns correct version."""
     print("\n[Test 1] GET /api/version")
-    result = http_get("/api/version")
+    status, result = http_get("/api/version")
+    t.check(status == 200, f"Returns 200 (got {status})")
     t.check("version" in result, "Response has 'version' field")
     t.check(bool(re.match(r'^\d+\.\d+\.\d+$', result["version"])), f"Version matches semver pattern (got {result.get('version')})")
 
@@ -261,7 +270,8 @@ def test_version(t: TestResult) -> None:
 def test_columns(t: TestResult) -> None:
     """Test GET /api/columns returns column metadata."""
     print("\n[Test 2] GET /api/columns")
-    result = http_get("/api/columns")
+    status, result = http_get("/api/columns")
+    t.check(status == 200, f"Returns 200 (got {status})")
     t.check(isinstance(result, list), "Response is an array")
     t.check(len(result) == 23, f"Returns 23 test columns (got {len(result)})")
     if len(result) > 0:
@@ -277,7 +287,8 @@ def test_columns(t: TestResult) -> None:
 def test_dates(t: TestResult) -> None:
     """Test GET /api/dates returns min/max date range."""
     print("\n[Test 3] GET /api/dates")
-    result = http_get("/api/dates")
+    status, result = http_get("/api/dates")
+    t.check(status == 200, f"Returns 200 (got {status})")
     t.check("min" in result and "max" in result, "Response has 'min' and 'max' fields")
     t.check(result["min"] == "2026-07-27", f"Min date is 2026-07-27 (got {result.get('min')})")
     t.check(result["max"] == "2026-08-02", f"Max date is 2026-08-02 (got {result.get('max')})")
@@ -286,10 +297,11 @@ def test_dates(t: TestResult) -> None:
 def test_data_single_date(t: TestResult) -> None:
     """Test GET /api/data returns raw data for a single date."""
     print("\n[Test 4] GET /api/data (single date)")
-    result = http_get("/api/data", {
+    status, result = http_get("/api/data", {
         "date": "2026-07-27",
         "columns": "current_power,battery_soc"
     })
+    t.check(status == 200, f"Returns 200 (got {status})")
     t.check("rows" in result, "Response has 'rows' field")
     t.check(len(result["rows"]) == 96, f"Returns 96 rows for single day (got {len(result['rows'])})")
     if len(result["rows"]) > 0:
@@ -303,11 +315,12 @@ def test_data_single_date(t: TestResult) -> None:
 def test_data_range(t: TestResult) -> None:
     """Test GET /api/data-range returns data across multiple days."""
     print("\n[Test 5] GET /api/data-range (multiple days)")
-    result = http_get("/api/data-range", {
+    status, result = http_get("/api/data-range", {
         "from": "2026-07-27",
         "to": "2026-07-28",
         "columns": "current_power,battery_soc"
     })
+    t.check(status == 200, f"Returns 200 (got {status})")
     t.check("rows" in result, "Response has 'rows' field")
     t.check(len(result["rows"]) == 192, f"Returns 192 rows for 2 days (got {len(result['rows'])})")
 
@@ -317,30 +330,25 @@ def test_data_validation(t: TestResult) -> None:
     print("\n[Test 6] GET /api/data validation errors")
     
     # Missing date
-    try:
-        result = http_get("/api/data", {"columns": "current_power"})
-        # If we get here without error, that's a problem
-        t.check(False, "Missing 'date' param should return 400")
-    except ConnectionError:
-        pass  # Expected
-    except Exception as e:
-        # Check if it's a 400 error
-        if "400" in str(e):
-            t.check(True, "Missing 'date' param returns 400")
-        else:
-            t.check(False, f"Missing 'date' param error: {e}")
+    status, _ = http_get("/api/data", {"columns": "current_power"})
+    t.check(status == 400, f"Missing 'date' param returns 400 (got {status})")
+
+    # No valid columns
+    status, _ = http_get("/api/data", {"date": "2026-07-27", "columns": "not_a_column"})
+    t.check(status == 400, f"Unknown columns return 400 (got {status})")
 
 
 def test_histogram_all_days(t: TestResult) -> None:
     """Test GET /api/histogram with dayFilter=all (default)."""
     print("\n[Test 7] GET /api/histogram (dayFilter=all, 1-day range)")
-    result = http_get("/api/histogram", {
+    status, result = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power,battery_soc",
         "binMinutes": "60",
         "dayFilter": "all"
     })
+    t.check(status == 200, f"Returns 200 (got {status})")
     t.check("labels" in result, "Response has 'labels' field")
     t.check("datasets" in result, "Response has 'datasets' field")
     t.check("maxValues" in result, "Response has 'maxValues' field")
@@ -358,7 +366,7 @@ def test_histogram_day_filter_monday(t: TestResult) -> None:
     # Range: 2026-07-27 (Mon) to 2026-07-29 (Wed)
     # With dayFilter=mon, only Monday records should be included
     
-    result_all = http_get("/api/histogram", {
+    _, result_all = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-29",
         "columns": "current_power,battery_soc",
@@ -366,7 +374,7 @@ def test_histogram_day_filter_monday(t: TestResult) -> None:
         "dayFilter": "all"
     })
     
-    result_mon = http_get("/api/histogram", {
+    _, result_mon = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-29",
         "columns": "current_power,battery_soc",
@@ -378,7 +386,7 @@ def test_histogram_day_filter_monday(t: TestResult) -> None:
     t.check(len(result_mon["datasets"]) == 2, f"dayFilter=mon returns 2 datasets (got {len(result_mon['datasets'])})")
     
     # Verify that dayFilter=mon gives same result as dayFilter=all for single-day range
-    result_all_1day = http_get("/api/histogram", {
+    _, result_all_1day = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power,battery_soc",
@@ -404,7 +412,7 @@ def test_histogram_day_filter_sunday(t: TestResult) -> None:
     
     # Range: 2026-07-27 (Mon) to 2026-07-29 (Wed)
     # With dayFilter=sun, no records should match (no Sunday in range)
-    result = http_get("/api/histogram", {
+    _, result = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-29",
         "columns": "current_power,battery_soc",
@@ -421,7 +429,7 @@ def test_histogram_day_filter_all_days(t: TestResult) -> None:
     print("\n[Test 10] GET /api/histogram (all day filters on matching range)")
     
     # Test each day filter with a 7-day range containing all days
-    result_all = http_get("/api/histogram", {
+    _, result_all = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-08-02",
         "columns": "current_power",
@@ -438,7 +446,7 @@ def test_histogram_day_filter_all_days(t: TestResult) -> None:
     # Now test each day individually
     days = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
     for day in days:
-        result = http_get("/api/histogram", {
+        _, result = http_get("/api/histogram", {
             "from": "2026-07-27",
             "to": "2026-08-02",
             "columns": "current_power",
@@ -457,7 +465,7 @@ def test_histogram_day_filter_invalid(t: TestResult) -> None:
     print("\n[Test 11] GET /api/histogram (invalid dayFilter values)")
     
     # Invalid dayFilter should be treated as "all"
-    result_invalid = http_get("/api/histogram", {
+    _, result_invalid = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power",
@@ -465,7 +473,7 @@ def test_histogram_day_filter_invalid(t: TestResult) -> None:
         "dayFilter": "invalid"
     })
     
-    result_all = http_get("/api/histogram", {
+    _, result_all = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power",
@@ -481,7 +489,7 @@ def test_histogram_day_filter_case_insensitive(t: TestResult) -> None:
     """Test that dayFilter is case-insensitive."""
     print("\n[Test 12] GET /api/histogram (case-insensitive dayFilter)")
     
-    result_lower = http_get("/api/histogram", {
+    _, result_lower = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power",
@@ -489,7 +497,7 @@ def test_histogram_day_filter_case_insensitive(t: TestResult) -> None:
         "dayFilter": "mon"
     })
     
-    result_upper = http_get("/api/histogram", {
+    _, result_upper = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power",
@@ -497,7 +505,7 @@ def test_histogram_day_filter_case_insensitive(t: TestResult) -> None:
         "dayFilter": "MON"
     })
     
-    result_mixed = http_get("/api/histogram", {
+    _, result_mixed = http_get("/api/histogram", {
         "from": "2026-07-27",
         "to": "2026-07-27",
         "columns": "current_power",
@@ -518,7 +526,7 @@ def test_histogram_different_bin_sizes(t: TestResult) -> None:
     bin_sizes = [("15", 96), ("30", 48), ("60", 24)]
     
     for bin_size, expected_bins in bin_sizes:
-        result = http_get("/api/histogram", {
+        _, result = http_get("/api/histogram", {
             "from": "2026-07-27",
             "to": "2026-07-27",
             "columns": "current_power",
@@ -534,17 +542,114 @@ def test_histogram_missing_params(t: TestResult) -> None:
     print("\n[Test 14] GET /api/histogram (validation errors)")
     
     # Missing 'from'
-    try:
-        http_get("/api/histogram", {
-            "to": "2026-07-27",
-            "columns": "current_power"
-        })
-        t.check(False, "Missing 'from' param should return 400")
-    except Exception as e:
-        if "400" in str(e):
-            t.check(True, "Missing 'from' param returns 400")
-        else:
-            t.check(False, f"Unexpected error: {e}")
+    status, _ = http_get("/api/histogram", {
+        "to": "2026-07-27",
+        "columns": "current_power"
+    })
+    t.check(status == 400, f"Missing 'from' param returns 400 (got {status})")
+
+    # Missing 'to'
+    status, _ = http_get("/api/histogram", {
+        "from": "2026-07-27",
+        "columns": "current_power"
+    })
+    t.check(status == 400, f"Missing 'to' param returns 400 (got {status})")
+
+    # Missing 'columns'
+    status, _ = http_get("/api/histogram", {
+        "from": "2026-07-27",
+        "to": "2026-07-27"
+    })
+    t.check(status == 400, f"Missing 'columns' param returns 400 (got {status})")
+
+    # No valid columns
+    status, _ = http_get("/api/histogram", {
+        "from": "2026-07-27",
+        "to": "2026-07-27",
+        "columns": "not_a_column"
+    })
+    t.check(status == 400, f"Unknown columns return 400 (got {status})")
+
+
+def test_stats(t: TestResult) -> None:
+    """Test GET /api/stats — values, dayFilter, cutoffs, validation."""
+    print("\n[Test 15] GET /api/stats")
+
+    # 1-day: exact known values for current_power (Mon, 96 samples @ 15 min)
+    status, result = http_get("/api/stats", {
+        "from": "2026-07-27", "to": "2026-07-27",
+        "columns": "current_power,battery_soc"
+    })
+    t.check(status == 200, f"Returns 200 (got {status})")
+    t.check("stats" in result, "Response has 'stats' field")
+    t.check(len(result["stats"]) == 2, f"2 entries for 2 numeric columns (got {len(result['stats'])})")
+    s = result["stats"][0]
+    t.check(s["column"] == "current_power", "First entry is current_power")
+    t.check(s["label"] == "Current Power", f"Label from column_metadata (got {s.get('label')})")
+    t.check(s["unit"] == "W", f"Unit from column_metadata (got {s.get('unit')})")
+    t.check(s["count"] == 96, f"count=96 (got {s['count']})")
+    t.check(abs(s["mean"] - 237.5) < 1e-9, f"mean=237.5 (got {s['mean']})")
+    t.check(abs(s["stdDev"] - 71.2244) < 0.001, f"stdDev≈71.2244 (got {s['stdDev']})")
+    t.check(s["max"] == {"value": 375, "timestamp": "2026-07-27 23:45:00"},
+            f"max with first-occurrence ts (got {s['max']})")
+    t.check(s["min"] == {"value": 100, "timestamp": "2026-07-27 00:00:00"},
+            f"min with first-occurrence ts (got {s['min']})")
+    t.check(abs(s["high"]["threshold"] - 354.6642) < 0.001, f"high threshold=mean+1.645σ (got {s['high']['threshold']})")
+    t.check(s["high"]["avgDailyMinutes"] == 15.0, f"high avg 15 min/day (got {s['high']['avgDailyMinutes']})")
+    t.check(abs(s["low"]["threshold"] - 120.3358) < 0.001, f"low threshold=mean-1.645σ (got {s['low']['threshold']})")
+    t.check(s["low"]["avgDailyMinutes"] == 15.0, f"low avg 15 min/day (got {s['low']['avgDailyMinutes']})")
+
+    # 5-day range: max/min first occurrences span the range
+    _, result = http_get("/api/stats", {
+        "from": "2026-07-27", "to": "2026-07-31", "columns": "current_power"
+    })
+    s = result["stats"][0]
+    t.check(s["count"] == 480, f"5-day count=480 (got {s['count']})")
+    t.check(s["max"]["timestamp"] == "2026-07-31 23:45:00", f"max first occurrence on last day (got {s['max']['timestamp']})")
+    t.check(s["min"]["timestamp"] == "2026-07-27 00:00:00", f"min first occurrence on first day (got {s['min']['timestamp']})")
+    t.check(s["high"]["avgDailyMinutes"] == 60.0, f"5-day high avg 60 min/day (got {s['high']['avgDailyMinutes']})")
+
+    # dayFilter: fri on 5-day range → 96 samples; sun → empty
+    _, result = http_get("/api/stats", {
+        "from": "2026-07-27", "to": "2026-07-31", "columns": "current_power", "dayFilter": "fri"
+    })
+    s = result["stats"][0]
+    t.check(s["count"] == 96, f"dayFilter=fri count=96 (got {s['count']})")
+    t.check(abs(s["mean"] - 637.5) < 1e-9, f"dayFilter=fri mean=637.5 (got {s['mean']})")
+    _, result = http_get("/api/stats", {
+        "from": "2026-07-27", "to": "2026-07-31", "columns": "current_power", "dayFilter": "sun"
+    })
+    t.check(result["stats"] == [], f"dayFilter=sun on Mon-Fri range → empty (got {result['stats']})")
+
+    # Custom cutoffs: 90/10 use z=1.282
+    _, result = http_get("/api/stats", {
+        "from": "2026-07-27", "to": "2026-07-31", "columns": "current_power", "highCutoff": "90", "lowCutoff": "10"
+    })
+    s = result["stats"][0]
+    t.check(s["high"]["cutoff"] == 90 and s["low"]["cutoff"] == 10, "Echoes requested cutoffs")
+    t.check(abs(s["high"]["threshold"] - 640.4974) < 0.001, f"highCutoff=90 → mean+1.282σ (got {s['high']['threshold']})")
+    t.check(abs(s["low"]["threshold"] - 234.5026) < 0.001, f"lowCutoff=10 → mean-1.282σ (got {s['low']['threshold']})")
+
+    # Invalid values fall back to defaults
+    _, result = http_get("/api/stats", {
+        "from": "2026-07-27", "to": "2026-07-27", "columns": "current_power",
+        "highCutoff": "999", "lowCutoff": "42", "dayFilter": "xyz"
+    })
+    s = result["stats"][0]
+    t.check(s["high"]["cutoff"] == 95 and s["low"]["cutoff"] == 5, f"Invalid cutoffs → defaults 95/5 (got {s['high']['cutoff']}/{s['low']['cutoff']})")
+    t.check(s["count"] == 96, f"Invalid dayFilter → all (count {s['count']})")
+
+    # Validation errors
+    status, _ = http_get("/api/stats", {"from": "2026-07-27", "columns": "current_power"})
+    t.check(status == 400, f"Missing 'to' returns 400 (got {status})")
+    status, _ = http_get("/api/stats", {"from": "2026-07-27", "to": "2026-07-27", "columns": "not_a_column"})
+    t.check(status == 400, f"Unknown columns return 400 (got {status})")
+
+    # Non-numeric columns only → empty; range without data → empty
+    _, result = http_get("/api/stats", {"from": "2026-07-27", "to": "2026-07-27", "columns": "inverter_sn"})
+    t.check(result["stats"] == [], "Non-numeric columns → empty stats")
+    _, result = http_get("/api/stats", {"from": "2020-01-01", "to": "2020-01-02", "columns": "current_power"})
+    t.check(result["stats"] == [], "Range without data → empty stats")
 
 
 def main():
@@ -620,6 +725,7 @@ def main():
         test_histogram_day_filter_case_insensitive(test_result)
         test_histogram_different_bin_sizes(test_result)
         test_histogram_missing_params(test_result)
+        test_stats(test_result)
     except Exception as e:
         print(f"\n✗ Test error: {e}")
         import traceback
