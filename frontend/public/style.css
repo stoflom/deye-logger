@@ -143,7 +143,7 @@ body {
    BUTTONS
    ============================================================ */
 .btn-view {
-  padding: 8px 16px;
+  padding: 8px 10px;
   background: #4a5568;
   color: #cbd5e0;
   border: 1px solid #718096;
@@ -179,7 +179,7 @@ body {
 }
 
 .columns-toggle {
-  padding: 8px 16px;
+  padding: 8px 10px;
   background: #4a5568;
   color: #cbd5e0;
   border: 1px solid #718096;
@@ -215,7 +215,7 @@ body {
 }
 
 .btn-export {
-  padding: 8px 16px;
+  padding: 8px 10px;
   background: #276749;
   color: white;
   border: 1px solid #38a169;

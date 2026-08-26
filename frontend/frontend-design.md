@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v3.2
+> **Status:** v3.3
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -64,12 +64,14 @@ These objects are **always rendered and visible** regardless of the current view
 
 The title bar contains **all application buttons and controls** in a single horizontal area. When horizontal space runs out, buttons **wrap into additional rows** automatically (CSS `flex-wrap: wrap`). The title bar grows vertically as needed to accommodate wrapped rows, pushing the rest of the page content down. This is different from a fixed-height title bar — the title bar height is **dynamic**.
 
+**Compact buttons:** the title-bar buttons (`.btn-view`, `.btn-export`, `.columns-toggle`) use compact horizontal padding (`8px 10px`) to save width; view names on buttons are shortened — the grid buttons simply read **`Grid`** (the grid shows the data of the graph; tooltips disambiguate chart-data vs. histogram-data grids).
+
 **Button ordering in wrapped rows:** Buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next row. This means the bin-size and split buttons may appear on a second row when the viewport is narrow.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │ ☰ │
-│  📋 Data Grid │ 📊 Histogram │ 📈 Stats │ ⬇ CSV │ Bin: 15 ▼ │ Day: All ▼ │
+│  📋 Grid │ 📊 Histogram │ 📈 Stats │ ⬇ CSV │ Bin: 15 ▼ │ Day: All ▼ │
 │  High: 95% ▼ │ Low: 5% ▼ │ Split │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -106,7 +108,7 @@ Buttons use the `.active` CSS class (blue background `#3182ce`) to indicate the 
 
 | Button | ID | Active when… |
 | --------- | ----- | --------- |
-| `📋 Data Grid` | `#view-toggle` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
+| `📋 Grid` | `#view-toggle` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `📊 Histogram` | `#histogram-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `☰ Select` | `#columns-toggle` | When the **columns panel is open** |
 
@@ -692,19 +694,19 @@ In the stats view, `viewToggleBtn` and `histogramToggleBtn` are **hidden** (stat
 
 | `appState.activeView` | Button Text | Button Title | Toggles To |
 | ---------------------- | ------------ | ------------- | ------------ |
-| `chart` | `📋 Data Grid` | "Switch to data grid" | `grid` |
-| `grid` | `📈 Chart` | "Switch to chart" | `chart` |
-| `histogram` | `📊 Histogram Grid` | "Switch to histogram grid" | `histogram-grid` |
-| `histogram-grid` | `📈 Histogram Chart` | "Switch to histogram chart" | `histogram` |
+| `chart` | `📋 Grid` | "Show the chart data as a grid" | `grid` |
+| `grid` | `📈 Chart` | "Switch back to the chart" | `chart` |
+| `histogram` | `📋 Grid` | "Show the histogram data as a grid" | `histogram-grid` |
+| `histogram-grid` | `📈 Histogram Chart` | "Switch back to the histogram chart" | `histogram` |
 
 #### Histogram Toggle Button Labels (`histogramToggleBtn`)
 
 | `appState.activeView` | Button Text | Button Title | Toggles To |
 | ---------------------- | ------------ | ------------- | ------------ |
 | `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
-| `grid` | `📊 Histogram Grid` | "Show binned average histogram grid" | `histogram-grid` |
-| `histogram` | `📋 Raw Chart` | "Switch back to raw data chart" | `chart` |
-| `histogram-grid` | `📋 Raw Grid` | "Switch back to raw data grid" | `grid` |
+| `grid` | `📋 Grid` | "Show the histogram data as a grid (binned averages)" | `histogram-grid` |
+| `histogram` | `📋 Raw Chart` | "Switch back to the raw data chart" | `chart` |
+| `histogram-grid` | `📋 Raw Grid` | "Switch back to the data grid" | `grid` |
 
 #### Columns Toggle Button Labels (`columnsToggleBtn`)
 
@@ -1407,3 +1409,4 @@ This section tracks changes to the design document itself. Every modification to
 | 3.0 | 2026-08-26 | §1–§16, new | New Stats view — per-column stat cards (mean, max/min + first occurrence, high/low average daily durations) computed by new backend `GET /api/stats`; new `#stats-btn`, `#high-cutoff-select`, `#low-cutoff-select` controls; day filter now shared with stats view; status bar always shows selected-range day count (`#range-days`); CSS tooltips on all stat cards; new `stats` view mode in setView/URL state |
 | 3.1 | 2026-08-26 | §16.1, §16.5 | Stat cards get a per-measurement accent color (`--stat-accent`: 3px top border + header text) using a shared `CHART_PALETTE` moved to `shared.ts` so stats and chart colors match; cutoff abbreviation in card sub-lines changes from `(95th pct)` to `(95%)` (#55) |
 | 3.2 | 2026-08-26 | §16.2 | High/low row tooltips echo the response `method` field: percentage-unit columns (e.g. SOC) use the direct data percentile as threshold instead of `mean ± z·σ` (backend design v3.1, #56) |
+| 3.3 | 2026-08-26 | §2.1, §2.3, §6.x button tables | Title-bar buttons compacted: horizontal padding `8px 16px` → `8px 10px`; grid button labels shortened — `📋 Data Grid` and `📊 Histogram Grid` both become `📋 Grid`, tooltips clarify which graph's data the grid shows (chart data / histogram binned averages) (#57) |

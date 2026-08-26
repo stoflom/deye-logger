@@ -230,14 +230,14 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   if (isHistogramMode) {
     if (view === "histogram") {
       histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Chart";
-      histogramToggleBtn.title = "Switch back to raw data chart";
+      histogramToggleBtn.title = "Switch back to the raw data chart";
     } else {
       histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Grid";
-      histogramToggleBtn.title = "Switch back to raw data grid";
+      histogramToggleBtn.title = "Switch back to the data grid";
     }
   } else if (view === "grid") {
-    histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram Grid";
-    histogramToggleBtn.title = "Show binned average histogram grid";
+    histogramToggleBtn.textContent = "\uD83D\uDCCB Grid";
+    histogramToggleBtn.title = "Show the histogram data as a grid (binned averages)";
   } else {
     histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram";
     histogramToggleBtn.title = "Show binned average histogram";
@@ -256,11 +256,11 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
     statsBtn.title = "Show per-column statistics for the selected range";
   }
   if (isHistogramMode) {
-    viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCA Histogram Grid" : "\uD83D\uDCC8 Histogram Chart";
-    viewToggleBtn.title = view === "histogram" ? "Switch to histogram grid" : "Switch to histogram chart";
+    viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Histogram Chart";
+    viewToggleBtn.title = view === "histogram" ? "Show the histogram data as a grid" : "Switch back to the histogram chart";
   } else {
-    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Data Grid" : "\uD83D\uDCC8 Chart";
-    viewToggleBtn.title = view === "chart" ? "Switch to data grid" : "Switch to chart";
+    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Chart";
+    viewToggleBtn.title = view === "chart" ? "Show the chart data as a grid" : "Switch back to the chart";
   }
 
   // Split button — visible only in histogram (not histogram-grid)
