@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v2.7
+> **Status:** v3.0
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -354,7 +354,92 @@ If no data or no numeric columns are found, returns:
 
 ---
 
-### 2.7 `POST /api/refresh`
+### 2.7 `GET /api/stats`
+
+Computes per-column statistics across a date range. Designed for the frontend Stats view: one result object per selected numeric column. All calculations (mean, extremes, high/low durations) are done **entirely in the backend** — the frontend only renders the returned values.
+
+**Request:**
+
+```
+GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,current_power&dayFilter=all&highCutoff=95&lowCutoff=5
+```
+
+**Query Parameters:**
+
+| Parameter | Required | Description |
+| ----------- | ---------- | ------------- |
+| `from` | Yes | Start date in YYYY-MM-DD format (inclusive) |
+| `to` | Yes | End date in YYYY-MM-DD format (inclusive) |
+| `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
+| `dayFilter` | No | Day-of-week filter. Default: `all`. Values: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat`. When set, only rows falling on that day of week participate in **all** statistics. Same semantics as `/api/histogram`. Invalid values are treated as `all`. |
+| `highCutoff` | No | Percentile for the "high" threshold. Default: `95`. Allowed values: `50`, `75`, `90`, `95`, `99`. The high threshold is `mean + z * stdDev` where `z` is the standard-normal deviate for the percentile (see table below). Invalid values fall back to the default. |
+| `lowCutoff` | No | Percentile for the "low" threshold. Default: `5`. Allowed values: `1`, `5`, `10`, `25`, `50`. The low threshold is `mean - z * stdDev`. Invalid values fall back to the default. |
+
+**Percentile → z mapping** (one-tailed standard normal):
+
+| Cutoff | 50 | 75 | 90 | 95 | 99 | 1 | 5 | 10 | 25 |
+| -------- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ---- |
+| z | 0.000 | 0.674 | 1.282 | 1.645 | 2.326 | 2.326 | 1.645 | 1.282 | 0.674 |
+
+**Validation:**
+
+- If any of `from`, `to`, or `columns` is missing → `400 Bad Request`
+- If no valid columns are requested → `400 Bad Request`
+- Invalid `dayFilter` / `highCutoff` / `lowCutoff` values → silently treated as defaults
+
+**Response (200 OK):**
+
+```json
+{
+  "stats": [
+    {
+      "column": "current_power",
+      "label": "Grid Power (W)",
+      "unit": "W",
+      "count": 2016,
+      "mean": 123.45,
+      "stdDev": 678.90,
+      "max": { "value": 5120.0, "timestamp": "2025-07-22 13:30:00" },
+      "min": { "value": -310.0, "timestamp": "2025-07-20 01:05:00" },
+      "high": { "cutoff": 95, "threshold": 1237.84, "avgDailyMinutes": 42.5 },
+      "low":  { "cutoff": 5,  "threshold": -997.84, "avgDailyMinutes": 6.0 }
+    }
+  ]
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+| ------- | ------ | ------------- |
+| `stats` | object[] | One entry per selected **numeric** column that has at least one non-null sample in the range. Metadata/text columns are excluded. Order follows the order of the requested `columns` parameter. |
+| `stats[].column` | string | Internal column name |
+| `stats[].label` | string | Human-readable label (`column_metadata.display_label`) |
+| `stats[].unit` | string | Unit from `column_metadata.unit`; `""` if none |
+| `stats[].count` | number | Number of non-null samples included |
+| `stats[].mean` | number | Arithmetic mean of all samples in the range |
+| `stats[].stdDev` | number | Population standard deviation: `sqrt(Σ(x − mean)² / n)`. `0` when `count < 2` |
+| `stats[].max` | object | `{ value, timestamp }` — maximum value and the **first occurrence** (earliest timestamp) at which it is observed |
+| `stats[].min` | object | `{ value, timestamp }` — minimum value and the **first occurrence** (earliest timestamp) at which it is observed |
+| `stats[].high` | object | `{ cutoff, threshold, avgDailyMinutes }` — the percentile used, the computed high threshold (`mean + z·σ`), and the average per-day duration (minutes) the value spent **strictly above** the threshold (see §5.4) |
+| `stats[].low` | object | Same as `high` but **strictly below** the low threshold (`mean − z·σ`) |
+
+**Empty Response:**
+If no data exists or no selected numeric column has samples, returns:
+
+```json
+{ "stats": [] }
+```
+
+**Edge cases:**
+
+- `count < 2`: `stdDev = 0`, both thresholds equal `mean`, durations are `0`.
+- A calendar day with samples but none on the relevant side of a threshold contributes `0` minutes but **is counted** in the average denominator ("average per day with data").
+- When `dayFilter` is active, per-day grouping is still by calendar day; only matching weekdays contribute rows.
+
+---
+
+### 2.8 `POST /api/refresh`
 
 Triggers the Python data ingestion script (`deye-cloud/deye-logger.py`) to fetch the latest telemetry data from the Deye Cloud API and import it into the SQLite database. After success, the server re-opens the database to pick up new data.
 
@@ -453,7 +538,7 @@ Client → GET /api/data-range?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...
        Return { rows: [...] }
 ```
 
-### 5.3 Histogram Queries (`/api/histogram`)
+### 5.3 Histogram Queries (`/api/histogram`) (`/api/histogram`)
 
 ```
 Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinutes=N&dayFilter=X
@@ -483,6 +568,40 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
 - `dayFilter=mon` (or any other day): only rows whose `device_timestamp` falls on that day of week are included.
 - Day mapping: `sun=0`, `mon=1`, `tue=2`, `wed=3`, `thu=4`, `fri=5`, `sat=6` (JavaScript `Date.getDay()` convention).
 - Filtering is applied **after** the SQL range query, before binning. This means the date range still controls the overall window, but only matching days contribute data to the bins.
+
+### 5.4 Stats Queries (`/api/stats`)
+
+```
+Client → GET /api/stats?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&dayFilter=X&highCutoff=P&lowCutoff=Q
+           ↓
+       Parse columns (validate against column_metadata, prepend device_timestamp)
+           ↓
+       Parse dayFilter (default: "all"), highCutoff (default: 95), lowCutoff (default: 5)
+           ↓
+       Query all rows in range (same SQL as data-range)
+           ↓
+       If dayFilter != "all", keep only rows on that day of week
+           ↓
+       For each selected numeric column (in request order):
+           collect non-null samples ordered by device_timestamp
+           ├─ mean, population stdDev
+           ├─ max / min value + earliest timestamp at which each is first observed
+           ├─ highThreshold = mean + z(highCutoff) * stdDev
+           ├─ lowThreshold  = mean - z(lowCutoff)  * stdDev
+           ├─ per calendar day with samples, duration on a side =
+           │     Σ (t[i+1] − t[i]) over consecutive sample pairs where
+           │     BOTH samples are strictly beyond that threshold
+           ├─ avgDailyMinutes = (Σ per-day durations) / (days with ≥1 sample), in minutes
+           └─ retrieve label + unit from column_metadata
+           ↓
+       Return { stats: [...] } (columns with zero samples omitted)
+```
+
+**Duration semantics:**
+
+- Time is measured between consecutive samples; an interval counts as "above" (or "below") only when **both** bounding samples are strictly beyond the threshold. This makes the result deterministic and independent of sampling rate, with a small (≤ 1 sample interval) under-count at episode boundaries.
+- `avgDailyMinutes` is averaged over days that have at least one sample for that column; days without any qualifying samples contribute `0` but remain in the denominator.
+- Null/missing values are skipped — they break continuity (the interval straddling a gap is not counted).
 
 ---
 
@@ -555,3 +674,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.5 | 2026-07-30 | §8 | Lock file guard tests — validates shared lock file format, 409 response with lock details, stale lock auto-cleanup |
 | 2.6 | 2026-07-30 | §8 | Test table updated to list all 7 scenarios; manual testing adds lock file path verification |
 | 2.7 | 2026-08-15 | §2.7, §3, §8 | Remove backend lock file guard — lock management delegated entirely to Python script; removes redundant lock file that conflicted with Python-side lock; 409 status code removed |
+| 3.0 | 2026-08-26 | §2.7, §2.8, §5.4 | New `GET /api/stats` endpoint — per-column statistics (mean, max/min with first-occurrence timestamp, high/low average daily durations) with `dayFilter`, `highCutoff`, `lowCutoff` parameters; all computation in backend; refresh endpoint renumbered to §2.8 |

@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v2.8
+> **Status:** v3.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -34,6 +34,7 @@ The application is a single-page app with three vertical regions:
 │  │ • info-view (non-modal info msg)   │ │
 │  │ • columns-view (selection panel)   │ │
 │  │ • data-view (chart/grid/histogram) │ │
+│  │ • stats-view (per-column stat cards)│ │
 │  └────────────────────────────────────┘ │
 └──────────────────────────────────────────┘
 ```
@@ -68,7 +69,8 @@ The title bar contains **all application buttons and controls** in a single hori
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │ ☰ │
-│  📋 Data Grid │ 📊 Histogram │ ⬇ CSV │ Bin: 15 ▼ │ Day: All ▼ │ Split │
+│  📋 Data Grid │ 📊 Histogram │ 📈 Stats │ ⬇ CSV │ Bin: 15 ▼ │ Day: All ▼ │
+│  High: 95% ▼ │ Low: 5% ▼ │ Split │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -81,9 +83,12 @@ The title bar contains **all application buttons and controls** in a single hori
 | Columns toggle | `#columns-toggle` | Open/close column selection panel |
 | View toggle | `#view-toggle` | Toggle between chart ↔ grid (or histogram ↔ histogram-grid) |
 | Histogram button | `#histogram-btn` | Toggle between normal mode and histogram mode |
+| Stats button | `#stats-btn` | Toggle between the Stats view and the chart view |
 | CSV export | `#export-btn` | Export current grid as CSV (hidden in chart views) |
 | Bin size | `#bin-size-select` | Histogram bin size dropdown: `5` / `10` / `15` / `30` / `60` (hidden in non-histogram modes) |
-| Day filter | `#day-filter-select` | Histogram day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` (hidden in non-histogram modes) |
+| Day filter | `#day-filter-select` | Day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat`. Visible in histogram modes **and** the Stats view; limits histogram bins (histogram) or statistics calculations (Stats) to that weekday |
+| High cutoff | `#high-cutoff-select` | Stats high-threshold percentile dropdown: `50` / `75` / `90` / `95` / `99` (default `95`); visible only in the Stats view |
+| Low cutoff | `#low-cutoff-select` | Stats low-threshold percentile dropdown: `1` / `5` / `10` / `25` / `50` (default `5`); visible only in the Stats view |
 | Split button | `#split-btn` | Split/combine histogram buttons (visible only in histogram view) |
 
 ### 2.2 Status Bar (`<div class="status-bar">`)
@@ -91,7 +96,8 @@ The title bar contains **all application buttons and controls** in a single hori
 | Element | ID | Purpose |
 | --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
-| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid |
+| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid / Stats |
+| Range days | `#range-days` | Always visible. Shows the number of days in the selected date range as "N days" (or "1 day"). Count = number of calendar days from `from` to `to` inclusive; any fractional day (e.g. a partial first/last day of the range relative to available data) is **counted as a whole day** (`Math.ceil`). Updated whenever the date range changes, independent of the active view |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
 ### 2.3 Button Active State Styling
@@ -116,13 +122,15 @@ These objects define the **page state** and must be pushed to URL history so tha
 
 | Parameter | Values | Source | Used By |
 | ----------- | -------- | -------- | --------- |
-| `view` | `chart`, `grid`, `histogram`, `histogram-grid` | `setView()` | `getUrlState()`, `setView()` |
+| `view` | `chart`, `grid`, `histogram`, `histogram-grid`, `stats` | `setView()` | `getUrlState()`, `setView()` |
 | `date` | ISO date string (YYYY-MM-DD) | Date inputs, nav buttons | `getUrlState()` (single day) |
 | `from` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range start) |
 | `to` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range end) |
 | `binSize` | `5`, `10`, `15`, `30`, `60` | `#bin-size-select` | `getUrlState()`, histogram fetch |
 | `split` | `1` (presence = true) | Split button | `getUrlState()`, `setView()` |
-| `dayFilter` | `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` | `#day-filter-select` | `getUrlState()`, histogram fetch |
+| `dayFilter` | `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` | `#day-filter-select` | `getUrlState()`, histogram fetch, stats fetch |
+| `highCutoff` | `50`, `75`, `90`, `95`, `99` | `#high-cutoff-select` | `getUrlState()`, stats fetch |
+| `lowCutoff` | `1`, `5`, `10`, `25`, `50` | `#low-cutoff-select` | `getUrlState()`, stats fetch |
 
 **Serialization rules** (`buildUrlString()`):
 
@@ -131,8 +139,10 @@ These objects define the **page state** and must be pushed to URL history so tha
 - Histogram with custom bin: `?view=histogram&date=2025-07-20&binSize=30`
 - Histogram split: `?view=histogram&date=2025-07-20&split=1`
 - Histogram with day filter: `?view=histogram&date=2025-07-20&dayFilter=mon`
+- Stats view: `?view=stats&date=2025-07-20&highCutoff=90&lowCutoff=10&dayFilter=sun`
 - Default `binSize=15` is omitted from URL
 - Default `dayFilter=all` is omitted from URL
+- Default `highCutoff=95` and `lowCutoff=5` are omitted from URL
 
 ### 3.2 History State (pushState payload)
 
@@ -161,7 +171,9 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | `histogramBtn` click | Yes (on success) | Mode toggle |
 | Date nav (prev/next/today/picker) | Yes (on success) | Date change triggers full re-render |
 | `binSizeSelect` change | Yes (on success) | Re-renders current view |
-| `dayFilterSelect` change | Yes (on success) | Re-renders current view |
+| `dayFilterSelect` change | Yes (on success) | Re-renders current view (histogram or stats) |
+| `highCutoffSelect` / `lowCutoffSelect` change | Yes (on success) | Re-renders stats view with new cutoffs |
+| Stats button click | Yes (on success) | Enters `stats` view / returns to `chart` |
 | Split/Combine toggle | Yes (on success) | `split=1` in URL |
 | `popstate` (browser back/forward) | No (`replace`) | Restores view without double-push |
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
@@ -206,8 +218,9 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Histogram view** | `#histogram-view` | `setView("histogram")` (not split) | Yes |
 | **Histogram grid view** | `#histogram-grid-view` | `setView("histogram-grid")` | Yes |
 | **Split histogram view** | `#split-histogram-view` | `setView("histogram", { split: true })` | Yes (`split=1`) |
+| **Stats view** | `#stats-view` | `setView("stats")` | Yes |
 
-**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, split-histogram }` is visible. `setView` enforces this.
+**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, split-histogram, stats }` is visible. `setView` enforces this.
 
 ---
 
@@ -224,7 +237,7 @@ interface SetViewOptions {
 }
 
 function setView(
-  view: "chart" | "grid" | "histogram" | "histogram-grid",
+  view: "chart" | "grid" | "histogram" | "histogram-grid" | "stats",
   opts?: SetViewOptions,
 ): Promise<void>
 ```
@@ -285,12 +298,21 @@ setView(view, opts?)
   │     │       draw combined chart; split mode also draws individual charts
   │     │       return { ok: true }
   │     │
-  │     └─ view === "histogram-grid"
+  │     ├─ view === "histogram-grid"
   │             → renderHistogramGridView(updateWaiting)
   │             updateWaiting("Fetching histogram data…")
   │             GET /api/histogram → histogramLastApiResult
   │             updateWaiting("Building grid…")
   │             init/update histogram AG Grid
+  │             return { ok: true }
+  │     │
+  │     └─ view === "stats"
+  │             → renderStatsView(updateWaiting)
+  │             updateWaiting("Fetching statistics…")
+  │             GET /api/stats?from&to&columns&dayFilter&highCutoff&lowCutoff
+  │               → appState.statsResult (per-column stat objects, see §16)
+  │             updateWaiting("Building stat cards…")
+  │             build one stat card per numeric column into #stats-view
   │             return { ok: true }
   │
   ├─ STEP 4: Handle result
@@ -326,6 +348,14 @@ setView(view, opts?)
   │     │     │  ├─ → enableAllControls()
   │     │     │  ├─ → NO history push (transient)
   │     │     │  └─ → return
+  │     │
+  │     │  ┌─ stats result empty (stats view: `stats: []`)
+  │     │  ├─ → waitingView.hide()
+  │     │  ├─ → infoView.show(noDataMessage)
+  │     │  ├─ → showPanel("info")
+  │     │  ├─ → enableAllControls()
+  │     │  ├─ → NO history push (transient)
+  │     │  └─ → return
   │     │     │
   │     │     → (data present — normal path)
   │     │     → waitingView.hide()
@@ -346,11 +376,16 @@ setView(view, opts?)
   │
   └─ STEP 5: updateButtonLabels(view, split)
         exportCsvBtn.visible          ← grid views only
+        histogramToggleBtn.visible    ← all views except stats
         histogramToggleBtn.text/title  ← contextual label
+        viewToggleBtn.visible          ← all views except stats
         viewToggleBtn.text/title       ← contextual label
+        statsBtn.text/title            ← contextual label (see §9.3)
         splitBtn.visible               ← histogram view only
         binSizeSelect.visible           ← histogram modes only
-        dayFilterSelect.visible          ← histogram modes only
+        dayFilterSelect.visible          ← histogram modes OR stats view
+        highCutoffSelect.visible        ← stats view only
+        lowCutoffSelect.visible         ← stats view only
 ```
 
 ### 6.3 Renderer Contract
@@ -389,7 +424,9 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | `popstate` → error | Error state detected | — | Shows error-view directly (no render) |
 | `popstate` → columns | `{ columns: true }` marker detected | `{ columns: true, replace: true }` | Re-shows columns panel (no data fetch) |
 | `binSizeSelect` change | Bin size dropdown | `split` from URL | Re-renders current histogram view |
-| `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram view |
+| `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram or stats view |
+| `highCutoffSelect` / `lowCutoffSelect` change | Cutoff dropdowns (stats view) | — | `setView("stats")` — re-renders with new thresholds |
+| `statsBtn` click | Stats view button | — | In stats view → `setView("chart")`; otherwise → `setView("stats")` |
 | `splitBtn` click | Split/combine toggle | `{ split: !histogramIsSplitMode }` | Toggles split mode |
 | `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
 | `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Pushes history entry with `columns: true` marker (URL unchanged) |
@@ -512,7 +549,8 @@ try {
 | `appState.binnedDataRows` | `Row[]` | Transient (render) | Declared but currently unused (reserved) — histogram-grid rows are built locally in the renderer via `histogramResultToRows()` |
 | `appState.rawDataChartInstance` | `Chart \| null` | Transient (render) | Chart.js instance for the raw data line chart |
 | `appState.rawDataGridApi` | `GridApi \| null` | Transient (render) | AG Grid API for the raw data grid |
-| `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid |
+| `appState.statsResult` | `StatsResponse \| null` | Transient (render) | Last `/api/stats` response (per-column stat objects) for the stats view |
+| `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid, stats |
 
 ### 8.2 Histogram Module Variables (`histogram-chart.ts`)
 
@@ -563,7 +601,8 @@ other modules → shared.ts + dom-refs.ts
 | `histogramGridView` | `#histogram-grid-view` | Histogram grid table container |
 | `splitHistogramView` | `#split-histogram-view` | Split histogram container |
 | `splitHistogramScroll` | `#split-histogram-scroll` | Container for split charts (no inner scroll — single scroll pane on `#content-area`) |
-| `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`) |
+| `statsViewPanel` | `#stats-view` | Stats view container — grid of per-column stat cards (direct child of `#content-area`) |
+| `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`; **hidden** in stats view) |
 
 ### 8.4 DOM Button/Control References (`dom-refs.ts`)
 
@@ -581,24 +620,32 @@ other modules → shared.ts + dom-refs.ts
 | `exportCsvBtn` | `#export-btn` | CSV export button |
 | `splitBtn` | `#split-btn` | Split/combine histogram button |
 | `binSizeSelect` | `#bin-size-select` | Histogram bin size dropdown |
-| `dayFilterSelect` | `#day-filter-select` | Histogram day-of-week filter dropdown |
+| `dayFilterSelect` | `#day-filter-select` | Day-of-week filter dropdown (histogram modes and stats view) |
+| `highCutoffSelect` | `#high-cutoff-select` | Stats high-threshold percentile dropdown (stats view only) |
+| `lowCutoffSelect` | `#low-cutoff-select` | Stats low-threshold percentile dropdown (stats view only) |
+| `statsBtn` | `#stats-btn` | Stats view toggle button |
 | `rowCountEl` | `#row-count` | Row/metric count display |
 | `viewLabelEl` | `#view-label` | Current view name display |
+| `rangeDaysEl` | `#range-days` | Selected date range day count display (always visible) |
 | `versionBadgeEl` | `#version-badge` | Version string display |
 
 ---
 
 ## 9. View Modes and Transitions
 
-### 9.1 Normal Mode (chart / grid)
+### 9.1 Normal Mode (chart / grid) and Stats
 
 ```
 chart  ←─viewToggle─→  grid
   │                       │
-  └────histogramBtn───────┘
-         │
-         ▼
-  histogram ←─viewToggle─→ histogram-grid
+  ├──histogramBtn─────────┤
+  │                       │
+  │     statsBtn (from chart or grid or any histogram view)
+  ▼                       ▼
+  stats            histogram ←─viewToggle─→ histogram-grid
+   │
+   └──statsBtn──→ chart   (no grid/histogram counterpart of stats;
+                          viewToggle and histogramBtn are hidden in stats view)
 ```
 
 ### 9.2 Histogram Sub-Mode (split)
@@ -627,7 +674,19 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | CSV Export | `exportCsvBtn` | `⬇ CSV` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
 | Split | `splitBtn` | `Split` / `Combine` | Histogram view only | Toggle (combined↔split) | `histogramIsSplitMode`, URL `?split=1` | `histogramIsSplitMode`, URL `?split=1` | URL-stateful (via `split`) |
 | Bin Size | `binSizeSelect` | `5` / `10` / `15` / `30` / `60` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?binSize=N` | URL-stateful (via `binSize`) |
-| Day Filter | `dayFilterSelect` | `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?dayFilter=X` | URL-stateful (via `dayFilter`) |
+| Day Filter | `dayFilterSelect` | `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` | Histogram mode **and** stats view (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?dayFilter=X` | URL-stateful (via `dayFilter`) |
+| High Cutoff | `highCutoffSelect` | `50` / `75` / `90` / `95` / `99` (default `95`) | Stats view only (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?highCutoff=N` | URL-stateful (via `highCutoff`) |
+| Low Cutoff | `lowCutoffSelect` | `1` / `5` / `10` / `25` / `50` (default `5`) | Stats view only (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?lowCutoff=N` | URL-stateful (via `lowCutoff`) |
+| Stats Toggle | `statsBtn` | See labels below | All views (in title bar) | Toggle (stats↔chart) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
+
+#### Stats Button Labels (`statsBtn`)
+
+| `appState.activeView` | Button Text | Button Title | Action |
+| ---------------------- | ------------ | ------------- | -------- |
+| `chart` / `grid` / `histogram` / `histogram-grid` | `📈 Stats` | "Show per-column statistics for the selected range" | `setView("stats")` |
+| `stats` | `📊 Back to Chart` | "Return to the chart view" | `setView("chart")` |
+
+In the stats view, `viewToggleBtn` and `histogramToggleBtn` are **hidden** (stats has no grid/histogram counterpart). Date nav, refresh, columns toggle, day filter, and both cutoff selects remain visible.
 
 #### View Toggle Button Labels (`viewToggleBtn`)
 
@@ -664,6 +723,23 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 ---
 
 ## 10. Data Flow
+
+### 10.0 Status Bar Range-Days Display
+
+`#range-days` is updated by `setView` (STEP 5) on **every** successful render and on every date-range change, regardless of view:
+
+```typescript
+function updateRangeDays(): void {
+  const from = new Date(appState.dateRangeFrom);
+  const to = new Date(appState.dateRangeTo);
+  // inclusive calendar-day count; fractional days count as whole days
+  const days = Math.ceil((to.getTime() - from.getTime()) / 86_400_000) + 1;
+  rangeDaysEl.textContent = days === 1 ? "1 day" : `${days} days`;
+}
+```
+
+The element is always visible in the status bar (like the view label and version badge) and is not toggled by `setView`.
+
 
 ### 10.1 Normal Data Views (chart / grid)
 
@@ -768,7 +844,32 @@ User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView
   → enableAllControls()
 ```
 
-### 10.5 Empty Data Flow (Info View)
+#### 10.5 Stats View Data Flow
+
+```
+statsBtn click → setView("stats")
+  → disableAllControls()
+  → showPanel("waiting") → waitingView.show()
+  → renderStatsView(updateWaiting)
+      → updateWaiting("Fetching statistics…")
+      → GET /api/stats?from=X&to=Y&columns=...&dayFilter=X&highCutoff=N&lowCutoff=M
+      → appState.statsResult = response
+      → updateWaiting("Building stat cards…")
+      → clear #stats-view, build one stat card per entry in response.stats (§16)
+      → return { ok: true }
+  → setView detects response.stats.length === 0 → info-view (transient)
+  → otherwise: waitingView.hide()
+  → showPanel("stats")            ← #stats-view
+  → hide #summary-cards           ← stats cards ARE the content
+  → push URL history (?view=stats[&dayFilter][&highCutoff][&lowCutoff])
+  → enableAllControls()
+  → updateRangeDays()
+
+cutoff/dayFilter change while in stats view → setView("stats")
+  → same flow with the new parameter values (URL carries them)
+```
+
+### 10.6 Empty Data Flow (Info View)
 
 ```
 setView("chart")
@@ -809,6 +910,7 @@ User clicks Refresh from info-view:
 | `/api/data` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (single day) |
 | `/api/data-range` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (range) |
 | `/api/histogram` | GET | fetchHistogramData() (histogram renderers) | 30s | Time-binned average data |
+| `/api/stats` | GET | renderStatsView() | 30s | Per-column statistics (mean, max/min + first occurrence, high/low avg daily durations) |
 | `/api/refresh` | POST | renderRefreshView() | 120s | Trigger inverter data sync |
 | `/api/version` | GET | init() | 5s | Backend version string |
 
@@ -908,6 +1010,7 @@ When a data renderer succeeds but returns zero rows, the following messages are 
 | chart/grid | range | "No data found for **{from}** to **{to}**. Click **Refresh** to sync from the inverter, or select a different date range." |
 | histogram | any | "No histogram data available for the selected date range. Click **Refresh** to sync from the inverter, or select a different date." |
 | histogram-grid | any | Same as histogram |
+| stats | any | "No statistics available for the selected date range. Click **Refresh** to sync from the inverter, or select a different date range." |
 
 ### 14.3 Init Procedure — Immediate Waiting View
 
@@ -1206,3 +1309,95 @@ Both the raw data grid and histogram grid display units in column header labels.
 | Histogram grid | `label (unit)` | `Grid Power (W)`, `Battery SOC (%)` |
 
 If no unit is defined in the metadata, the label is shown without parentheses (e.g. `Time`). The `device_timestamp` column is always labeled "Time" without a unit.
+
+---
+
+## 16. Stats View
+
+The Stats view (`setView("stats")`) replaces the chart/grid area with a grid of **stat cards** — one per selected numeric column. All computation is done by the backend (`GET /api/stats`); the frontend only formats and renders the response. The summary-cards bar (`#summary-cards`) is **hidden** in this view — the stat cards *are* the view content.
+
+```
+┌──────────────────────────────────────────┐
+│  #content-area (single scrollable pane)  │
+│  ┌──────────────────────────────────────┐│
+│  │ #stats-view                          ││
+│  │ ┌────────────┐ ┌────────────┐ …      ││
+│  │ │ Grid Power │ │ Battery SOC│ …      ││
+│  │ │ Mean 123 W │ │ Mean 55 %  │        ││
+│  │ │ Max 5.1 kW │ │ Max 100 %  │        ││
+│  │ │  07-22 …   │ │  07-20 …   │        ││
+│  │ │ Min -310 W │ │ Min 0 %    │        ││
+│  │ │  07-20 …   │ │  07-21 …   │        ││
+│  │ │ High 42m/d │ │ High 0m/d  │        ││
+│  │ │ Low  6m/d  │ │ Low  12m/d │        ││
+│  │ └────────────┘ └────────────┘        ││
+│  └──────────────────────────────────────┘│
+└──────────────────────────────────────────┘
+```
+
+### 16.1 Card Content
+
+Each card (one per entry in the `/api/stats` response `stats` array, in request order) displays:
+
+| Row | Content | Formatting |
+| ----- | ------- | ---------- |
+| **Header** | `label` (e.g. "Grid Power (W)") | Bold, card title |
+| **Mean** | `mean` + unit | `Average 123.4 W` |
+| **Max** | `max.value` + unit, with `max.timestamp` (first occurrence) on a second line (small, muted) | `Max 5.12 kW` / `2025-07-22 13:30` |
+| **Min** | `min.value` + unit, with `min.timestamp` (first occurrence) on a second line (small, muted) | `Min -310 W` / `2025-07-20 01:05` |
+| **High avg duration** | `high.avgDailyMinutes` per day + threshold + cutoff | `High 42.5 min/day` / `> 1.24 kW (95th pct)` |
+| **Low avg duration** | `low.avgDailyMinutes` per day + threshold + cutoff | `Low 6 min/day` / `< -997.8 W (5th pct)` |
+
+Formatting rules:
+
+- Units come from the response (`unit`, `""` if none); number formatting reuses the existing value/unit helpers (`extractUnit()`-style spacing, up to 2 decimals, unit-aware magnitude where already applied to other views).
+- Threshold rows are secondary/muted text and echo the *effective* cutoff used (from the response `high.cutoff` / `low.cutoff`), so the card always describes exactly what the backend computed — even after a popstate restore with URL-supplied cutoffs.
+- The card grid is recreated from scratch on every render (same contract as `#summary-cards`: clear container, rebuild elements).
+
+### 16.2 Card Tooltips
+
+Every card and every stat row carries a **tooltip explaining its content** (custom CSS tooltips — `data-tooltip` attribute rendered via `::after`, no JS library; tooltip text is truncated with ellipsis only where it exceeds the card width). Tooltip texts:
+
+| Element | Tooltip text |
+| ------- | ------------ |
+| Card (header) | `Statistics for {label} over {from} to {to}{, weekdays only: {Day}} — N samples` |
+| Mean row | `Arithmetic mean of all N samples in the selected date range.` |
+| Max row | `Maximum value observed; shown with the date-time of its first occurrence.` |
+| Min row | `Minimum value observed; shown with the date-time of its first occurrence.` |
+| High row | `Average time per day the value was above the high threshold (mean + z·σ). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no high readings count as 0.` |
+| Low row | `Average time per day the value was below the low threshold (mean − z·σ). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no low readings count as 0.` |
+
+Placeholders are filled from the response data and current date range at render time. Tooltips must also be keyboard-accessible (rows are focusable, `:focus-visible` shows the same tooltip as hover).
+
+### 16.3 Controls Interaction
+
+| Control | Effect in stats view |
+| -------- | -------------------- |
+| Date inputs / prev / next / Today | Re-fetch stats for the new range; `#range-days` updates |
+| Day filter | Restricts *all* statistics (mean, max, min, durations) to that weekday (backend-side) |
+| High cutoff | Changes the high threshold percentile → backend re-computes `high` |
+| Low cutoff | Changes the low threshold percentile → backend re-computes `low` |
+| Columns (☰ Select) | Cards are rendered for the selected numeric columns only; non-numeric columns never produce a card |
+| Refresh | Re-syncs data, then re-fetches stats |
+
+### 16.4 Responsive Behavior
+
+The stats card grid follows the same CSS grid approach as the summary cards (auto-fit columns, `--card-scale` breakpoints at 1200/900/600/400 px — see §15.3), with one difference: stat cards are taller (multi-row content), so at narrow viewports the grid naturally collapses to fewer columns and the content area scrolls. Cards keep equal heights within a row (`align-items: stretch`).
+
+### 16.5 Renderer
+
+`renderStatsView(updateWaiting)` (new module `stats-view.ts` or added to an existing view module) owns:
+
+- Building the card DOM (one element tree per stat object)
+- Populating tooltip attributes (§16.2)
+- No panel visibility, button state, or history manipulation (setView contract, §6.3)
+
+---
+
+## 17. Change Management
+
+This section tracks changes to the design document itself. Every modification to this document must be recorded below.
+
+| Version | Date | Section Changed | Description |
+|---------|------|----------------|-------------|
+| 3.0 | 2026-08-26 | §1–§16, new | New Stats view — per-column stat cards (mean, max/min + first occurrence, high/low average daily durations) computed by new backend `GET /api/stats`; new `#stats-btn`, `#high-cutoff-select`, `#low-cutoff-select` controls; day filter now shared with stats view; status bar always shows selected-range day count (`#range-days`); CSS tooltips on all stat cards; new `stats` view mode in setView/URL state |
