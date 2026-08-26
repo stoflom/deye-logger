@@ -599,6 +599,18 @@ def test_stats(t: TestResult) -> None:
     t.check(abs(s["low"]["threshold"] - 120.3358) < 0.001, f"low threshold=mean-1.645σ (got {s['low']['threshold']})")
     t.check(s["low"]["avgDailyMinutes"] == 15.0, f"low avg 15 min/day (got {s['low']['avgDailyMinutes']})")
 
+    # #56: battery_soc is a %-unit column → direct data percentiles
+    b = result["stats"][1]
+    t.check(b["column"] == "battery_soc" and b["unit"] == "%", f"Second entry is battery_soc (%) (got {b['column']})")
+    t.check(s["high"]["method"] == "mean-sigma", f"current_power method=mean-sigma (got {s['high'].get('method')})")
+    t.check(b["high"]["method"] == "percentile" and b["low"]["method"] == "percentile",
+            f"SOC method=percentile (got {b['high'].get('method')}/{b['low'].get('method')})")
+    t.check(abs(b["mean"] - 78.0) < 1e-9, f"SOC mean=78 (got {b['mean']})")
+    t.check(abs(b["high"]["threshold"] - 99.0) < 1e-9, f"SOC high threshold=p95=99 (got {b['high']['threshold']})")
+    t.check(abs(b["low"]["threshold"] - 57.0) < 1e-9, f"SOC low threshold=p5=57 (got {b['low']['threshold']})")
+    t.check(b["high"]["avgDailyMinutes"] == 45.0, f"SOC high 45 min/day (got {b['high']['avgDailyMinutes']})")
+    t.check(b["low"]["avgDailyMinutes"] == 45.0, f"SOC low 45 min/day (got {b['low']['avgDailyMinutes']})")
+
     # 5-day range: max/min first occurrences span the range
     _, result = http_get("/api/stats", {
         "from": "2026-07-27", "to": "2026-07-31", "columns": "current_power"
