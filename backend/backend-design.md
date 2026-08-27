@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v3.0
+> **Status:** v3.1
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -372,8 +372,8 @@ GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,cu
 | `to` | Yes | End date in YYYY-MM-DD format (inclusive) |
 | `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
 | `dayFilter` | No | Day-of-week filter. Default: `all`. Values: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat`. When set, only rows falling on that day of week participate in **all** statistics. Same semantics as `/api/histogram`. Invalid values are treated as `all`. |
-| `highCutoff` | No | Percentile for the "high" threshold. Default: `95`. Allowed values: `50`, `75`, `90`, `95`, `99`. The high threshold is `mean + z * stdDev` where `z` is the standard-normal deviate for the percentile (see table below). Invalid values fall back to the default. |
-| `lowCutoff` | No | Percentile for the "low" threshold. Default: `5`. Allowed values: `1`, `5`, `10`, `25`, `50`. The low threshold is `mean - z * stdDev`. Invalid values fall back to the default. |
+| `highCutoff` | No | Percentile for the "high" threshold. Default: `95`. Allowed values: `50`, `75`, `90`, `95`, `99`. For ordinary units the high threshold is `mean + z * stdDev` where `z` is the standard-normal deviate for the percentile (see table below); for **percentage-unit columns** (`unit === "%"`, e.g. Battery SOC) the threshold is the direct data percentile instead (see §2.7 "Percentage-unit columns"). Invalid values fall back to the default. |
+| `lowCutoff` | No | Percentile for the "low" threshold. Default: `5`. Allowed values: `1`, `5`, `10`, `25`, `50`. For ordinary units the low threshold is `mean - z * stdDev`; for percentage-unit columns the direct data percentile. Invalid values fall back to the default. |
 
 **Percentile → z mapping** (one-tailed standard normal):
 
@@ -401,12 +401,26 @@ GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,cu
       "stdDev": 678.90,
       "max": { "value": 5120.0, "timestamp": "2025-07-22 13:30:00" },
       "min": { "value": -310.0, "timestamp": "2025-07-20 01:05:00" },
-      "high": { "cutoff": 95, "threshold": 1237.84, "avgDailyMinutes": 42.5 },
-      "low":  { "cutoff": 5,  "threshold": -997.84, "avgDailyMinutes": 6.0 }
+      "high": { "cutoff": 95, "threshold": 1237.84, "avgDailyMinutes": 42.5, "method": "mean-sigma" },
+      "low":  { "cutoff": 5,  "threshold": -997.84, "avgDailyMinutes": 6.0, "method": "mean-sigma" }
+    },
+    {
+      "column": "battery_soc",
+      "label": "Battery SOC (%)",
+      "unit": "%",
+      "count": 2016,
+      "mean": 81.2,
+      "stdDev": 7.4,
+      "max": { "value": 100.0, "timestamp": "2025-07-23 09:00:00" },
+      "min": { "value": 58.0, "timestamp": "2025-07-21 22:15:00" },
+      "high": { "cutoff": 95, "threshold": 96.1, "avgDailyMinutes": 30.0, "method": "percentile" },
+      "low":  { "cutoff": 5,  "threshold": 62.4, "avgDailyMinutes": 15.0, "method": "percentile" }
     }
   ]
 }
 ```
+
+Note the second entry: `battery_soc` is a percentage-unit column, so both thresholds are direct data percentiles (`"method": "percentile"`), not `mean ± z·σ`.
 
 **Response Fields:**
 
@@ -421,8 +435,8 @@ GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,cu
 | `stats[].stdDev` | number | Population standard deviation: `sqrt(Σ(x − mean)² / n)`. `0` when `count < 2` |
 | `stats[].max` | object | `{ value, timestamp }` — maximum value and the **first occurrence** (earliest timestamp) at which it is observed |
 | `stats[].min` | object | `{ value, timestamp }` — minimum value and the **first occurrence** (earliest timestamp) at which it is observed |
-| `stats[].high` | object | `{ cutoff, threshold, avgDailyMinutes }` — the percentile used, the computed high threshold (`mean + z·σ`), and the average per-day duration (minutes) the value spent **strictly above** the threshold (see §5.4) |
-| `stats[].low` | object | Same as `high` but **strictly below** the low threshold (`mean − z·σ`) |
+| `stats[].high` | object | `{ cutoff, threshold, avgDailyMinutes, method }` — the percentile used, the computed high threshold, the average per-day duration (minutes) the value spent **strictly above** the threshold (see §5.4), and the method: `"mean-sigma"` (`mean + z·σ`) or `"percentile"` (direct data percentile, percentage-unit columns) |
+| `stats[].low` | object | Same as `high` but **strictly below** the low threshold |
 
 **Empty Response:**
 If no data exists or no selected numeric column has samples, returns:
@@ -434,6 +448,8 @@ If no data exists or no selected numeric column has samples, returns:
 **Edge cases:**
 
 - `count < 2`: `stdDev = 0`, both thresholds equal `mean`, durations are `0`.
+
+**Percentage-unit columns** (`unit === "%"` in `column_metadata`, e.g. Battery SOC): the normal-deviate formula is invalid for bounded percentages — `mean + z·σ` can exceed 100% (or the low threshold go below 0%), which is physically meaningless. For these columns the threshold is the **direct data percentile** of the sample values: a cutoff of `95` means the value at the 95th percentile of the SOC samples (≈ 95% SOC), and `5` means the value at the 5th percentile (≈ 5% SOC). The percentile is computed with linear interpolation between closest ranks (type-7, the NumPy default): for the `n` sorted values `x[0..n-1]` and `p` in percent, rank `r = (n−1) · p/100`, `lo = floor(r)`, and `percentile = x[lo] + (r−lo)·(x[lo+1]−x[lo])` with `x[n] = x[n-1]`. For `count < 2` the percentile equals `mean` (all samples are equal). The high/low *duration* semantics (strictly beyond threshold, consecutive-pair rule, day split) are unchanged — only the threshold value differs.
 - A calendar day with samples but none on the relevant side of a threshold contributes `0` minutes but **is counted** in the average denominator ("average per day with data").
 - When `dayFilter` is active, per-day grouping is still by calendar day; only matching weekdays contribute rows.
 
@@ -586,8 +602,10 @@ Client → GET /api/stats?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&dayFilter=X&
            collect non-null samples ordered by device_timestamp
            ├─ mean, population stdDev
            ├─ max / min value + earliest timestamp at which each is first observed
-           ├─ highThreshold = mean + z(highCutoff) * stdDev
-           ├─ lowThreshold  = mean - z(lowCutoff)  * stdDev
+           ├─ highThreshold = (unit === "%") ? percentile(samples, highCutoff)
+           │                                 : mean + z(highCutoff) * stdDev
+           ├─ lowThreshold  = (unit === "%") ? percentile(samples, lowCutoff)
+           │                                : mean - z(lowCutoff)  * stdDev
            ├─ per calendar day with samples, duration on a side =
            │     Σ (t[i+1] − t[i]) over consecutive sample pairs where
            │     BOTH samples are strictly beyond that threshold
@@ -675,3 +693,4 @@ This section tracks changes to the design document itself. Every modification to
 | 2.6 | 2026-07-30 | §8 | Test table updated to list all 7 scenarios; manual testing adds lock file path verification |
 | 2.7 | 2026-08-15 | §2.7, §3, §8 | Remove backend lock file guard — lock management delegated entirely to Python script; removes redundant lock file that conflicted with Python-side lock; 409 status code removed |
 | 3.0 | 2026-08-26 | §2.7, §2.8, §5.4 | New `GET /api/stats` endpoint — per-column statistics (mean, max/min with first-occurrence timestamp, high/low average daily durations) with `dayFilter`, `highCutoff`, `lowCutoff` parameters; all computation in backend; refresh endpoint renumbered to §2.8 |
+| 3.1 | 2026-08-26 | §2.7, §5.4 | Percentage-unit columns (`unit === "%"`, e.g. SOC) use the direct data percentile (type-7 linear interpolation) as the high/low threshold instead of `mean ± z·σ`, which can leave the 0–100% bounds; `high`/`low` objects gain a `method` field (`"mean-sigma"` \| `"percentile"`) (#56) |

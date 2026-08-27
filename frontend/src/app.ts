@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "3.0.0";
+export const FRONTEND_VERSION = "4.0.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -218,7 +218,7 @@ async function renderRefreshView(updateWaiting: (text: string) => void): Promise
 function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   const isAnyGrid = view === "grid" || view === "histogram-grid";
   const isHistogramMode = view === "histogram" || view === "histogram-grid";
-  const isStats = view === "stats";
+  const isStats = view === "stats" || view === "stats-grid";
 
   // Export button — visible only in grid views
   exportCsvBtn.style.display = isAnyGrid ? "" : "none";
@@ -230,21 +230,20 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   if (isHistogramMode) {
     if (view === "histogram") {
       histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Chart";
-      histogramToggleBtn.title = "Switch back to raw data chart";
+      histogramToggleBtn.title = "Switch back to the raw data chart";
     } else {
       histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Grid";
-      histogramToggleBtn.title = "Switch back to raw data grid";
+      histogramToggleBtn.title = "Switch back to the data grid";
     }
   } else if (view === "grid") {
-    histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram Grid";
-    histogramToggleBtn.title = "Show binned average histogram grid";
+    histogramToggleBtn.textContent = "\uD83D\uDCCB Grid";
+    histogramToggleBtn.title = "Show the histogram data as a grid (binned averages)";
   } else {
     histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram";
     histogramToggleBtn.title = "Show binned average histogram";
   }
 
-  // View toggle button — hidden in stats view (no counterpart)
-  viewToggleBtn.style.display = isStats ? "none" : "";
+  // View toggle button — always visible (in stats views it toggles stats ↔ stats-grid)
   viewToggleBtn.classList.toggle("active", true);
 
   // Stats toggle button — always visible
@@ -256,11 +255,14 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
     statsBtn.title = "Show per-column statistics for the selected range";
   }
   if (isHistogramMode) {
-    viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCA Histogram Grid" : "\uD83D\uDCC8 Histogram Chart";
-    viewToggleBtn.title = view === "histogram" ? "Switch to histogram grid" : "Switch to histogram chart";
+    viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Histogram Chart";
+    viewToggleBtn.title = view === "histogram" ? "Show the histogram data as a grid" : "Switch back to the histogram chart";
+  } else if (isStats) {
+    viewToggleBtn.textContent = view === "stats" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Stats Cards";
+    viewToggleBtn.title = view === "stats" ? "Show the statistics as a grid (table)" : "Back to the statistics cards";
   } else {
-    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Data Grid" : "\uD83D\uDCC8 Chart";
-    viewToggleBtn.title = view === "chart" ? "Switch to data grid" : "Switch to chart";
+    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Chart";
+    viewToggleBtn.title = view === "chart" ? "Show the chart data as a grid" : "Switch back to the chart";
   }
 
   // Split button — visible only in histogram (not histogram-grid)
@@ -346,7 +348,7 @@ async function setView(
       // Push current view state to history BEFORE refresh so that
       // history.back() from the error view restores the pre-refresh state.
       const isHistogramModeRefresh = view === "histogram" || view === "histogram-grid";
-      const isStatsRefresh = view === "stats";
+      const isStatsRefresh = view === "stats" || view === "stats-grid";
       const refreshUrl = buildUrlString(
         view,
         appState.dateRangeFrom,
@@ -367,7 +369,7 @@ async function setView(
 
     // --- Normal data render ---
     const isHistogramMode = view === "histogram" || view === "histogram-grid";
-    const isStats = view === "stats";
+    const isStats = view === "stats" || view === "stats-grid";
     const split = optSplit ?? false;
 
     // Sync date inputs with state
@@ -396,8 +398,8 @@ async function setView(
       } else {
         await renderHistogramChartView((text) => waitingView.setText(text));
       }
-    } else if (view === "stats") {
-      await renderStatsView((text) => waitingView.setText(text));
+    } else if (isStats) {
+      await renderStatsView((text) => waitingView.setText(text), view === "stats-grid");
     }
 
     // Check for empty data — show info-view instead of data view
@@ -445,7 +447,7 @@ async function setView(
       showPanel("split-histogram");
     } else if (view === "histogram") {
       showPanel("histogram");
-    } else if (view === "stats") {
+    } else if (isStats) {
       showPanel("stats");
     }
 
@@ -462,6 +464,7 @@ async function setView(
       histogram: "Histogram",
       "histogram-grid": "Histogram Grid",
       stats: "Stats",
+      "stats-grid": "Stats Grid",
     };
     viewLabelEl.textContent = viewLabels[view] ?? view;
 
@@ -522,7 +525,9 @@ async function setView(
 // View toggle: chart <-> grid, histogram <-> histogram-grid
 viewToggleBtn.addEventListener("click", () => {
   const v = appState.activeView;
-  if (v === "chart") setView("grid");
+  if (v === "stats") setView("stats-grid");
+  else if (v === "stats-grid") setView("stats");
+  else if (v === "chart") setView("grid");
   else if (v === "grid") setView("chart");
   else if (v === "histogram") setView("histogram-grid");
   else if (v === "histogram-grid") setView("histogram");
@@ -539,9 +544,10 @@ histogramToggleBtn.addEventListener("click", () => {
   }
 });
 
-// Stats toggle: stats <-> chart (no grid/histogram counterpart)
+// Stats toggle: stats/stats-grid <-> chart
 statsBtn.addEventListener("click", () => {
-  if (appState.activeView === "stats") {
+  const v = appState.activeView;
+  if (v === "stats" || v === "stats-grid") {
     setView("chart");
   } else {
     setView("stats");
@@ -569,17 +575,19 @@ dayFilterSelect.addEventListener("change", () => {
   const v = appState.activeView;
   if (v === "histogram" || v === "histogram-grid") {
     setView(v, { split: isSplitModeActive() });
-  } else if (v === "stats") {
-    setView("stats");
+  } else if (v === "stats" || v === "stats-grid") {
+    setView(v);
   }
 });
 
-// Cutoff changes — re-render stats view with new thresholds
+// Cutoff changes — re-render current stats view with new thresholds
 highCutoffSelect.addEventListener("change", () => {
-  if (appState.activeView === "stats") setView("stats");
+  const v = appState.activeView;
+  if (v === "stats" || v === "stats-grid") setView(v);
 });
 lowCutoffSelect.addEventListener("change", () => {
-  if (appState.activeView === "stats") setView("stats");
+  const v = appState.activeView;
+  if (v === "stats" || v === "stats-grid") setView(v);
 });
 
 // CSV export — stateless action

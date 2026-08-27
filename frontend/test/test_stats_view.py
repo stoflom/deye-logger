@@ -109,8 +109,28 @@ def main():
             subs = tester.find_elements(By.CSS_SELECTOR, ".stat-card:first-child .stat-row-sub")
             t.check(len(subs) == 4, f"max/min/high/low sub-lines present (got {len(subs)})")
 
+        # #55: per-measurement accent colors + percent cutoffs
+        accents = tester.execute_script(
+            "return Array.from(document.querySelectorAll('.stat-card'))"
+            ".map(c => getComputedStyle(c).borderTopColor);"
+        )
+        t.check(
+            len(accents) >= 2 and accents[0] != accents[1],
+            f"stat cards carry distinct accent colors (got {accents[:3]})",
+        )
+        header_color = tester.execute_script(
+            "const h = document.querySelector('.stat-card .stat-card-header');"
+            "return h ? getComputedStyle(h).color : null;"
+        )
+        t.check(header_color == accents[0] if accents else False, f"header text uses accent color (got {header_color})")
+
+        high_sub = tester.find_element(By.CSS_SELECTOR, ".stat-card:first-child .stat-row:nth-child(5) .stat-row-sub").text
+        t.check("pct" not in high_sub and "%" in high_sub, f"high sub-line uses percent, not 'pct' (got '{high_sub}')")
+
         # Control visibility in stats view
-        t.check(not visible(tester, "#view-toggle"), "view-toggle hidden in stats view")
+        vt = tester.find_element(By.ID, "view-toggle")
+        t.check(visible(tester, "#view-toggle"), "view-toggle visible in stats view")
+        t.check(vt.text == "\U0001F4CB Grid", f"view-toggle offers 'Grid' in stats view (got '{vt.text}')")
         t.check(not visible(tester, "#histogram-btn"), "histogram-btn hidden in stats view")
         t.check(not visible(tester, "#histogram-controls"), "bin-size/split controls hidden")
         t.check(not visible(tester, "#export-btn"), "CSV export hidden")
@@ -207,6 +227,60 @@ def main():
         info_msg = tester.find_element(By.ID, "info-message").text
         t.check("No statistics available" in info_msg, f"info message mentions statistics (got '{info_msg[:60]}…')")
         tester.screenshot(os.path.join(SCREENSHOT_DIR, "stats-view-empty.png"))
+
+        # ── Test 7: stats-grid table variant (design §16.6) ──────────
+        print("\n[Test 7] stats-grid table variant")
+        tester.navigate(f"{BASE_URL}/?view=stats-grid&from={RANGE_FROM}&to={RANGE_TO}")
+        try:
+            tester.wait_for_element(By.CSS_SELECTOR, ".stats-grid-table tbody tr", timeout=20)
+        except Exception:
+            pass
+        tester.screenshot(os.path.join(SCREENSHOT_DIR, "stats-grid-view.png"))
+
+        t.check(visible(tester, "#stats-view.stats-grid-mode"), "stats panel in grid mode")
+        view_label = tester.find_element(By.ID, "view-label").text
+        t.check(view_label.strip() == "Stats Grid", f"view label is 'Stats Grid' (got '{view_label.strip()}')")
+        t.check(visible(tester, "#view-toggle"), "view-toggle visible in stats-grid")
+        t.check(not visible(tester, "#histogram-btn"), "histogram-btn hidden in stats-grid")
+        vt = tester.find_element(By.ID, "view-toggle")
+        t.check(vt.text == "\U0001F4C8 Stats Cards", f"view-toggle offers 'Stats Cards' (got '{vt.text}')")
+
+        cols = tester.find_elements(By.CSS_SELECTOR, ".stats-grid-table thead th")
+        t.check(len(cols) == 9, f"9 stat columns (got {len(cols)})")
+        col_texts = [c.text.lower() for c in cols]  # CSS uppercases header text
+        t.check(col_texts[0] == "measurement" and col_texts[-2:] == ["high min/day", "low min/day"],
+                f"column headers ordered per design (got {col_texts})")
+        rows = tester.find_elements(By.CSS_SELECTOR, ".stats-grid-table tbody tr")
+        t.check(len(rows) >= 1, f"at least one measurement row (got {len(rows)})")
+        cells = tester.find_elements(By.CSS_SELECTOR, ".stats-grid-table tbody tr:first-child td")
+        t.check(len(cells) == 9, f"row has 9 cells (got {len(cells)})")
+        # Accent color on the measurement cell
+        name_color = tester.execute_script(
+            "const n = document.querySelector('.stats-grid-table tbody td.stats-grid-name');"
+            "return n ? getComputedStyle(n).color : null;"
+        )
+        t.check(name_color is not None and "rgb" in name_color, f"measurement cell colored (got {name_color})")
+        # High/Low cells carry method-aware tooltips
+        hi_tip = cells[7].get_attribute("data-tooltip") or ""
+        t.check("high threshold" in hi_tip and "percentile" in hi_tip, f"high cell tooltip (got '{hi_tip[:60]}…')")
+        # #59: cutoff change in stats-grid keeps the grid variant
+        tester.select_dropdown_option(By.ID, "high-cutoff-select", "value=90")
+        try:
+            tester.wait_for_url_contains("highCutoff=90", timeout=15)
+        except Exception:
+            pass
+        t.check("view=stats-grid" in tester.get_url() and "highCutoff=90" in tester.get_url(),
+                f"cutoff change keeps stats-grid in URL (got {tester.get_url()})")
+        t.check(visible(tester, ".stats-grid-table"), "stats table re-rendered (not cards)")
+        # Toggle back to cards
+        vt.click()
+        try:
+            tester.wait_for_element(By.CSS_SELECTOR, ".stat-card", timeout=20)
+        except Exception:
+            pass
+        t.check(visible(tester, ".stat-card"), "cards rendered after toggling back")
+        t.check("view=stats" in tester.get_url() and "stats-grid" not in tester.get_url(),
+                f"URL has view=stats after toggle (got {tester.get_url()})")
 
     # ── Summary ─────────────────────────────────────────────────────
     print("\n" + "=" * 70)

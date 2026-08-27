@@ -10,6 +10,7 @@
 import { Chart } from "chart.js";
 import {
   appState,
+  CHART_PALETTE,
   summaryCardsPanel,
   rawDataChartCanvas,
   extractUnit,
@@ -30,12 +31,6 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
     return;
   }
 
-  const palette = [
-    "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
-    "#dd6b20", "#319795", "#d53f8c", "#2b6cb0", "#c53030",
-    "#276749", "#b7791f", "#6b46c1", "#c05621", "#285e61",
-    "#97266d",
-  ];
 
   const isHistogramView = binnedMaxValues !== undefined && binnedMaxValues !== null;
   const dataRows = appState.rawDataRows;
@@ -57,7 +52,7 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
   for (let i = 0; i < numericCols.length; i++) {
     const col = numericCols[i];
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.name === col);
-    const color = palette[i % palette.length];
+    const color = CHART_PALETTE[i % CHART_PALETTE.length];
 
     let max: number;
     let ts = "";
@@ -146,13 +141,6 @@ export function renderRawDataChart(): void {
 
   const numericCols = getNumericColumnNames(appState.selectedColumnNames, appState.rawDataRows, appState.columnMetadata, null);
 
-  const palette = [
-    "#3182ce", "#e53e3e", "#38a169", "#d69e2e", "#805ad5",
-    "#dd6b20", "#319795", "#d53f8c", "#2b6cb0", "#c53030",
-    "#276749", "#b7791f", "#6b46c1", "#c05621", "#285e61",
-    "#97266d",
-  ];
-
   // Step 1: Collect unique units in order of first appearance.
   // All units are collected first, then axes are split roughly equally
   // between left and right sides to support more than 4 unique units.
@@ -216,8 +204,8 @@ export function renderRawDataChart(): void {
     return {
       label: unit ? `${meta ? meta.label : col} (${unit})` : meta ? meta.label : col,
       data: appState.rawDataRows.map((row: Record<string, unknown>) => row[col] as number),
-      borderColor: palette[i % palette.length],
-      backgroundColor: palette[i % palette.length] + "20",
+      borderColor: CHART_PALETTE[i % CHART_PALETTE.length],
+      backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length] + "20",
       borderWidth: 1.5,
       pointRadius: 0,
       pointHoverRadius: 4,
