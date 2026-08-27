@@ -55,9 +55,17 @@ function ordinal(n: number): string {
 
 /** Tooltip description of how the threshold was computed (design §16.2) */
 function methodDesc(t: { cutoff: number; method: string }): string {
-  return t.method === "percentile"
-    ? `the direct ${ordinal(t.cutoff)} percentile of the data (percentage-unit column)`
+  return t.method === "cutoff"
+    ? `the selected ${t.cutoff}% limit (percentage-unit column)`
     : "mean + z·σ";
+}
+
+/**
+ * "at the 95th percentile" for mean-sigma; empty for cutoff (the value
+ * already carries the % unit). Design §16.2.
+ */
+function thresholdDesc(t: { cutoff: number; method: string }): string {
+  return t.method === "cutoff" ? "" : ` at the ${ordinal(t.cutoff)} percentile`;
 }
 
 const WEEKDAY_NAMES: Record<string, string> = {
@@ -142,20 +150,20 @@ function buildStatCard(entry: StatsEntry, index: number): HTMLElement {
   card.appendChild(
     statRow(
       `Average time per day the value was above the high threshold (${methodDesc(high)}). ` +
-        `Threshold: ${withUnit(high.threshold, unit)} at the ${ordinal(high.cutoff)} percentile. ` +
+        `Threshold: ${withUnit(high.threshold, unit)}${thresholdDesc(high)}. ` +
         `Days with samples but no high readings count as 0.`,
       `High ${fmtMinutes(high.avgDailyMinutes)}`,
-      `> ${withUnit(high.threshold, unit)} (${high.cutoff}%)`,
+      `> ${withUnit(high.threshold, unit)}`,
     ),
   );
 
   card.appendChild(
     statRow(
       `Average time per day the value was below the low threshold (${methodDesc(low)}). ` +
-        `Threshold: ${withUnit(low.threshold, unit)} at the ${ordinal(low.cutoff)} percentile. ` +
+        `Threshold: ${withUnit(low.threshold, unit)}${thresholdDesc(low)}. ` +
         `Days with samples but no low readings count as 0.`,
       `Low ${fmtMinutes(low.avgDailyMinutes)}`,
-      `< ${withUnit(low.threshold, unit)} (${low.cutoff}%)`,
+      `< ${withUnit(low.threshold, unit)}`,
     ),
   );
 
@@ -225,11 +233,11 @@ function buildStatsGrid(result: StatsResponse): HTMLElement {
     const dur = (t: StatsEntry["high"], sign: string) => {
       const td = el("td", "stats-grid-num");
       td.appendChild(el("span", "stat-row-main", fmtMinutes(t.avgDailyMinutes)));
-      td.appendChild(el("span", "stat-row-sub", `${sign} ${withUnit(t.threshold, unit)} (${t.cutoff}%)`));
+      td.appendChild(el("span", "stat-row-sub", `${sign} ${withUnit(t.threshold, unit)}`));
       td.dataset.tooltip =
         `Average time per day the value was ${sign === ">" ? "above the high" : "below the low"} ` +
         `threshold (${methodDesc(t)}). ` +
-        `Threshold: ${withUnit(t.threshold, unit)} at the ${ordinal(t.cutoff)} percentile. ` +
+        `Threshold: ${withUnit(t.threshold, unit)}${thresholdDesc(t)}. ` +
         `Days with samples but no readings on that side count as 0.`;
       tr.appendChild(td);
     };

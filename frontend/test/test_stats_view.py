@@ -125,7 +125,25 @@ def main():
         t.check(header_color == accents[0] if accents else False, f"header text uses accent color (got {header_color})")
 
         high_sub = tester.find_element(By.CSS_SELECTOR, ".stat-card:first-child .stat-row:nth-child(5) .stat-row-sub").text
-        t.check("pct" not in high_sub and "%" in high_sub, f"high sub-line uses percent, not 'pct' (got '{high_sub}')")
+        # #60: the cutoff is no longer echoed in braces on the card (shown in the top bar)
+        t.check("(" not in high_sub, f"high sub-line has no cutoff in braces (got '{high_sub}')")
+
+        # #60: a %-unit column (Battery SOC) shows the selected cutoff as an
+        # absolute percent limit — high '> 95 %', low '< 5 %' (defaults 95/5).
+        soc = tester.execute_script(
+            "const cards = Array.from(document.querySelectorAll('.stat-card'));"
+            "const c = cards.find(c => {const h = c.querySelector('.stat-card-header');"
+            "  return h && h.textContent.includes('SOC');});"
+            "if (!c) return null;"
+            "const rows = c.querySelectorAll('.stat-row');"
+            "const hs = rows[3].querySelector('.stat-row-sub');"
+            "const ls = rows[4].querySelector('.stat-row-sub');"
+            "return [hs ? hs.textContent.trim() : '', ls ? ls.textContent.trim() : ''];"
+        )
+        t.check(soc is not None, "Battery SOC stat card present")
+        if soc:
+            t.check(soc[0] == "> 95 %", f"SOC high sub reads '> 95 %' (got '{soc[0]}')")
+            t.check(soc[1] == "< 5 %", f"SOC low sub reads '< 5 %' (got '{soc[1]}')")
 
         # Control visibility in stats view
         vt = tester.find_element(By.ID, "view-toggle")
