@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v4.3
+> **Status:** v5.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -67,17 +67,27 @@ These objects are **always rendered and visible** regardless of the current view
 
 The title bar contains **all application buttons and controls** in a single horizontal area. When horizontal space runs out, buttons **wrap into additional rows** automatically (CSS `flex-wrap: wrap`). The title bar grows vertically as needed to accommodate wrapped rows, pushing the rest of the page content down. This is different from a fixed-height title bar — the title bar height is **dynamic**.
 
-**Compact buttons:** the title-bar buttons (`.btn-view`, `.btn-export`, `.columns-toggle`) use compact horizontal padding (`8px 10px`) to save width; view names on buttons are shortened — the grid buttons simply read **`Grid`** (the grid shows the data of the graph; tooltips disambiguate chart-data vs. histogram-data grids).
+**Compact buttons:** the title-bar buttons (`.btn-view`, `.btn-export`, `.columns-toggle`) use compact horizontal padding (`8px 10px`) to save width; button labels are short (`Series`, `Histogram`, `Stats`, `Grid`, `Select`, `Back`) with tooltips providing the full description.
+
+**Button groups (v5.0 — fixes #62):** the title-bar buttons are organized into three clearly-segmented groups:
+
+1. **Major views (blue)** — `Series` (line chart; the name references *Time Series*, replacing the too-general "Chart"), `Histogram`, `Stats`. Always visible on the three major views; the **active** view's button is **disabled (grey)** (see §2.3) and the **other two** are **blue** and clickable to switch major views. These buttons are **hidden** in all grid views and in the Select (columns) view.
+2. **Utilities (grey, always visible)** — date inputs + `Today` + `‹`/`›`, `↻ Refresh`, `Select`, `Grid`.
+3. **Contextual controls** — `Bin size` (histogram view only), `Day` day-of-week selector, `High`/`Low` cutoffs (stats views), `Split` (histogram view), `⬇ Download (CSV)` (grid views only).
+
+**Grid utility button:** `#view-toggle` is no longer a major-view toggle. It **opens the data grid for the data of the currently-selected view** (chart → grid, histogram → histogram-grid, stats → stats-grid). Inside a grid view it reads **`Back`** and **automatically returns to the view that opened the grid**. Grid views show no major-view switching buttons — they only go back. `Day` + `Today`/`‹`/`›` and `⬇ Download (CSV)` remain available on the grids.
 
 **Button ordering in wrapped rows:** Buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next row. This means the bin-size and split buttons may appear on a second row when the viewport is narrow.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │ ☰ │
-│  📋 Grid │ 📊 Histogram │ 📈 Stats │ ⬇ CSV │ Bin: 15 ▼ │ Day: All ▼ │
-│  High: 95% ▼ │ Low: 5% ▼ │ Split │
+│  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │
+│  📈 Series │ 📊 Histogram │ 📈 Stats │ ☰ Select │ 📋 Grid │
+│  ⬇ Download │ Bin: 15 ▼ │ Day: All ▼ │ High: 95% ▼ │ Low: 5% ▼ │ Split │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+(Contextual rows show only the controls relevant to the active view — see the table below and §9.3.)
 
 | Element | ID | Purpose |
 | --------- | ----- | --------- |
@@ -85,15 +95,16 @@ The title bar contains **all application buttons and controls** in a single hori
 | Date inputs | `#date-from`, `#date-to` | Date range selectors |
 | Nav buttons | `#prev-day`, `#next-day`, `#today-btn` | Shift dates by ±1 day or go to today |
 | Refresh button | `#refresh-btn` | Trigger backend data refresh |
-| Columns toggle | `#columns-toggle` | Open/close column selection panel |
-| View toggle | `#view-toggle` | Toggle between chart ↔ grid (or histogram ↔ histogram-grid) |
-| Histogram button | `#histogram-btn` | Toggle between normal mode and histogram mode |
-| Stats button | `#stats-btn` | Toggle between the Stats view and the chart view |
-| CSV export | `#export-btn` | Export current grid as CSV (hidden in chart views) |
+| Series button | `#chart-btn` | Major-view button: shows the line (time-series) chart. Active (disabled grey) in chart/grid views, blue in the other major views, hidden in grid/Select views |
+| Histogram button | `#histogram-btn` | Major-view button: shows the binned-average histogram. Active (disabled grey) in histogram/histogram-grid views, blue in the other major views, hidden in grid/Select views |
+| Stats button | `#stats-btn` | Major-view button: shows per-column statistics. Active (disabled grey) in stats/stats-grid views, blue in the other major views, hidden in grid/Select views |
+| Grid button (utility) | `#view-toggle` | `📋 Grid` — opens the data grid for the currently-selected view (chart→grid, histogram→histogram-grid, stats→stats-grid). In grid views reads **`Back`** and returns automatically to the view that opened the grid |
+| Columns button (utility) | `#columns-toggle` | `☰ Select` — opens the column selection panel. While the panel is open reads **`Back`**; closing returns to the view that opened it |
+| CSV export | `#export-btn` | `⬇ Download (CSV)` — export current grid as CSV (visible in grid views only) |
 | Bin size | `#bin-size-select` | Histogram bin size dropdown: `5` / `10` / `15` / `30` / `60` (hidden in non-histogram modes) |
-| Day filter | `#day-filter-select` | Day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat`. Visible in histogram modes **and** the Stats view; limits histogram bins (histogram) or statistics calculations (Stats) to that weekday |
-| High cutoff | `#high-cutoff-select` | Stats high-threshold percentile dropdown: `50` / `75` / `90` / `95` / `99` (default `95`); visible only in the Stats view |
-| Low cutoff | `#low-cutoff-select` | Stats low-threshold percentile dropdown: `1` / `5` / `10` / `25` / `50` (default `5`); visible only in the Stats view |
+| Day filter | `#day-filter-select` | Day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat`. Visible in histogram modes, the Stats view **and their grid views**; limits histogram bins or statistics calculations to that weekday |
+| High cutoff | `#high-cutoff-select` | Stats high-threshold percentile dropdown: `50` / `75` / `90` / `95` / `99` (default `95`); visible only in the Stats views |
+| Low cutoff | `#low-cutoff-select` | Stats low-threshold percentile dropdown: `1` / `5` / `10` / `25` / `50` (default `5`); visible only in the Stats views |
 | Split button | `#split-btn` | Split/combine histogram buttons (visible only in histogram view) |
 
 ### 2.2 Status Bar (`<div class="status-bar">`)
