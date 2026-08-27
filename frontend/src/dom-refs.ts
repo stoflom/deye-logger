@@ -31,6 +31,7 @@ export const todayBtn = getRequiredEl<HTMLButtonElement>("today-btn", "#today-bt
 export const refreshBtn = getRequiredEl<HTMLButtonElement>("refresh-btn", "#refresh-btn");
 export const columnsToggleBtn = getRequiredEl<HTMLButtonElement>("columns-toggle", "#columns-toggle");
 export const viewToggleBtn = getRequiredEl<HTMLButtonElement>("view-toggle", "#view-toggle");
+export const chartBtn = getRequiredEl<HTMLButtonElement>("chart-btn", "#chart-btn");
 export const histogramToggleBtn = getRequiredEl<HTMLButtonElement>("histogram-btn", "#histogram-btn");
 export const statsBtn = getRequiredEl<HTMLButtonElement>("stats-btn", "#stats-btn");
 export const exportCsvBtn = getRequiredEl<HTMLButtonElement>("export-btn", "#export-btn");

@@ -22,6 +22,7 @@ import {
   refreshBtn,
   columnsToggleBtn,
   viewToggleBtn,
+  chartBtn,
   histogramToggleBtn,
   statsBtn,
   binSizeSelect,
@@ -216,55 +217,47 @@ async function renderRefreshView(updateWaiting: (text: string) => void): Promise
 // Button label updater — called by setView at step 5
 // ------------------------------------------------------------------
 function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
-  const isAnyGrid = view === "grid" || view === "histogram-grid";
+  const isAnyGrid = view === "grid" || view === "histogram-grid" || view === "stats-grid";
   const isHistogramMode = view === "histogram" || view === "histogram-grid";
   const isStats = view === "stats" || view === "stats-grid";
 
   // Export button — visible only in grid views
   exportCsvBtn.style.display = isAnyGrid ? "" : "none";
 
-  // Histogram toggle button — hidden in stats view (no counterpart)
-  histogramToggleBtn.style.display = isStats ? "none" : "";
-  histogramToggleBtn.classList.toggle("active", true);
+  // Major view buttons (Series / Histogram / Stats) — hidden in grid views
+  // (and in the columns view, handled by setView); the active view's button
+  // is disabled (grey), the other two stay blue (#62).
+  const showMajor = !isAnyGrid;
+  chartBtn.style.display = showMajor ? "" : "none";
+  histogramToggleBtn.style.display = showMajor ? "" : "none";
+  statsBtn.style.display = showMajor ? "" : "none";
+  chartBtn.disabled = view === "chart";
+  histogramToggleBtn.disabled = view === "histogram";
+  statsBtn.disabled = view === "stats";
+  chartBtn.classList.remove("active");
+  histogramToggleBtn.classList.remove("active");
+  statsBtn.classList.remove("active");
 
-  if (isHistogramMode) {
-    if (view === "histogram") {
-      histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Chart";
-      histogramToggleBtn.title = "Switch back to the raw data chart";
-    } else {
-      histogramToggleBtn.textContent = "\uD83D\uDCCB Raw Grid";
-      histogramToggleBtn.title = "Switch back to the data grid";
-    }
-  } else if (view === "grid") {
-    histogramToggleBtn.textContent = "\uD83D\uDCCB Grid";
-    histogramToggleBtn.title = "Show the histogram data as a grid (binned averages)";
+  // Grid utility button — opens the grid for the currently-selected view;
+  // in grid views it reads `Back` and returns to the view that opened it (#62)
+  if (isAnyGrid) {
+    viewToggleBtn.textContent = "Back";
+    viewToggleBtn.title =
+      view === "grid"
+        ? "Return to the Series view"
+        : view === "histogram-grid"
+          ? "Return to the Histogram view"
+          : "Return to the Stats view";
   } else {
-    histogramToggleBtn.textContent = "\uD83D\uDCCA Histogram";
-    histogramToggleBtn.title = "Show binned average histogram";
+    viewToggleBtn.textContent = "\uD83D\uDCCB Grid";
+    viewToggleBtn.title =
+      view === "chart"
+        ? "Show the chart data as a grid"
+        : view === "histogram"
+          ? "Show the histogram data as a grid"
+          : "Show the statistics as a grid (table)";
   }
-
-  // View toggle button — always visible (in stats views it toggles stats ↔ stats-grid)
-  viewToggleBtn.classList.toggle("active", true);
-
-  // Stats toggle button — always visible, blue like the other major-view buttons (#61)
-  statsBtn.classList.toggle("active", true);
-  if (isStats) {
-    statsBtn.textContent = "\uD83D\uDCCA Back to Chart";
-    statsBtn.title = "Return to the chart view";
-  } else {
-    statsBtn.textContent = "\uD83D\uDCC8 Stats";
-    statsBtn.title = "Show per-column statistics for the selected range";
-  }
-  if (isHistogramMode) {
-    viewToggleBtn.textContent = view === "histogram" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Histogram Chart";
-    viewToggleBtn.title = view === "histogram" ? "Show the histogram data as a grid" : "Switch back to the histogram chart";
-  } else if (isStats) {
-    viewToggleBtn.textContent = view === "stats" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Stats Cards";
-    viewToggleBtn.title = view === "stats" ? "Show the statistics as a grid (table)" : "Back to the statistics cards";
-  } else {
-    viewToggleBtn.textContent = view === "chart" ? "\uD83D\uDCCB Grid" : "\uD83D\uDCC8 Chart";
-    viewToggleBtn.title = view === "chart" ? "Show the chart data as a grid" : "Switch back to the chart";
-  }
+  viewToggleBtn.classList.remove("active");
 
   // Split button — visible only in histogram (not histogram-grid)
   splitBtn.style.display = view === "histogram" ? "" : "none";
@@ -323,10 +316,14 @@ async function setView(
       // STEP 4a: Columns success
       waitingView.hide();
       showPanel("columns");
-      columnsToggleBtn.textContent = "\u21BB Load Data";
-      columnsToggleBtn.title = "Close panel and load selected data";
+      columnsToggleBtn.textContent = "Back";
+      columnsToggleBtn.title = "Close the panel and return to the view that opened it";
       columnsToggleBtn.classList.add("active");
-      // Only columns toggle ("↻ Load Data") is enabled in columns view
+      // Only the columns toggle (`Back`) is enabled in the columns view and the
+      // major-view buttons are hidden — the panel returns only via `Back` (#62)
+      chartBtn.style.display = "none";
+      histogramToggleBtn.style.display = "none";
+      statsBtn.style.display = "none";
       enableOnlyControls(["columnsToggle"]);
 
       // Push columns entry — URL unchanged (panel is not bookmarkable),
@@ -337,7 +334,7 @@ async function setView(
       return;
     }
 
-    // Reset columns toggle button — it may still show "↻ Load Data" (active)
+    // Reset columns toggle button — it may still show "Back" (active)
     // if the columns panel was closed via browser back (popstate restores the
     // data view directly, bypassing the columnsToggleBtn click handler). #48
     columnsToggleBtn.textContent = "\u2630 Select";
@@ -523,36 +520,38 @@ async function setView(
 // Button handlers — all route through setView
 // ------------------------------------------------------------------
 
-// View toggle: chart <-> grid, histogram <-> histogram-grid
+// Grid utility: opens the grid for the currently-selected view (chart→grid,
+// histogram→histogram-grid, stats→stats-grid); in grid views the button reads
+// `Back` and automatically returns to the view that opened the grid (#62)
 viewToggleBtn.addEventListener("click", () => {
   const v = appState.activeView;
-  if (v === "stats") setView("stats-grid");
+  if (v === "grid") setView("chart");
+  else if (v === "histogram-grid") setView("histogram");
   else if (v === "stats-grid") setView("stats");
   else if (v === "chart") setView("grid");
-  else if (v === "grid") setView("chart");
   else if (v === "histogram") setView("histogram-grid");
-  else if (v === "histogram-grid") setView("histogram");
+  else setView("stats-grid"); // stats
 });
 
-// Histogram toggle: normal mode <-> histogram mode
+// Series major-view button: switches to the Series (line chart) view.
+// Disabled (grey) in chart views; hidden in grid and Select views (#62)
+chartBtn.addEventListener("click", () => {
+  if (appState.activeView === "chart") return; // disabled
+  setView("chart");
+});
+
+// Histogram major-view button: switches to the Histogram view.
+// Disabled (grey) in histogram views; hidden in grid and Select views (#62)
 histogramToggleBtn.addEventListener("click", () => {
-  const v = appState.activeView;
-  if (v === "stats") return; // hidden in stats view
-  if (v === "chart" || v === "histogram") {
-    setView(v === "chart" ? "histogram" : "chart");
-  } else {
-    setView(v === "grid" ? "histogram-grid" : "grid");
-  }
+  if (appState.activeView === "histogram") return; // disabled
+  setView("histogram");
 });
 
-// Stats toggle: stats/stats-grid <-> chart
+// Stats major-view button: switches to the Stats view.
+// Disabled (grey) in stats views; hidden in grid and Select views (#62)
 statsBtn.addEventListener("click", () => {
-  const v = appState.activeView;
-  if (v === "stats" || v === "stats-grid") {
-    setView("chart");
-  } else {
-    setView("stats");
-  }
+  if (appState.activeView === "stats") return; // disabled
+  setView("stats");
 });
 
 // Split/combine toggle (histogram only)
