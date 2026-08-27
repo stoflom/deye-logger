@@ -393,17 +393,16 @@ setView(view, opts?)
   │             → errorViewCloseBtn.disabled = false
   │
   └─ STEP 5: updateButtonLabels(view, split)
+        chartBtn/histogramBtn/statsBtn.visible  ← major views only — hidden in grid views and the columns (Select) view
+        chartBtn/histogramBtn/statsBtn.disabled ← the ACTIVE major view is disabled (grey); the other two are blue and enabled (see §2.3)
+        viewToggleBtn.label             ← `Grid` on major views / `Back` in grid views
+        columnsToggleBtn.label          ← `Select` (closed) / `Back` (columns view)
         exportCsvBtn.visible          ← grid views only
-        histogramToggleBtn.visible    ← all views except stats views
-        histogramToggleBtn.text/title  ← contextual label
-        viewToggleBtn.visible          ← all views (stats: toggles stats ↔ stats-grid)
-        viewToggleBtn.text/title       ← contextual label
-        statsBtn.text/title            ← contextual label (see §9.3)
         splitBtn.visible               ← histogram view only
         binSizeSelect.visible           ← histogram modes only
-        dayFilterSelect.visible          ← histogram modes OR stats view
-        highCutoffSelect.visible        ← stats view only
-        lowCutoffSelect.visible         ← stats view only
+        dayFilterSelect.visible          ← histogram modes, stats views and their grid views
+        highCutoffSelect.visible        ← stats views only
+        lowCutoffSelect.visible         ← stats views only
 ```
 
 ### 6.3 Renderer Contract
@@ -435,8 +434,8 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | Call Site | Trigger | Flags | Notes |
 | ----------- | --------- | ------- | ------- |
 | `init()` → `setView(urlState.view, { split: urlState.isSplit })` | Page load | `split` from URL | Initial render |
-| `viewToggleBtn` click | View toggle button | — | Toggles chart↔grid or histogram↔histogram-grid |
-| `histogramToggleBtn` click | Histogram mode button | — | Enters/exits histogram mode |
+| `viewToggleBtn` click (Grid utility) | Grid button | — | Major view: `setView(<grid variant>)` — chart→grid, histogram→histogram-grid, stats→stats-grid. Grid view: button reads `Back` → `setView(<view that opened the grid>)` — the opener is derived from the grid variant (grid→chart, histogram-grid→histogram, stats-grid→stats, preserving the stats cards↔table state) |
+| `histogramBtn` click | Histogram major-view button | — | From chart or grid → `setView("histogram")`. Disabled (grey) in histogram/histogram-grid views; hidden in grid and Select views |
 | Date nav buttons/pickers | Date change | — | `setView(appState.activeView)` — re-render with new dates |
 | `popstate` | Browser back/forward | `{ replace: true, split: urlState.isSplit }` | Restores from URL state |
 | `popstate` → error | Error state detected | — | Shows error-view directly (no render) |
@@ -444,11 +443,11 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | `binSizeSelect` change | Bin size dropdown | `split` from URL | Re-renders current histogram view |
 | `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram or stats view |
 | `highCutoffSelect` / `lowCutoffSelect` change | Cutoff dropdowns (stats views) | — | `setView(current)` (stats or stats-grid) — re-renders with new thresholds |
-| `statsBtn` click | Stats view button | — | In stats views → `setView("chart")`; otherwise → `setView("stats")` |
+| `statsBtn` click | Stats major-view button | — | From chart or histogram → `setView("stats")`. Disabled (grey) in stats views; hidden in grid and Select views |
 | `splitBtn` click | Split/combine toggle | `{ split: !histogramIsSplitMode }` | Toggles split mode |
 | `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
 | `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Pushes history entry with `columns: true` marker (URL unchanged) |
-| `columnsToggleBtn` click (close) | Close columns panel | — | `setView(appState.activeView)` — full re-fetch |
+| `columnsToggleBtn` click (close) | Close columns panel (label `Back`) | — | `setView(appState.activeView)` — full re-fetch, returns to the view that opened the panel |
 | `errorViewCloseBtn` click | Dismiss error | — | `history.back()` — popstate recreates previous |
 | `exportCsvBtn` click | CSV export | — | Stateless — `gridApi.exportDataAsCsv()` |
 
