@@ -226,14 +226,16 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
 
   // Major view buttons (Series / Histogram / Stats) — hidden in grid views
   // (and in the columns view, handled by setView); the active view's button
-  // is disabled (grey), the other two stay blue (#62).
+  // is disabled (grey), the other two stay blue (#62). Hidden (grid views)
+  // buttons are disabled too, since enableAllControls() after rendering
+  // would otherwise leave them enabled (though invisible) (#77).
   const showMajor = !isAnyGrid;
   chartBtn.style.display = showMajor ? "" : "none";
   histogramToggleBtn.style.display = showMajor ? "" : "none";
   statsBtn.style.display = showMajor ? "" : "none";
-  chartBtn.disabled = view === "chart";
-  histogramToggleBtn.disabled = view === "histogram";
-  statsBtn.disabled = view === "stats";
+  chartBtn.disabled = !showMajor || view === "chart";
+  histogramToggleBtn.disabled = !showMajor || view === "histogram";
+  statsBtn.disabled = !showMajor || view === "stats";
   chartBtn.classList.remove("active");
   histogramToggleBtn.classList.remove("active");
   statsBtn.classList.remove("active");
@@ -452,9 +454,6 @@ async function setView(
     // Summary cards bar is hidden in stats view — the stat cards ARE the content
     if (!isStats) showSummaryCards();
 
-    // STEP 5: Update button labels and visibility
-    updateButtonLabels(view, split);
-
     // Update view label in status bar
     const viewLabels: Record<ViewMode, string> = {
       chart: "Chart",
@@ -488,6 +487,10 @@ async function setView(
     // Re-enable all controls
     enableAllControls();
     updateNavButtonStates();
+
+    // STEP 5: Update button labels and visibility — after enableAllControls()
+    // so the active major-view button's disabled (grey) state is preserved (#77)
+    updateButtonLabels(view, split);
 
   } catch (err) {
     // STEP 4d: Error — show error-view
