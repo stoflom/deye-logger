@@ -163,6 +163,7 @@ export const {
   refreshBtn,
   columnsToggleBtn,
   viewToggleBtn,
+  chartBtn,
   histogramToggleBtn,
   exportCsvBtn,
   splitBtn,
@@ -306,6 +307,7 @@ const ALL_CONTROLS: (HTMLElement | null)[] = [
   refreshBtn,
   columnsToggleBtn,
   viewToggleBtn,
+  chartBtn,
   histogramToggleBtn,
   exportCsvBtn,
   binSizeSelect,
@@ -342,6 +344,7 @@ const CONTROL_KEYS: Record<string, HTMLElement | null> = {
   refresh: refreshBtn,
   columnsToggle: columnsToggleBtn,
   viewToggle: viewToggleBtn,
+  chart: chartBtn,
   histogramToggle: histogramToggleBtn,
   exportCsv: exportCsvBtn,
   binSize: binSizeSelect,
@@ -354,7 +357,7 @@ const CONTROL_KEYS: Record<string, HTMLElement | null> = {
 
 /**
  * Disable all controls, then enable only the ones listed by key.
- * Used for columns-view where only "↻ Load Data" (columnsToggle) is enabled.
+ * Used for columns-view where only `Back` (columnsToggle) is enabled.
  */
 export function enableOnlyControls(enableKeys: string[]): void {
   disableAllControls();

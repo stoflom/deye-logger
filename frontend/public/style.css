@@ -178,6 +178,28 @@ body {
   color: white;
 }
 
+/* Major-view buttons (Series / Histogram / Stats) — blue when switchable;
+   the active view's button is disabled and rendered grey by .btn-view:disabled (#62) */
+.btn-view.btn-major {
+  background: #3182ce;
+  border-color: #63b3ed;
+  color: white;
+}
+
+.btn-view.btn-major:hover:not(:disabled) {
+  background: #4299e1;
+  color: white;
+}
+
+/* Active major view — grey and not clickable (declared after .btn-view.btn-major so it wins) */
+.btn-view.btn-major:disabled {
+  background: #2d374e;
+  color: #4a5568;
+  border-color: #4a5568;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .columns-toggle {
   padding: 8px 10px;
   background: #4a5568;
