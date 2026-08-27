@@ -2,13 +2,20 @@
 """
 Test script to verify button states in major frontend views.
 
-Covers the following views as per frontend-design.md §9.3:
-  - chart
-  - grid
-  - histogram
-  - histogram-grid
+Covers the following views as per frontend-design.md §9.3 (v5.0 button scheme):
+  - chart / grid
+  - histogram / histogram-grid
+  - stats / stats-grid
   - columns select (transient)
   - error
+
+Button scheme (#62):
+  - Major views (blue): #chart-btn (Series), #histogram-btn, #stats-btn —
+    the active view's button is disabled (grey), the other two are blue;
+    hidden in grid views and the columns (Select) view.
+  - Grid utility (#view-toggle): "📋 Grid" on major views, "Back" in grid
+    views (auto-return to the view that opened the grid).
+  - Columns (#columns-toggle): "☰ Select" closed, "Back" open.
 
 For each view, verifies:
   - Button visibility (display style)
@@ -49,7 +56,9 @@ BUTTON_IDS = {
     "refresh": "refresh-btn",
     "columnsToggle": "columns-toggle",
     "viewToggle": "view-toggle",
+    "chartBtn": "chart-btn",
     "histogramToggle": "histogram-btn",
+    "statsBtn": "stats-btn",
     "exportCsv": "export-btn",
     "split": "split-btn",
 }
@@ -71,10 +80,12 @@ EXPECTED_STATES = {
         "today": {"enabled": True, "visible": True},
         "refresh": {"enabled": True, "visible": True},
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
-        # View toggle: shows "📋 Grid" when in chart (design v3.3)
-        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
-        # Histogram toggle: shows "📊 Histogram" when in chart
+        # Major-view buttons: active (Series) disabled (grey); others blue (#62)
+        "chartBtn": {"enabled": False, "visible": True, "text": "📈 Series"},
         "histogramToggle": {"enabled": True, "visible": True, "text": "📊 Histogram"},
+        "statsBtn": {"enabled": True, "visible": True, "text": "📈 Stats"},
+        # Grid utility: opens the grid for the current view
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
         # Export: hidden in non-grid views
         "exportCsv": {"enabled": True, "visible": False},
         # Split: hidden in non-histogram views
@@ -89,10 +100,12 @@ EXPECTED_STATES = {
         "today": {"enabled": True, "visible": True},
         "refresh": {"enabled": True, "visible": True},
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
-        # View toggle: shows "📈 Chart" when in grid
-        "viewToggle": {"enabled": True, "visible": True, "text": "📈 Chart"},
-        # Histogram toggle: shows "📋 Grid" when in grid (design v3.3)
-        "histogramToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
+        # Major-view buttons hidden in grid views (#62)
+        "chartBtn": {"enabled": False, "visible": False},
+        "histogramToggle": {"enabled": False, "visible": False},
+        "statsBtn": {"enabled": False, "visible": False},
+        # Grid utility reads Back — auto-return to the Series view
+        "viewToggle": {"enabled": True, "visible": True, "text": "Back"},
         # Export: visible in grid views
         "exportCsv": {"enabled": True, "visible": True},
         "split": {"enabled": True, "visible": False},
@@ -105,10 +118,12 @@ EXPECTED_STATES = {
         "today": {"enabled": True, "visible": True},
         "refresh": {"enabled": True, "visible": True},
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
-        # View toggle: shows "📋 Grid" when in histogram (design v3.3)
+        # Major-view buttons: active (Histogram) disabled (grey); others blue (#62)
+        "chartBtn": {"enabled": True, "visible": True, "text": "📈 Series"},
+        "histogramToggle": {"enabled": False, "visible": True, "text": "📊 Histogram"},
+        "statsBtn": {"enabled": True, "visible": True, "text": "📈 Stats"},
+        # Grid utility: opens histogram-grid
         "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
-        # Histogram toggle: shows "📋 Raw Chart" when in histogram
-        "histogramToggle": {"enabled": True, "visible": True, "text": "📋 Raw Chart"},
         # Export: hidden in histogram views
         "exportCsv": {"enabled": True, "visible": False},
         # Split: visible only in histogram (not histogram-grid)
@@ -123,10 +138,12 @@ EXPECTED_STATES = {
         "today": {"enabled": True, "visible": True},
         "refresh": {"enabled": True, "visible": True},
         "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
-        # View toggle: shows "📈 Histogram Chart" when in histogram-grid
-        "viewToggle": {"enabled": True, "visible": True, "text": "📈 Histogram Chart"},
-        # Histogram toggle: shows "📋 Raw Grid" when in histogram-grid
-        "histogramToggle": {"enabled": True, "visible": True, "text": "📋 Raw Grid"},
+        # Major-view buttons hidden in grid views (#62)
+        "chartBtn": {"enabled": False, "visible": False},
+        "histogramToggle": {"enabled": False, "visible": False},
+        "statsBtn": {"enabled": False, "visible": False},
+        # Grid utility reads Back — auto-return to the Histogram view
+        "viewToggle": {"enabled": True, "visible": True, "text": "Back"},
         # Export: visible in grid views (histogram-grid is a grid)
         "exportCsv": {"enabled": True, "visible": True},
         # Split: hidden in histogram-grid
@@ -135,17 +152,56 @@ EXPECTED_STATES = {
         "binSize": {"enabled": True, "visible": True},
         "dayFilter": {"enabled": True, "visible": True},
     },
+    "stats": {
+        "prevDay": {"enabled": True, "visible": True},
+        "nextDay": {"enabled": True, "visible": True},
+        "today": {"enabled": True, "visible": True},
+        "refresh": {"enabled": True, "visible": True},
+        "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
+        # Major-view buttons: active (Stats) disabled (grey); others blue (#62)
+        "chartBtn": {"enabled": True, "visible": True, "text": "📈 Series"},
+        "histogramToggle": {"enabled": True, "visible": True, "text": "📊 Histogram"},
+        "statsBtn": {"enabled": False, "visible": True, "text": "📈 Stats"},
+        # Grid utility: opens stats-grid (table)
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
+        "exportCsv": {"enabled": True, "visible": False},
+        "split": {"enabled": True, "visible": False},
+        "binSize": {"enabled": True, "visible": False},
+        "dayFilter": {"enabled": True, "visible": True},
+    },
+    "stats-grid": {
+        "prevDay": {"enabled": True, "visible": True},
+        "nextDay": {"enabled": True, "visible": True},
+        "today": {"enabled": True, "visible": True},
+        "refresh": {"enabled": True, "visible": True},
+        "columnsToggle": {"enabled": True, "visible": True, "text": "☰ Select"},
+        # Major-view buttons hidden in grid views (#62)
+        "chartBtn": {"enabled": False, "visible": False},
+        "histogramToggle": {"enabled": False, "visible": False},
+        "statsBtn": {"enabled": False, "visible": False},
+        # Grid utility reads Back — auto-return to the Stats view
+        "viewToggle": {"enabled": True, "visible": True, "text": "Back"},
+        # Export: visible in grid views (stats-grid is a grid)
+        "exportCsv": {"enabled": True, "visible": True},
+        "split": {"enabled": True, "visible": False},
+        "binSize": {"enabled": True, "visible": False},
+        "dayFilter": {"enabled": True, "visible": True},
+    },
     "columns": {
-        # Only columnsToggle is enabled; all others are disabled.
-        # Visibility is inherited from the underlying view (chart here) —
-        # the columns panel is a transient overlay, not a view change.
+        # Only columnsToggle ("Back") is enabled; all others are disabled.
+        # Major-view buttons are hidden; visibility of the rest is inherited
+        # from the underlying view (chart here) — the columns panel is a
+        # transient overlay, not a view change.
         "prevDay": {"enabled": False, "visible": True},
         "nextDay": {"enabled": False, "visible": True},
         "today": {"enabled": False, "visible": True},
         "refresh": {"enabled": False, "visible": True},
-        "columnsToggle": {"enabled": True, "visible": True, "text": "↻ Load Data"},
+        "columnsToggle": {"enabled": True, "visible": True, "text": "Back"},
+        # Major-view buttons hidden in the columns (Select) view (#62)
+        "chartBtn": {"enabled": False, "visible": False},
+        "histogramToggle": {"enabled": False, "visible": False},
+        "statsBtn": {"enabled": False, "visible": False},
         "viewToggle": {"enabled": False, "visible": True},
-        "histogramToggle": {"enabled": False, "visible": True},
         "exportCsv": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "split": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "binSize": {"enabled": False, "visible": False},  # hidden inside histogram-controls (display:none)
@@ -160,7 +216,9 @@ EXPECTED_STATES = {
         "refresh": {"enabled": False, "visible": True},
         "columnsToggle": {"enabled": False, "visible": True},
         "viewToggle": {"enabled": False, "visible": True},
+        "chartBtn": {"enabled": False, "visible": True},
         "histogramToggle": {"enabled": False, "visible": True},
+        "statsBtn": {"enabled": False, "visible": True},
         "exportCsv": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "split": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "binSize": {"enabled": False, "visible": False},  # hidden inside histogram-controls
@@ -368,8 +426,8 @@ def test_histogram_grid_view_button_states(tester):
 def test_columns_select_button_states(tester):
     """Test button states when columns selection panel is open.
 
-    Per design §6.2 STEP 4a: only columnsToggle ('↻ Load Data') is enabled.
-    All other controls are disabled.
+    Per design §6.2 STEP 4a: only columnsToggle ('Back') is enabled and the
+    major-view buttons are hidden; all other controls are disabled (#62).
     """
     print("\n[Test 5] Columns select button states")
 
@@ -480,14 +538,14 @@ def test_button_transition_chart_to_grid(tester):
     assert padding == "10px", f"compact horizontal padding 10px (got {padding})"
     print(f"  ✓ #57: tooltip='{view_title}', paddingLeft={padding}")
 
-    # Toggle to grid
+    # Open grid via the Grid utility button
     view_toggle_btn = tester.find_element(By.ID, "view-toggle")
     view_toggle_btn.click()
     tester.wait_for_element(By.ID, "summary-cards")
     time.sleep(0.5)
 
     view_text = get_button_text(tester, "view-toggle")
-    assert view_text == "📈 Chart", f"Expected '📈 Chart', got '{view_text}'"
+    assert view_text == "Back", f"Expected 'Back' in grid view, got '{view_text}'"
     print(f"  ✓ Grid: view-toggle text = '{view_text}'")
 
     # CSV should now be visible
@@ -495,7 +553,13 @@ def test_button_transition_chart_to_grid(tester):
     assert csv_visible, "CSV export should be visible in grid view"
     print("  ✓ CSV export visible in grid view")
 
-    # Toggle back to chart
+    # Major-view buttons must be hidden in grid views (#62)
+    for btn_id in ("chart-btn", "histogram-btn", "stats-btn"):
+        assert not is_element_visible(tester, btn_id), \
+            f"{btn_id} should be hidden in grid view"
+    print("  ✓ Major-view buttons hidden in grid view")
+
+    # Auto-return to chart via Back
     view_toggle_btn = tester.find_element(By.ID, "view-toggle")
     view_toggle_btn.click()
     tester.wait_for_element(By.ID, "summary-cards")
@@ -503,12 +567,16 @@ def test_button_transition_chart_to_grid(tester):
 
     view_text = get_button_text(tester, "view-toggle")
     assert view_text == "📋 Grid", f"Expected '📋 Grid', got '{view_text}'"
-    print(f"  ✓ Chart: view-toggle text = '{view_text}' (after toggle back)")
+    print(f"  ✓ Chart: view-toggle text = '{view_text}' (after Back auto-return)")
 
-    # CSV should now be hidden
+    # CSV should now be hidden; Series button disabled (active view) (#62)
     csv_visible = is_element_visible(tester, "export-btn")
     assert not csv_visible, "CSV export should be hidden in chart view"
     print("  ✓ CSV export hidden in chart view")
+    assert is_element_disabled(tester, "chart-btn"), "Series button should be disabled in chart view"
+    assert not is_element_disabled(tester, "histogram-btn"), "Histogram button should be enabled in chart view"
+    assert not is_element_disabled(tester, "stats-btn"), "Stats button should be enabled in chart view"
+    print("  ✓ Series disabled (active); Histogram/Stats enabled in chart view")
 
     take_screenshot(tester, "buttons-transition.png", "Button transition chart<->grid")
     print("  ✓ Button transitions work correctly")
@@ -524,15 +592,19 @@ def test_button_transition_normal_to_histogram(tester):
     assert hist_text == "📊 Histogram", f"Expected '📊 Histogram', got '{hist_text}'"
     print(f"  ✓ Chart: histogram-btn text = '{hist_text}'")
 
-    # Toggle to histogram
+    # Switch to histogram via the Histogram major-view button
     hist_btn = tester.find_element(By.ID, "histogram-btn")
     hist_btn.click()
     tester.wait_for_element(By.ID, "summary-cards")
     time.sleep(0.5)
 
     hist_text = get_button_text(tester, "histogram-btn")
-    assert hist_text == "📋 Raw Chart", f"Expected '📋 Raw Chart', got '{hist_text}'"
-    print(f"  ✓ Histogram: histogram-btn text = '{hist_text}'")
+    assert hist_text == "📊 Histogram", f"Expected '📊 Histogram', got '{hist_text}'"
+    assert is_element_disabled(tester, "histogram-btn"), \
+        "Histogram button should be disabled (grey) in histogram view"
+    assert not is_element_disabled(tester, "chart-btn"), \
+        "Series button should be enabled in histogram view"
+    print(f"  ✓ Histogram: histogram-btn = '{hist_text}' (disabled/active)")
 
     # Histogram controls should be visible
     assert get_histogram_controls_visible(tester), "histogram-controls should be visible"
@@ -541,15 +613,33 @@ def test_button_transition_normal_to_histogram(tester):
     assert is_element_visible(tester, "day-filter-select"), "day-filter-select should be visible"
     print("  ✓ Histogram controls visible (bin-size, day-filter, split)")
 
-    # Toggle back to chart (via histogram toggle which goes back to chart)
-    hist_btn = tester.find_element(By.ID, "histogram-btn")
-    hist_btn.click()
+    # histogram → histogram-grid via Grid utility, auto-return via Back (#62)
+    grid_btn = tester.find_element(By.ID, "view-toggle")
+    grid_btn.click()
+    tester.wait_for_element(By.ID, "summary-cards")
+    time.sleep(0.5)
+    assert get_button_text(tester, "view-toggle") == "Back", \
+        "view-toggle should read 'Back' in histogram-grid"
+    assert not is_element_visible(tester, "chart-btn"), "major buttons hidden in histogram-grid"
+    print("  ✓ histogram-grid: view-toggle = 'Back', major buttons hidden")
+    grid_btn.click()
+    tester.wait_for_element(By.ID, "summary-cards")
+    time.sleep(0.5)
+    assert get_button_text(tester, "view-toggle") == "📋 Grid", \
+        "Back should auto-return to the Histogram view"
+    print("  ✓ Back auto-returned to Histogram view")
+
+    # Switch back to chart via the Series major-view button
+    series_btn = tester.find_element(By.ID, "chart-btn")
+    series_btn.click()
     tester.wait_for_element(By.ID, "summary-cards")
     time.sleep(0.5)
 
-    hist_text = get_button_text(tester, "histogram-btn")
-    assert hist_text == "📊 Histogram", f"Expected '📊 Histogram', got '{hist_text}'"
-    print(f"  ✓ Chart: histogram-btn text = '{hist_text}' (after toggle back)")
+    assert is_element_disabled(tester, "chart-btn"), \
+        "Series button should be disabled (grey) in chart view"
+    assert not is_element_disabled(tester, "histogram-btn"), \
+        "Histogram button should be enabled in chart view"
+    print("  ✓ Chart: Series disabled (active), Histogram enabled")
 
     # Histogram controls should be hidden
     assert not get_histogram_controls_visible(tester), "histogram-controls should be hidden"
@@ -561,6 +651,51 @@ def test_button_transition_normal_to_histogram(tester):
     print("  ✓ Histogram transitions work correctly")
 
 
+def test_stats_view_button_states(tester):
+    """Test button states in stats and stats-grid views + Grid/Back auto-return (#62)."""
+    print("\n[Test 10] Stats view button states")
+    navigate_to_view(tester, "stats")
+
+    failures = []
+    for control, expected in EXPECTED_STATES["stats"].items():
+        failures.extend(check_control(tester, control, expected, "stats"))
+    if failures:
+        print("  ✗ FAILURES:")
+        for f in failures:
+            print(f)
+        take_screenshot(tester, "buttons-stats-fail.png", "Stats view button failures")
+        raise AssertionError(f"Stats view: {len(failures)} button state failures")
+    print("  ✓ All button states correct for stats view")
+
+    # stats → stats-grid via Grid utility, auto-return via Back
+    grid_btn = tester.find_element(By.ID, "view-toggle")
+    grid_btn.click()
+    tester.wait_for_element(By.ID, "summary-cards")
+    time.sleep(0.5)
+
+    failures = []
+    for control, expected in EXPECTED_STATES["stats-grid"].items():
+        failures.extend(check_control(tester, control, expected, "stats-grid"))
+    if failures:
+        print("  ✗ FAILURES:")
+        for f in failures:
+            print(f)
+        take_screenshot(tester, "buttons-stats-grid-fail.png", "Stats-grid view button failures")
+        raise AssertionError(f"Stats-grid view: {len(failures)} button state failures")
+    print("  ✓ All button states correct for stats-grid view")
+
+    assert get_button_text(tester, "view-toggle") == "Back", \
+        "view-toggle should read 'Back' in stats-grid"
+    grid_btn.click()
+    tester.wait_for_element(By.ID, "summary-cards")
+    time.sleep(0.5)
+    assert get_button_text(tester, "view-toggle") == "📋 Grid", \
+        "Back should auto-return to the Stats view"
+    print("  ✓ Back auto-returned to Stats view")
+
+    take_screenshot(tester, "buttons-stats.png", "Stats view buttons")
+
+
 def test_view_label_in_status_bar(tester):
     """Test that the view label in the status bar updates correctly."""
     print("\n[Test 9] View label in status bar")
@@ -570,6 +705,8 @@ def test_view_label_in_status_bar(tester):
         "grid": "Data Grid",
         "histogram": "Histogram",
         "histogram-grid": "Histogram Grid",
+        "stats": "Stats",
+        "stats-grid": "Stats Grid",
     }
 
     for view_mode, expected_label in expected_labels.items():
@@ -615,6 +752,7 @@ def main():
             test_grid_view_button_states(tester)
             test_histogram_view_button_states(tester)
             test_histogram_grid_view_button_states(tester)
+            test_stats_view_button_states(tester)
             test_columns_select_button_states(tester)
 
             # Close columns panel before continuing

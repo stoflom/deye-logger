@@ -149,17 +149,22 @@ def main():
         vt = tester.find_element(By.ID, "view-toggle")
         t.check(visible(tester, "#view-toggle"), "view-toggle visible in stats view")
         t.check(vt.text == "\U0001F4CB Grid", f"view-toggle offers 'Grid' in stats view (got '{vt.text}')")
-        t.check(not visible(tester, "#histogram-btn"), "histogram-btn hidden in stats view")
+        # #62: stats is a major view — the other major buttons stay visible (blue);
+        # only grid views and the Select view hide them
+        t.check(visible(tester, "#histogram-btn"), "histogram-btn visible (blue) in stats view")
+        t.check(visible(tester, "#chart-btn"), "Series (chart-btn) visible (blue) in stats view")
         t.check(not visible(tester, "#histogram-controls"), "bin-size/split controls hidden")
         t.check(not visible(tester, "#export-btn"), "CSV export hidden")
         t.check(visible(tester, "#day-filter-group"), "day filter group visible")
         t.check(visible(tester, "#stats-cutoffs"), "cutoff selects visible")
 
+        # #62: the active major-view button is disabled (grey)
         stats_btn = tester.find_element(By.ID, "stats-btn")
-        t.check("Back to Chart" in stats_btn.text, f"stats button shows 'Back to Chart' (got '{stats_btn.text}')")
-        # #61: stats is a major view — its button carries the blue .active style
-        t.check("active" in (stats_btn.get_attribute("class") or ""),
-                "stats button has 'active' class (blue background)")
+        t.check(stats_btn.text.strip() == "\U0001F4C8 Stats", f"stats button reads 'Stats' (got '{stats_btn.text}')")
+        t.check(stats_btn.get_attribute("disabled") is not None,
+                "stats button disabled (grey, active view) in stats view")
+        t.check(tester.find_element(By.ID, "histogram-btn").get_attribute("disabled") is None,
+                "histogram button enabled (blue) in stats view")
         # #61: minutes use 'mins' so they are not confused with 'Min' (minimum)
         high_main = tester.find_elements(By.CSS_SELECTOR, ".stat-card:first-child .stat-row-main")[3].text
         t.check("mins/day" in high_main and " min/day" not in high_main,
@@ -220,25 +225,28 @@ def main():
         range_days = tester.find_element(By.ID, "range-days").text
         t.check(range_days.strip() == "1 day", f"range-days shows '1 day' (got '{range_days.strip()}')")
 
-        # ── Test 5: Back to Chart ────────────────────────────────────
-        print("\n[Test 5] Back to Chart button")
+        # ── Test 5: return to the Series view via the Series major button ──
+        print("\n[Test 5] Series button returns to the chart view")
         tester.navigate(f"{BASE_URL}/?view=stats&from={RANGE_FROM}&to={RANGE_TO}")
         try:
             tester.wait_for_element(By.CSS_SELECTOR, ".stat-card", timeout=20)
         except Exception:
             pass
-        tester.find_element(By.ID, "stats-btn").click()
+        tester.find_element(By.ID, "chart-btn").click()
         try:
             tester.wait_for_element(By.CSS_SELECTOR, "#raw-data-chart-view.visible", timeout=20)
         except Exception:
             pass
-        t.check(visible(tester, "#raw-data-chart-view"), "chart view visible after back")
-        t.check(not visible(tester, "#stats-view"), "stats view hidden after back")
+        t.check(visible(tester, "#raw-data-chart-view"), "chart view visible after switch")
+        t.check(not visible(tester, "#stats-view"), "stats view hidden after switch")
         t.check(visible(tester, "#view-toggle"), "view-toggle visible again")
         t.check(visible(tester, "#histogram-btn"), "histogram-btn visible again")
         t.check(not visible(tester, "#stats-cutoffs"), "cutoffs hidden in chart view")
         stats_btn = tester.find_element(By.ID, "stats-btn")
-        t.check("Stats" in stats_btn.text and "Back" not in stats_btn.text, f"stats button back to 'Stats' (got '{stats_btn.text}')")
+        t.check("Stats" in stats_btn.text and "Back" not in stats_btn.text, f"stats button reads 'Stats' (got '{stats_btn.text}')")
+        t.check(stats_btn.get_attribute("disabled") is None, "stats button enabled in chart view")
+        t.check(tester.find_element(By.ID, "chart-btn").get_attribute("disabled") is not None,
+                "Series button disabled (grey, active view) in chart view")
         t.check("view=chart" in tester.get_url(), f"URL has view=chart (got {tester.get_url()})")
 
         # ── Test 6: empty data → info view ───────────────────────────
@@ -267,8 +275,9 @@ def main():
         t.check(view_label.strip() == "Stats Grid", f"view label is 'Stats Grid' (got '{view_label.strip()}')")
         t.check(visible(tester, "#view-toggle"), "view-toggle visible in stats-grid")
         t.check(not visible(tester, "#histogram-btn"), "histogram-btn hidden in stats-grid")
+        t.check(not visible(tester, "#chart-btn"), "Series (chart-btn) hidden in stats-grid")
         vt = tester.find_element(By.ID, "view-toggle")
-        t.check(vt.text == "\U0001F4C8 Stats Cards", f"view-toggle offers 'Stats Cards' (got '{vt.text}')")
+        t.check(vt.text == "Back", f"view-toggle reads 'Back' in stats-grid (got '{vt.text}')")
 
         cols = tester.find_elements(By.CSS_SELECTOR, ".stats-grid-table thead th")
         t.check(len(cols) == 9, f"9 stat columns (got {len(cols)})")
