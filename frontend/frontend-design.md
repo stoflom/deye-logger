@@ -653,21 +653,24 @@ other modules → shared.ts + dom-refs.ts
 
 ## 9. View Modes and Transitions
 
-### 9.1 Normal Mode (chart / grid) and Stats
+### 9.1 View Transitions
+
+The three major views — **Series** (`chart`), **Histogram**, **Stats** — are cross-switched by the three blue major-view buttons; the button of the active view is disabled (grey). Each major view opens its **corresponding grid view** with the grey `Grid` utility button; `Back` inside the grid **automatically returns to the view that opened it**. The `Select` button opens the **columns view** from any data view; `Back` returns to the view that opened it. **No major-view buttons are shown in grid views or in the columns view** — they only go back.
 
 ```
-chart  ←─viewToggle─→  grid
-  │                       │
-  ├──histogramBtn─────────┤
-  │                       │
-  │     statsBtn (from chart or grid or any histogram view)
-  ▼                       ▼
-  stats            histogram ←─viewToggle─→ histogram-grid
-   │
-   ├──viewToggle──→ stats-grid   (table layout; same data, §16.6)
-   │
-   └──statsBtn──→ chart          (histogramBtn is hidden in stats views;
-                                 viewToggle toggles stats ↔ stats-grid)
+Major views — the blue buttons switch between them (active one disabled, grey):
+
+        Series ──────────────▶ Histogram ─────────────▶ Stats
+           ▲  ▲                     ▲  ▲                   ▲  ▲
+           │  └──── Series ─────────┘  └──── Series ────────┘  │
+           └───────── Histogram ───────────────────────────────┘
+
+Overlay navigation — grey utility buttons; Back returns to the view that opened it:
+
+        Series ──Grid──▶ Grid (grid) ──────────Back──▶ Series
+        Histogram ─Grid─▶ Histogram Grid ──────Back──▶ Histogram
+        Stats ──Grid──▶ Stats Grid ────────────Back──▶ Stats
+        any data view ─Select─▶ Columns view ───Back──▶ the view that opened it
 ```
 
 ### 9.2 Histogram Sub-Mode (split)
@@ -690,52 +693,51 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Next Day | `nextDayBtn` | `›` | Always | Action (shift +1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.maxAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Today | `todayBtn` | `Today` | Always | Action (set to today) | — | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`) |
 | Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })`; pushes pre-refresh snapshot to history for error recovery | URL-stateful (pre-refresh snapshot) |
-| Columns Toggle | `columnsToggleBtn` | `☰ Select` (closed) / `↻ Load Data` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (opening pushes history entry) | Stateless (columns persist to localStorage) |
-| View Toggle | `viewToggleBtn` | See labels below | Always | Toggle (within mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
-| Histogram Toggle | `histogramToggleBtn` | See labels below | Always | Toggle (normal↔histogram mode) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
-| CSV Export | `exportCsvBtn` | `⬇ CSV` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
+| Series (major view) | `chartBtn` | `📈 Series` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Series) | — | `appState.activeView` (URL) | URL-stateful (via `view`) |
+| Histogram (major view) | `histogramToggleBtn` | `📊 Histogram` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Histogram) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
+| Stats (major view) | `statsBtn` | `📈 Stats` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Stats) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
+| Grid (utility) | `viewToggleBtn` | `📋 Grid` (major views) / `Back` (grid views) | Always | Action (open grid for current view / auto-return) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
+| Columns (utility) | `columnsToggleBtn` | `☰ Select` (closed) / `Back` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (opening pushes history entry) | Stateless (columns persist to localStorage) |
+| CSV Export | `exportCsvBtn` | `⬇ Download (CSV)` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
 | Split | `splitBtn` | `Split` / `Combine` | Histogram view only | Toggle (combined↔split) | `histogramIsSplitMode`, URL `?split=1` | `histogramIsSplitMode`, URL `?split=1` | URL-stateful (via `split`) |
 | Bin Size | `binSizeSelect` | `5` / `10` / `15` / `30` / `60` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?binSize=N` | URL-stateful (via `binSize`) |
 | Day Filter | `dayFilterSelect` | `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` | Histogram mode **and** stats view (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?dayFilter=X` | URL-stateful (via `dayFilter`) |
 | High Cutoff | `highCutoffSelect` | `50` / `75` / `90` / `95` / `99` (default `95`) | Stats view only (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?highCutoff=N` | URL-stateful (via `highCutoff`) |
 | Low Cutoff | `lowCutoffSelect` | `1` / `5` / `10` / `25` / `50` (default `5`) | Stats view only (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?lowCutoff=N` | URL-stateful (via `lowCutoff`) |
-| Stats Toggle | `statsBtn` | See labels below | All views (in title bar) | Toggle (stats↔chart) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 
-#### Stats Button Labels (`statsBtn`)
+
+#### Major View Button States (`chartBtn` / `histogramToggleBtn` / `statsBtn`)
+
+| `appState.activeView` | `📈 Series` | `📊 Histogram` | `📈 Stats` |
+| ---------------------- | ------------- | --------------- | ----------- |
+| `chart` / `grid` | Disabled (grey, active) | Blue — `setView("histogram")` | Blue — `setView("stats")` |
+| `histogram` / `histogram-grid` | Blue — `setView("chart")` | Disabled (grey, active) | Blue — `setView("stats")` |
+| `stats` / `stats-grid` | Blue — `setView("chart")` | Blue — `setView("histogram")` | Disabled (grey, active) |
+| Grid views / Columns view | Hidden | Hidden | Hidden |
+
+Titles: Series — "Show the time-series line chart"; Histogram — "Show binned average histogram"; Stats — "Show per-column statistics for the selected range".
+
+In the stats views, the Stats button is disabled (grey) and the other two major buttons are blue. No major-view switching happens from grid views or the columns view — they return only via `Back`. Date nav, refresh, `Select`, the day filter (histogram/stats views) and the cutoff selects (stats views) remain visible; `⬇ Download (CSV)` is available on the grid views.
+
+#### Grid Button Labels (`viewToggleBtn`)
 
 | `appState.activeView` | Button Text | Button Title | Action |
 | ---------------------- | ------------ | ------------- | -------- |
-| `chart` / `grid` / `histogram` / `histogram-grid` | `📈 Stats` | "Show per-column statistics for the selected range" | `setView("stats")` |
-| `stats` / `stats-grid` | `📊 Back to Chart` | "Return to the chart view" | `setView("chart")` |
+| `chart` | `📋 Grid` | "Show the chart data as a grid" | `setView("grid")` |
+| `grid` | `Back` | "Return to the Series view" | `setView("chart")` |
+| `histogram` | `📋 Grid` | "Show the histogram data as a grid" | `setView("histogram-grid")` |
+| `histogram-grid` | `Back` | "Return to the Histogram view" | `setView("histogram")` |
+| `stats` | `📋 Grid` | "Show the statistics as a grid (table)" | `setView("stats-grid")` |
+| `stats-grid` | `Back` | "Return to the Stats view" | `setView("stats")` |
 
-In the stats views, `histogramToggleBtn` is **hidden** (stats has no histogram counterpart), but `viewToggleBtn` is visible and toggles `stats` ↔ `stats-grid`. Date nav, refresh, columns toggle, day filter, and both cutoff selects remain visible.
+The grid views show **no** major-view-switching buttons — only `Back`, which automatically returns to the view that opened the grid. The Stats cards↔table sub-toggle is exactly `stats` ↔ `stats-grid` via `Grid` / `Back`.
 
-#### View Toggle Button Labels (`viewToggleBtn`)
-
-| `appState.activeView` | Button Text | Button Title | Toggles To |
-| ---------------------- | ------------ | ------------- | ------------ |
-| `chart` | `📋 Grid` | "Show the chart data as a grid" | `grid` |
-| `grid` | `📈 Chart` | "Switch back to the chart" | `chart` |
-| `histogram` | `📋 Grid` | "Show the histogram data as a grid" | `histogram-grid` |
-| `histogram-grid` | `📈 Histogram Chart` | "Switch back to the histogram chart" | `histogram` |
-| `stats` | `📋 Grid` | "Show the statistics as a grid (table)" | `stats-grid` |
-| `stats-grid` | `📈 Stats Cards` | "Back to the statistics cards" | `stats` |
-
-#### Histogram Toggle Button Labels (`histogramToggleBtn`)
-
-| `appState.activeView` | Button Text | Button Title | Toggles To |
-| ---------------------- | ------------ | ------------- | ------------ |
-| `chart` | `📊 Histogram` | "Show binned average histogram" | `histogram` |
-| `grid` | `📋 Grid` | "Show the histogram data as a grid (binned averages)" | `histogram-grid` |
-| `histogram` | `📋 Raw Chart` | "Switch back to the raw data chart" | `chart` |
-| `histogram-grid` | `📋 Raw Grid` | "Switch back to the data grid" | `grid` |
-
-#### Columns Toggle Button Labels (`columnsToggleBtn`)
+#### Columns Button Labels (`columnsToggleBtn`)
 
 | columns-view State | Button Text | Button Title | Action |
 | ------------------- | ------------ | ------------- | -------- |
 | Closed | `☰ Select` | "Select columns to display" | `setView(activeView, { columns: true })` |
-| Open | `↻ Load Data` | "Close panel and load selected data" | `setView(appState.activeView)` |
+| Open | `Back` | "Close the panel and return to the view that opened it" | `setView(appState.activeView)` |
 
 #### Split Button Labels (`splitBtn`)
 
