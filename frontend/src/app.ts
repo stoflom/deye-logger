@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "5.0.0";
+export const FRONTEND_VERSION = "5.1.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -244,6 +244,9 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   // in grid views it reads `Back` and returns to the view that opened it (#62)
   if (isAnyGrid) {
     viewToggleBtn.textContent = "Back";
+    // Blue (active) while in a grid view, matching #columns-toggle in the
+    // Select view, to emphasize the way back (#76)
+    viewToggleBtn.classList.add("active");
     viewToggleBtn.title =
       view === "grid"
         ? "Return to the Series view"
@@ -258,8 +261,8 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
         : view === "histogram"
           ? "Show the histogram data as a grid"
           : "Show the statistics as a grid (table)";
+    viewToggleBtn.classList.remove("active");
   }
-  viewToggleBtn.classList.remove("active");
 
   // Split button — visible only in histogram (not histogram-grid)
   splitBtn.style.display = view === "histogram" ? "" : "none";

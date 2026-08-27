@@ -84,8 +84,8 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": False, "visible": True, "text": "📈 Series"},
         "histogramToggle": {"enabled": True, "visible": True, "text": "📊 Histogram"},
         "statsBtn": {"enabled": True, "visible": True, "text": "📈 Stats"},
-        # Grid utility: opens the grid for the current view
-        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
+        # Grid utility: opens the grid for the current view (grey in major views)
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid", "blue": False},
         # Export: hidden in non-grid views
         "exportCsv": {"enabled": True, "visible": False},
         # Split: hidden in non-histogram views
@@ -104,8 +104,8 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": False, "visible": False},
         "histogramToggle": {"enabled": False, "visible": False},
         "statsBtn": {"enabled": False, "visible": False},
-        # Grid utility reads Back — auto-return to the Series view
-        "viewToggle": {"enabled": True, "visible": True, "text": "Back"},
+        # Grid utility reads Back (blue, .active — #76) — auto-return to the Series view
+        "viewToggle": {"enabled": True, "visible": True, "text": "Back", "blue": True},
         # Export: visible in grid views
         "exportCsv": {"enabled": True, "visible": True},
         "split": {"enabled": True, "visible": False},
@@ -122,8 +122,8 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": True, "visible": True, "text": "📈 Series"},
         "histogramToggle": {"enabled": False, "visible": True, "text": "📊 Histogram"},
         "statsBtn": {"enabled": True, "visible": True, "text": "📈 Stats"},
-        # Grid utility: opens histogram-grid
-        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
+        # Grid utility: opens histogram-grid (grey in major views)
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid", "blue": False},
         # Export: hidden in histogram views
         "exportCsv": {"enabled": True, "visible": False},
         # Split: visible only in histogram (not histogram-grid)
@@ -142,8 +142,8 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": False, "visible": False},
         "histogramToggle": {"enabled": False, "visible": False},
         "statsBtn": {"enabled": False, "visible": False},
-        # Grid utility reads Back — auto-return to the Histogram view
-        "viewToggle": {"enabled": True, "visible": True, "text": "Back"},
+        # Grid utility reads Back (blue, .active — #76) — auto-return to the Histogram view
+        "viewToggle": {"enabled": True, "visible": True, "text": "Back", "blue": True},
         # Export: visible in grid views (histogram-grid is a grid)
         "exportCsv": {"enabled": True, "visible": True},
         # Split: hidden in histogram-grid
@@ -162,8 +162,8 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": True, "visible": True, "text": "📈 Series"},
         "histogramToggle": {"enabled": True, "visible": True, "text": "📊 Histogram"},
         "statsBtn": {"enabled": False, "visible": True, "text": "📈 Stats"},
-        # Grid utility: opens stats-grid (table)
-        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid"},
+        # Grid utility: opens stats-grid (table) (grey in major views)
+        "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid", "blue": False},
         "exportCsv": {"enabled": True, "visible": False},
         "split": {"enabled": True, "visible": False},
         "binSize": {"enabled": True, "visible": False},
@@ -179,8 +179,8 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": False, "visible": False},
         "histogramToggle": {"enabled": False, "visible": False},
         "statsBtn": {"enabled": False, "visible": False},
-        # Grid utility reads Back — auto-return to the Stats view
-        "viewToggle": {"enabled": True, "visible": True, "text": "Back"},
+        # Grid utility reads Back (blue, .active — #76) — auto-return to the Stats view
+        "viewToggle": {"enabled": True, "visible": True, "text": "Back", "blue": True},
         # Export: visible in grid views (stats-grid is a grid)
         "exportCsv": {"enabled": True, "visible": True},
         "split": {"enabled": True, "visible": False},
@@ -201,7 +201,7 @@ EXPECTED_STATES = {
         "chartBtn": {"enabled": False, "visible": False},
         "histogramToggle": {"enabled": False, "visible": False},
         "statsBtn": {"enabled": False, "visible": False},
-        "viewToggle": {"enabled": False, "visible": True},
+        "viewToggle": {"enabled": False, "visible": True, "blue": False},  # grey (inherited from chart)
         "exportCsv": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "split": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "binSize": {"enabled": False, "visible": False},  # hidden inside histogram-controls (display:none)
@@ -215,7 +215,7 @@ EXPECTED_STATES = {
         "today": {"enabled": False, "visible": True},
         "refresh": {"enabled": False, "visible": True},
         "columnsToggle": {"enabled": False, "visible": True},
-        "viewToggle": {"enabled": False, "visible": True},
+        "viewToggle": {"enabled": False, "visible": True, "blue": False},  # grey (inherited from chart)
         "chartBtn": {"enabled": False, "visible": True},
         "histogramToggle": {"enabled": False, "visible": True},
         "statsBtn": {"enabled": False, "visible": True},
@@ -321,6 +321,16 @@ def check_control(tester, control_name, expected, view_name):
         if actual_text != expected_text:
             failures.append(
                 f"  {control_name} text: expected '{expected_text}', got '{actual_text}'"
+            )
+
+    # Check blue (.active) styling — #3182ce = rgb(49, 130, 206)
+    expected_blue = expected.get("blue")
+    if expected_blue is not None:
+        bg = tester.get_computed_style(By.ID, element_id, "background-color")
+        actual_blue = bg == "rgb(49, 130, 206)"
+        if actual_blue != expected_blue:
+            failures.append(
+                f"  {control_name} blue: expected {expected_blue}, got {actual_blue} (bg={bg})"
             )
 
     return failures

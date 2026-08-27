@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v5.0
+> **Status:** v5.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -72,10 +72,10 @@ The title bar contains **all application buttons and controls** in a single hori
 **Button groups (v5.0 — fixes #62):** the title-bar buttons are organized into three clearly-segmented groups:
 
 1. **Major views (blue)** — `Series` (line chart; the name references *Time Series*, replacing the too-general "Chart"), `Histogram`, `Stats`. Always visible on the three major views; the **active** view's button is **disabled (grey)** (see §2.3) and the **other two** are **blue** and clickable to switch major views. These buttons are **hidden** in all grid views and in the Select (columns) view.
-2. **Utilities (grey, always visible)** — date inputs + `Today` + `‹`/`›`, `↻ Refresh`, `Select`, `Grid`.
+2. **Utilities (grey, always visible)** — date inputs + `Today` + `‹`/`›`, `↻ Refresh`, `Select`, `Grid`. Exception: the `Grid` button becomes **blue (`.active`)** while inside a grid view, when it reads `Back` (v5.1 — #76).
 3. **Contextual controls** — `Bin size` (histogram view only), `Day` day-of-week selector, `High`/`Low` cutoffs (stats views), `Split` (histogram view), `⬇ Download (CSV)` (grid views only).
 
-**Grid utility button:** `#view-toggle` is no longer a major-view toggle. It **opens the data grid for the data of the currently-selected view** (chart → grid, histogram → histogram-grid, stats → stats-grid). Inside a grid view it reads **`Back`** and **automatically returns to the view that opened the grid**. Grid views show no major-view switching buttons — they only go back. `Day` + `Today`/`‹`/`›` and `⬇ Download (CSV)` remain available on the grids.
+**Grid utility button:** `#view-toggle` is no longer a major-view toggle. It **opens the data grid for the data of the currently-selected view** (chart → grid, histogram → histogram-grid, stats → stats-grid). Inside a grid view it reads **`Back`**, is styled **blue (`.active`)** to emphasize the way back (v5.1 — #76, mirroring `#columns-toggle` in the Select view), and **automatically returns to the view that opened the grid**. Grid views show no major-view switching buttons — they only go back. `Day` + `Today`/`‹`/`›` and `⬇ Download (CSV)` remain available on the grids.
 
 **Button ordering in wrapped rows:** Buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next row. This means the bin-size and split buttons may appear on a second row when the viewport is narrow.
 
@@ -98,7 +98,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Series button | `#chart-btn` | Major-view button: shows the line (time-series) chart. Active (disabled grey) in chart/grid views, blue in the other major views, hidden in grid/Select views |
 | Histogram button | `#histogram-btn` | Major-view button: shows the binned-average histogram. Active (disabled grey) in histogram/histogram-grid views, blue in the other major views, hidden in grid/Select views |
 | Stats button | `#stats-btn` | Major-view button: shows per-column statistics. Active (disabled grey) in stats/stats-grid views, blue in the other major views, hidden in grid/Select views |
-| Grid button (utility) | `#view-toggle` | `📋 Grid` — opens the data grid for the currently-selected view (chart→grid, histogram→histogram-grid, stats→stats-grid). In grid views reads **`Back`** and returns automatically to the view that opened the grid |
+| Grid button (utility) | `#view-toggle` | `📋 Grid` — opens the data grid for the currently-selected view (chart→grid, histogram→histogram-grid, stats→stats-grid). In grid views reads **`Back`** (blue, `.active`) and returns automatically to the view that opened the grid |
 | Columns button (utility) | `#columns-toggle` | `☰ Select` — opens the column selection panel. While the panel is open reads **`Back`**; closing returns to the view that opened it |
 | CSV export | `#export-btn` | `⬇ Download (CSV)` — export current grid as CSV (visible in grid views only) |
 | Bin size | `#bin-size-select` | Histogram bin size dropdown: `5` / `10` / `15` / `30` / `60` (hidden in non-histogram modes) |
@@ -123,10 +123,11 @@ Buttons are color-coded by group (v5.0 — fixes #62). The state is applied via 
 | Button | ID | Appearance |
 | --------- | ----- | --------- |
 | `📈 Series` / `📊 Histogram` / `📈 Stats` (major views) | `#chart-btn` / `#histogram-btn` / `#stats-btn` | **Blue** when the view is *not* the current one (clickable, switches major view). **Disabled (grey)** when it is the active view — the current view is already shown, so the button is not clickable. Hidden in all grid views and in the columns (Select) view. |
-| Utilities (`Grid`, `Select`, date nav, refresh) | `#view-toggle`, `#columns-toggle`, `#prev-day`, `#next-day`, `#today-btn`, `#refresh-btn` | **Grey**, always enabled where visible. |
-| `☰ Select` | `#columns-toggle` | **Blue (`.active`)** while the **columns panel is open** — the one utility button with an active state, since it is clickable (it closes the panel). |
+| Utilities (`Grid`, `Select`, date nav, refresh) | `#view-toggle`, `#columns-toggle`, `#prev-day`, `#next-day`, `#today-btn`, `#refresh-btn` | **Grey**, always enabled where visible — except the two overlay-return buttons below. |
+| `☰ Select` / `Back` (columns) | `#columns-toggle` | **Blue (`.active`)** while the **columns panel is open** — clickable, it closes the panel. |
+| `📋 Grid` / `Back` (grid) | `#view-toggle` | **Blue (`.active`)** while **inside a grid view** — clickable, it returns to the view that opened the grid (v5.1 — #76). |
 
-The **active major-view button is disabled (grey)**, while the **other two major-view buttons stay blue** and switch the major view. Utility buttons remain grey; only `#columns-toggle` becomes blue while the Select panel is open.
+The **active major-view button is disabled (grey)**, while the **other two major-view buttons stay blue** and switch the major view. Utility buttons remain grey, except `#columns-toggle` (Select view open) and `#view-toggle` (grid views), which turn blue (`.active`) as overlay-return buttons.
 
 ---
 
@@ -655,7 +656,7 @@ other modules → shared.ts + dom-refs.ts
 
 ### 9.1 View Transitions
 
-The three major views — **Series** (`chart`), **Histogram**, **Stats** — are cross-switched by the three blue major-view buttons; the button of the active view is disabled (grey). Each major view opens its **corresponding grid view** with the grey `Grid` utility button; `Back` inside the grid **automatically returns to the view that opened it**. The `Select` button opens the **columns view** from any data view; `Back` returns to the view that opened it. **No major-view buttons are shown in grid views or in the columns view** — they only go back.
+The three major views — **Series** (`chart`), **Histogram**, **Stats** — are cross-switched by the three blue major-view buttons; the button of the active view is disabled (grey). Each major view opens its **corresponding grid view** with the grey `Grid` utility button; `Back` inside the grid (blue, `.active`) **automatically returns to the view that opened it**. The `Select` button opens the **columns view** from any data view; `Back` returns to the view that opened it. **No major-view buttons are shown in grid views or in the columns view** — they only go back.
 
 ```
 Major views — the blue buttons switch between them (active one disabled, grey):
@@ -665,7 +666,7 @@ Major views — the blue buttons switch between them (active one disabled, grey)
            │  └──── Series ─────────┘  └──── Series ────────┘  │
            └───────── Histogram ───────────────────────────────┘
 
-Overlay navigation — grey utility buttons; Back returns to the view that opened it:
+Overlay navigation — grey utility buttons; the blue `Back` (`.active`) returns to the view that opened it:
 
         Series ──Grid──▶ Grid (grid) ──────────Back──▶ Series
         Histogram ─Grid─▶ Histogram Grid ──────Back──▶ Histogram
@@ -696,7 +697,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Series (major view) | `chartBtn` | `📈 Series` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Series) | — | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Histogram (major view) | `histogramToggleBtn` | `📊 Histogram` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Histogram) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Stats (major view) | `statsBtn` | `📈 Stats` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Stats) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
-| Grid (utility) | `viewToggleBtn` | `📋 Grid` (major views) / `Back` (grid views) | Always | Action (open grid for current view / auto-return) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
+| Grid (utility) | `viewToggleBtn` | `📋 Grid` (major views, grey) / `Back` (grid views, blue `.active`) | Always | Action (open grid for current view / auto-return) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Columns (utility) | `columnsToggleBtn` | `☰ Select` (closed) / `Back` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (opening pushes history entry) | Stateless (columns persist to localStorage) |
 | CSV Export | `exportCsvBtn` | `⬇ Download (CSV)` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
 | Split | `splitBtn` | `Split` / `Combine` | Histogram view only | Toggle (combined↔split) | `histogramIsSplitMode`, URL `?split=1` | `histogramIsSplitMode`, URL `?split=1` | URL-stateful (via `split`) |
@@ -730,7 +731,7 @@ In the stats views, the Stats button is disabled (grey) and the other two major 
 | `stats` | `📋 Grid` | "Show the statistics as a grid (table)" | `setView("stats-grid")` |
 | `stats-grid` | `Back` | "Return to the Stats view" | `setView("stats")` |
 
-The grid views show **no** major-view-switching buttons — only `Back`, which automatically returns to the view that opened the grid. The Stats cards↔table sub-toggle is exactly `stats` ↔ `stats-grid` via `Grid` / `Back`.
+The grid views show **no** major-view-switching buttons — only `Back` (blue, `.active`), which automatically returns to the view that opened the grid. The Stats cards↔table sub-toggle is exactly `stats` ↔ `stats-grid` via `Grid` / `Back`.
 
 #### Columns Button Labels (`columnsToggleBtn`)
 
