@@ -118,16 +118,15 @@ The title bar contains **all application buttons and controls** in a single hori
 
 ### 2.3 Button Active State Styling
 
-Buttons use the `.active` CSS class (blue background `#3182ce`) to indicate the **currently selected view**. The active state is applied via `classList.toggle()` in `updateButtonLabels()`:
+Buttons are color-coded by group (v5.0 — fixes #62). The state is applied via `classList`/`disabled` updates in `updateButtonLabels()`:
 
-| Button | ID | Active when… |
+| Button | ID | Appearance |
 | --------- | ----- | --------- |
-| `📋 Grid` | `#view-toggle` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
-| `📊 Histogram` | `#histogram-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
-| `📈 Stats` | `#stats-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
-| `☰ Select` | `#columns-toggle` | When the **columns panel is open** |
+| `📈 Series` / `📊 Histogram` / `📈 Stats` (major views) | `#chart-btn` / `#histogram-btn` / `#stats-btn` | **Blue** when the view is *not* the current one (clickable, switches major view). **Disabled (grey)** when it is the active view — the current view is already shown, so the button is not clickable. Hidden in all grid views and in the columns (Select) view. |
+| Utilities (`Grid`, `Select`, date nav, refresh) | `#view-toggle`, `#columns-toggle`, `#prev-day`, `#next-day`, `#today-btn`, `#refresh-btn` | **Grey**, always enabled where visible. |
+| `☰ Select` | `#columns-toggle` | **Blue (`.active`)** while the **columns panel is open** — the one utility button with an active state, since it is clickable (it closes the panel). |
 
-The major-view toggle buttons (Grid, Histogram, Stats) remain blue regardless of which specific view is active, providing consistent visual feedback that the buttons are enabled and functional.
+The **active major-view button is disabled (grey)**, while the **other two major-view buttons stay blue** and switch the major view. Utility buttons remain grey; only `#columns-toggle` becomes blue while the Select panel is open.
 
 ---
 
