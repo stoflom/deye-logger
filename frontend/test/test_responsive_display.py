@@ -295,8 +295,11 @@ def test_histogram_control_visibility(tester):
 
 
 def test_day_filter_selector(tester):
-    """Test that day filter selector exists and works in histogram modes."""
-    print("\n[Test 8] Day filter selector in histogram controls")
+    """Test that day filter selector exists and works in histogram modes and Stats view.
+
+    The day filter lives in its own title-bar group (#day-filter-group), which is
+    visible in histogram modes AND the Stats view (frontend-design.md v3.0, §16)."""
+    print("\n[Test 8] Day filter selector in day-filter-group")
 
     # Switch to histogram mode
     set_view(tester, "histogram")
@@ -306,10 +309,14 @@ def test_day_filter_selector(tester):
     day_filter_select = tester.find_element(By.ID, "day-filter-select")
     assert day_filter_select is not None, "Day filter select should exist"
 
-    # Check it's inside histogram-controls
+    # Check it's inside day-filter-group (NOT inside #histogram-controls)
+    day_filter_group = tester.find_element(By.ID, "day-filter-group")
+    controls_in_group = day_filter_group.find_elements(By.CSS_SELECTOR, "#day-filter-select")
+    assert len(controls_in_group) > 0, "Day filter select should be inside day-filter-group"
+
     histogram_controls = tester.find_element(By.ID, "histogram-controls")
-    controls_in_histogram = histogram_controls.find_elements(By.CSS_SELECTOR, "#day-filter-select")
-    assert len(controls_in_histogram) > 0, "Day filter select should be inside histogram-controls"
+    inside_histogram_controls = histogram_controls.find_elements(By.CSS_SELECTOR, "#day-filter-select")
+    assert len(inside_histogram_controls) == 0, "Day filter select should NOT be inside histogram-controls"
 
     # Check that day filter has all expected options
     options = day_filter_select.find_elements(By.CSS_SELECTOR, "option")
@@ -327,6 +334,16 @@ def test_day_filter_selector(tester):
     display = tester.get_computed_style(By.CSS_SELECTOR, "#day-filter-select", "display")
     print(f"  Day filter select display: {display}")
     assert display != "none", "Day filter select should be visible in histogram mode"
+
+    # Day filter group must also be visible in the Stats view
+    set_view(tester, "stats")
+    group_display = tester.get_computed_style(By.CSS_SELECTOR, "#day-filter-group", "display")
+    print(f"  Stats view - day-filter-group display: {group_display}")
+    assert group_display != "none", "Day filter group should be visible in Stats view"
+    day_display = tester.get_computed_style(By.CSS_SELECTOR, "#day-filter-select", "display")
+    assert day_display != "none", "Day filter select should be visible in Stats view"
+    take_screenshot(tester, "day-filter-stats-view.png",
+                   "Day filter visible in Stats view")
 
     # Test changing day filter via URL
     from urllib.parse import urlencode
