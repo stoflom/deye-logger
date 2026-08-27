@@ -125,7 +125,25 @@ def main():
         t.check(header_color == accents[0] if accents else False, f"header text uses accent color (got {header_color})")
 
         high_sub = tester.find_element(By.CSS_SELECTOR, ".stat-card:first-child .stat-row:nth-child(5) .stat-row-sub").text
-        t.check("pct" not in high_sub and "%" in high_sub, f"high sub-line uses percent, not 'pct' (got '{high_sub}')")
+        # #60: the cutoff is no longer echoed in braces on the card (shown in the top bar)
+        t.check("(" not in high_sub, f"high sub-line has no cutoff in braces (got '{high_sub}')")
+
+        # #60: a %-unit column (Battery SOC) shows the selected cutoff as an
+        # absolute percent limit — high '> 95 %', low '< 5 %' (defaults 95/5).
+        soc = tester.execute_script(
+            "const cards = Array.from(document.querySelectorAll('.stat-card'));"
+            "const c = cards.find(c => {const h = c.querySelector('.stat-card-header');"
+            "  return h && h.textContent.includes('SOC');});"
+            "if (!c) return null;"
+            "const rows = c.querySelectorAll('.stat-row');"
+            "const hs = rows[3].querySelector('.stat-row-sub');"
+            "const ls = rows[4].querySelector('.stat-row-sub');"
+            "return [hs ? hs.textContent.trim() : '', ls ? ls.textContent.trim() : ''];"
+        )
+        t.check(soc is not None, "Battery SOC stat card present")
+        if soc:
+            t.check(soc[0] == "> 95 %", f"SOC high sub reads '> 95 %' (got '{soc[0]}')")
+            t.check(soc[1] == "< 5 %", f"SOC low sub reads '< 5 %' (got '{soc[1]}')")
 
         # Control visibility in stats view
         vt = tester.find_element(By.ID, "view-toggle")
@@ -139,6 +157,13 @@ def main():
 
         stats_btn = tester.find_element(By.ID, "stats-btn")
         t.check("Back to Chart" in stats_btn.text, f"stats button shows 'Back to Chart' (got '{stats_btn.text}')")
+        # #61: stats is a major view — its button carries the blue .active style
+        t.check("active" in (stats_btn.get_attribute("class") or ""),
+                "stats button has 'active' class (blue background)")
+        # #61: minutes use 'mins' so they are not confused with 'Min' (minimum)
+        high_main = tester.find_elements(By.CSS_SELECTOR, ".stat-card:first-child .stat-row-main")[3].text
+        t.check("mins/day" in high_main and " min/day" not in high_main,
+                f"high row uses 'mins/day' for minutes (got '{high_main}')")
 
         # ── Test 2: CSS tooltip renders on keyboard focus ────────────
         print("\n[Test 2] CSS tooltip on focus (:focus-visible ::after)")
@@ -248,7 +273,7 @@ def main():
         cols = tester.find_elements(By.CSS_SELECTOR, ".stats-grid-table thead th")
         t.check(len(cols) == 9, f"9 stat columns (got {len(cols)})")
         col_texts = [c.text.lower() for c in cols]  # CSS uppercases header text
-        t.check(col_texts[0] == "measurement" and col_texts[-2:] == ["high min/day", "low min/day"],
+        t.check(col_texts[0] == "measurement" and col_texts[-2:] == ["high mins/day", "low mins/day"],
                 f"column headers ordered per design (got {col_texts})")
         rows = tester.find_elements(By.CSS_SELECTOR, ".stats-grid-table tbody tr")
         t.check(len(rows) >= 1, f"at least one measurement row (got {len(rows)})")

@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "4.0.0";
+export const FRONTEND_VERSION = "4.3.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -246,7 +246,8 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   // View toggle button — always visible (in stats views it toggles stats ↔ stats-grid)
   viewToggleBtn.classList.toggle("active", true);
 
-  // Stats toggle button — always visible
+  // Stats toggle button — always visible, blue like the other major-view buttons (#61)
+  statsBtn.classList.toggle("active", true);
   if (isStats) {
     statsBtn.textContent = "\uD83D\uDCCA Back to Chart";
     statsBtn.title = "Return to the chart view";

@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v4.1
+> **Status:** v4.3
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -113,9 +113,10 @@ Buttons use the `.active` CSS class (blue background `#3182ce`) to indicate the 
 | --------- | ----- | --------- |
 | `📋 Grid` | `#view-toggle` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `📊 Histogram` | `#histogram-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
+| `📈 Stats` | `#stats-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `☰ Select` | `#columns-toggle` | When the **columns panel is open** |
 
-Both view toggle buttons remain blue regardless of which specific view is active, providing consistent visual feedback that the buttons are enabled and functional.
+The major-view toggle buttons (Grid, Histogram, Stats) remain blue regardless of which specific view is active, providing consistent visual feedback that the buttons are enabled and functional.
 
 ---
 
@@ -1360,13 +1361,15 @@ Each card (one per entry in the `/api/stats` response `stats` array, in request 
 | **Mean** | `mean` + unit | `Average 123.4 W` |
 | **Max** | `max.value` + unit, with `max.timestamp` (first occurrence) on a second line (small, muted) | `Max 5.12 kW` / `2025-07-22 13:30` |
 | **Min** | `min.value` + unit, with `min.timestamp` (first occurrence) on a second line (small, muted) | `Min -310 W` / `2025-07-20 01:05` |
-| **High avg duration** | `high.avgDailyMinutes` per day + threshold + cutoff | `High 42.5 min/day` / `> 1.24 kW (95%)` |
-| **Low avg duration** | `low.avgDailyMinutes` per day + threshold + cutoff | `Low 6 min/day` / `< -997.8 W (5%)` |
+| **High avg duration** | `high.avgDailyMinutes` per day + threshold | `High 42.5 mins/day` / `> 1.24 kW` (ordinary units) or `> 95%` (percentage-unit, e.g. SOC) |
+| **Low avg duration** | `low.avgDailyMinutes` per day + threshold | `Low 6 mins/day` / `< -997.8 W` (ordinary units) or `< 5%` (percentage-unit, e.g. SOC) |
+
+Duration labels use the abbreviation **`mins`** (minutes), never `min`, to keep them distinct from the `Min` (minimum value) row.
 
 Formatting rules:
 
 - Units come from the response (`unit`, `""` if none); number formatting reuses the existing value/unit helpers (`extractUnit()`-style spacing, up to 2 decimals, unit-aware magnitude where already applied to other views).
-- Threshold rows are secondary/muted text and echo the *effective* cutoff used (from the response `high.cutoff` / `low.cutoff`), so the card always describes exactly what the backend computed — even after a popstate restore with URL-supplied cutoffs. The cutoff is rendered as a percent, e.g. `(95%)`, not `(95th pct)`.
+- Threshold rows are secondary/muted text and show the *effective* threshold used by the backend (from the response `high.threshold` / `low.threshold`): for ordinary units the `mean ± z·σ` value (e.g. `> 1.24 kW`), for percentage-unit columns the selected cutoff in percent (e.g. `> 95%` for SOC). The cutoff is **not** repeated in braces on the card (the earlier `(95%)` suffix is dropped), since it is already shown in the top bar where it is selected.
 - The card grid is recreated from scratch on every render (same contract as `#summary-cards`: clear container, rebuild elements).
 
 **Per-measurement accent color:** each stat card carries the same accent color its measurement uses in the line chart, so the grid is not monochrome (the summary cards pattern). The palette is a single shared 16-color array (`CHART_PALETTE`, moved from `chart.ts` into `shared.ts`; `chart.ts` imports it) and cycles in dataset order (`CHART_PALETTE[i % CHART_PALETTE.length]`). The accent is applied via a `--stat-accent` CSS variable on the card: it colors the card's 3px top border and the header text; all other card text keeps the neutral palette.
@@ -1381,10 +1384,10 @@ Every card and every stat row carries a **tooltip explaining its content** (cust
 | Mean row | `Arithmetic mean of all N samples in the selected date range.` |
 | Max row | `Maximum value observed; shown with the date-time of its first occurrence.` |
 | Min row | `Minimum value observed; shown with the date-time of its first occurrence.` |
-| High row | `Average time per day the value was above the high threshold ({method}). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no high readings count as 0.` |
-| Low row | `Average time per day the value was below the low threshold ({method}). Threshold: {value} {unit} at the {cutoff}th percentile. Days with samples but no low readings count as 0.` |
+| High row | `Average time per day the value was above the high threshold ({method}). Threshold: {value} {unit}{threshold-desc}. Days with samples but no high readings count as 0.` |
+| Low row | `Average time per day the value was below the low threshold ({method}). Threshold: {value} {unit}{threshold-desc}. Days with samples but no low readings count as 0.` |
 
-`{method}` echoes the response `high.method` / `low.method` (backend design §2.7): `mean + z·σ` for ordinary units, `the direct {cutoff}th percentile of the data (percentage-unit column)` when `method === "percentile"` (e.g. SOC — `mean + z·σ` can leave the 0–100% bounds).
+`{method}` echoes the response `high.method` / `low.method` (backend design §2.7): `mean + z·σ` for ordinary units; `the selected {cutoff}% limit (percentage-unit column)` when `method === "cutoff"` (e.g. SOC — `mean + z·σ` can leave the 0–100% bounds, so the selected cutoff is used as an absolute percent limit). `{threshold-desc}` is `at the {cutoff}th percentile` for `mean-sigma` and empty for `cutoff` (the value already carries the `%` unit).
 
 Placeholders are filled from the response data and current date range at render time. Tooltips must also be keyboard-accessible (rows are focusable, `:focus-visible` shows the same tooltip as hover).
 
@@ -1424,8 +1427,8 @@ A table layout of the same `/api/stats` data, toggled via `viewToggleBtn` (`?vie
 | Max first seen | `max.timestamp` (ISO, seconds omitted) | "Date-time of the first occurrence of the maximum" |
 | Min | `min.value` + unit | §16.2 min-row text |
 | Min first seen | `min.timestamp` | "Date-time of the first occurrence of the minimum" |
-| High min/day | `high.avgDailyMinutes` + sub `> {threshold} {unit} ({cutoff}%)` | §16.2 high-row text |
-| Low min/day | `low.avgDailyMinutes` + sub `< {threshold} {unit} ({cutoff}%)` | §16.2 low-row text |
+| High mins/day | `high.avgDailyMinutes` + sub `> {threshold} {unit}` | §16.2 high-row text |
+| Low mins/day | `low.avgDailyMinutes` + sub `< {threshold} {unit}` | §16.2 low-row text |
 
 Cell tooltips: the High/Low cells carry the §16.2 high/low tooltips (method-aware); the Measurement cell carries the card-level tooltip ("Statistics for {label} … — N samples"). Rows are keyboard-focusable with the same CSS tooltip behavior as the cards. Empty range → same info-view message as the card view.
 
@@ -1442,4 +1445,5 @@ This section tracks changes to the design document itself. Every modification to
 | 3.2 | 2026-08-26 | §16.2 | High/low row tooltips echo the response `method` field: percentage-unit columns (e.g. SOC) use the direct data percentile as threshold instead of `mean ± z·σ` (backend design v3.1, #56) |
 | 3.3 | 2026-08-26 | §2.1, §2.3, §6.x button tables | Title-bar buttons compacted: horizontal padding `8px 16px` → `8px 10px`; grid button labels shortened — `📋 Data Grid` and `📊 Histogram Grid` both become `📋 Grid`, tooltips clarify which graph's data the grid shows (chart data / histogram binned averages) (#57) |
 | 4.0 | 2026-08-26 | §3.1, §8.1, §9.1, §9.3, new §16.6 | New `stats-grid` view mode — table variant of the Stats view (rows = measurements, columns = statistics: samples, average, max/min + first-occurrence, high/low min-day), toggled via `viewToggleBtn` in the stats views; `?view=stats-grid` URL state (#58) |
+| 4.2 | 2026-08-26 | §16.1, §16.2, §16.6 | High/low threshold sub-lines drop the `(N%)` cutoff suffix (shown in the top bar); percentage-unit columns now show the selected cutoff as an absolute percent limit (e.g. SOC `> 95%` / `< 5%`) with method text `the selected N% limit`; tooltip `{threshold-desc}` is method-aware (#60) |
 | 4.1 | 2026-08-26 | §1.1, §2.2, §6.1, §7, §8.3, §8.4, §10.5 | Design review against implementation (#59): added `stats-view.ts` to source files + esbuild/test notes; status-bar label list gains Stats Grid; `setView` union and `renderStatsView(updateWaiting, asGrid)` signatures updated; DOM refs table gains `histogramControls`/`dayFilterGroup`/`statsCutoffs`; stats flow reflects both variants; fixed stats-grid cutoff/dayFilter re-render handlers (kept current stats view) |
