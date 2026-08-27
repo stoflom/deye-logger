@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "5.0.0";
+export const FRONTEND_VERSION = "5.1.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -226,14 +226,16 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
 
   // Major view buttons (Series / Histogram / Stats) — hidden in grid views
   // (and in the columns view, handled by setView); the active view's button
-  // is disabled (grey), the other two stay blue (#62).
+  // is disabled (grey), the other two stay blue (#62). Hidden (grid views)
+  // buttons are disabled too, since enableAllControls() after rendering
+  // would otherwise leave them enabled (though invisible) (#77).
   const showMajor = !isAnyGrid;
   chartBtn.style.display = showMajor ? "" : "none";
   histogramToggleBtn.style.display = showMajor ? "" : "none";
   statsBtn.style.display = showMajor ? "" : "none";
-  chartBtn.disabled = view === "chart";
-  histogramToggleBtn.disabled = view === "histogram";
-  statsBtn.disabled = view === "stats";
+  chartBtn.disabled = !showMajor || view === "chart";
+  histogramToggleBtn.disabled = !showMajor || view === "histogram";
+  statsBtn.disabled = !showMajor || view === "stats";
   chartBtn.classList.remove("active");
   histogramToggleBtn.classList.remove("active");
   statsBtn.classList.remove("active");
@@ -242,6 +244,9 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
   // in grid views it reads `Back` and returns to the view that opened it (#62)
   if (isAnyGrid) {
     viewToggleBtn.textContent = "Back";
+    // Blue (active) while in a grid view, matching #columns-toggle in the
+    // Select view, to emphasize the way back (#76)
+    viewToggleBtn.classList.add("active");
     viewToggleBtn.title =
       view === "grid"
         ? "Return to the Series view"
@@ -256,8 +261,8 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
         : view === "histogram"
           ? "Show the histogram data as a grid"
           : "Show the statistics as a grid (table)";
+    viewToggleBtn.classList.remove("active");
   }
-  viewToggleBtn.classList.remove("active");
 
   // Split button — visible only in histogram (not histogram-grid)
   splitBtn.style.display = view === "histogram" ? "" : "none";
@@ -452,9 +457,6 @@ async function setView(
     // Summary cards bar is hidden in stats view — the stat cards ARE the content
     if (!isStats) showSummaryCards();
 
-    // STEP 5: Update button labels and visibility
-    updateButtonLabels(view, split);
-
     // Update view label in status bar
     const viewLabels: Record<ViewMode, string> = {
       chart: "Chart",
@@ -488,6 +490,10 @@ async function setView(
     // Re-enable all controls
     enableAllControls();
     updateNavButtonStates();
+
+    // STEP 5: Update button labels and visibility — after enableAllControls()
+    // so the active major-view button's disabled (grey) state is preserved (#77)
+    updateButtonLabels(view, split);
 
   } catch (err) {
     // STEP 4d: Error — show error-view
