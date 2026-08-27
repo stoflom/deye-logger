@@ -860,7 +860,9 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
 Browser back from columns panel → pops columns entry → popstate on previous data-view entry
   → setView(previous view, { replace: true }) — restores data view (fixes #47)
 
-User clicks columnsToggleBtn (close/"Load Data") → setView(appState.activeView)
+User clicks columnsToggleBtn (close, label `Back`) → setView(appState.activeView)
+  // While the columns panel is open the major-view buttons (Series / Histogram / Stats)
+  // are hidden; the panel returns only via `Back` to the view that opened it.
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
   → renderRawDataChartView(updateWaiting)  // with appState.selectedColumnNames
