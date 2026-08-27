@@ -184,13 +184,13 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 
 | Trigger | Pushes History? | Notes |
 | --------- | ---------------- | ------- |
-| `viewToggle` click | Yes (on success) | Full view change |
-| `histogramBtn` click | Yes (on success) | Mode toggle |
+| Grid button click (utility) | Yes (on success) | Opens the grid for the current view; in a grid view the button reads `Back` and auto-returns to the view that opened the grid |
+| `histogramBtn` click | Yes (on success) | Switches major view to histogram (major-view buttons are hidden in grid and Select views, so no switching happens from there) |
 | Date nav (prev/next/today/picker) | Yes (on success) | Date change triggers full re-render |
 | `binSizeSelect` change | Yes (on success) | Re-renders current view |
 | `dayFilterSelect` change | Yes (on success) | Re-renders current view (histogram or stats) |
 | `highCutoffSelect` / `lowCutoffSelect` change | Yes (on success) | Re-renders stats view with new cutoffs |
-| Stats button click | Yes (on success) | Enters `stats` view / returns to `chart` |
+| Stats button click | Yes (on success) | Enters `stats` view (the button is disabled/hidden in stats views — returns happen via the grid `Back` button) |
 | Split/Combine toggle | Yes (on success) | `split=1` in URL |
 | `popstate` (browser back/forward) | No (`replace`) | Restores view without double-push |
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
@@ -199,7 +199,7 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | Refresh success | Yes (on success) | Re-renders current view (dates unchanged) |
 | Refresh failure | — | History pushed *before* refresh so `history.back()` restores pre-refresh state |
 | Open columns panel | **Yes** | Same URL, payload `{ columns: true }` — browser back returns to previous data view |
-| Close columns panel | Yes (on success) | Full data re-fetch with new columns |
+| Close columns panel (`Back`) | Yes (on success) | Full data re-fetch with new columns |
 | Any render failure | Yes (with `error` marker) | Shows error-view |
 
 ---
