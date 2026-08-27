@@ -43,9 +43,9 @@ function fmtTs(ts: string): string {
   return ts.length >= 16 ? ts.slice(0, 16) : ts;
 }
 
-/** 42.5 → "42.5 min/day", 15 → "15 min/day" */
+/** 42.5 → "42.5 mins/day", 15 → "15 mins/day" (#61: mins = minutes, distinct from Min = minimum) */
 function fmtMinutes(m: number): string {
-  return `${Number.isInteger(m) ? m : m.toFixed(1)} min/day`;
+  return `${Number.isInteger(m) ? m : m.toFixed(1)} mins/day`;
 }
 
 /** 95 → "95th", 1 → "1st" */
@@ -192,8 +192,8 @@ function buildStatsGrid(result: StatsResponse): HTMLElement {
     ["Max first seen", "Date-time of the first occurrence of the maximum."],
     ["Min", "Minimum value observed."],
     ["Min first seen", "Date-time of the first occurrence of the minimum."],
-    ["High min/day", "Average time per day above the high threshold."],
-    ["Low min/day", "Average time per day below the low threshold."],
+    ["High mins/day", "Average time per day above the high threshold."],
+    ["Low mins/day", "Average time per day below the low threshold."],
   ];
   const thead = el("thead");
   const htr = el("tr");

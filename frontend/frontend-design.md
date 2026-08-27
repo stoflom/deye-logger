@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v4.2
+> **Status:** v4.3
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -113,9 +113,10 @@ Buttons use the `.active` CSS class (blue background `#3182ce`) to indicate the 
 | --------- | ----- | --------- |
 | `📋 Grid` | `#view-toggle` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `📊 Histogram` | `#histogram-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
+| `📈 Stats` | `#stats-btn` | **Always active** (blue) when visible — `classList.toggle("active", true)` unconditionally |
 | `☰ Select` | `#columns-toggle` | When the **columns panel is open** |
 
-Both view toggle buttons remain blue regardless of which specific view is active, providing consistent visual feedback that the buttons are enabled and functional.
+The major-view toggle buttons (Grid, Histogram, Stats) remain blue regardless of which specific view is active, providing consistent visual feedback that the buttons are enabled and functional.
 
 ---
 
@@ -1360,8 +1361,10 @@ Each card (one per entry in the `/api/stats` response `stats` array, in request 
 | **Mean** | `mean` + unit | `Average 123.4 W` |
 | **Max** | `max.value` + unit, with `max.timestamp` (first occurrence) on a second line (small, muted) | `Max 5.12 kW` / `2025-07-22 13:30` |
 | **Min** | `min.value` + unit, with `min.timestamp` (first occurrence) on a second line (small, muted) | `Min -310 W` / `2025-07-20 01:05` |
-| **High avg duration** | `high.avgDailyMinutes` per day + threshold | `High 42.5 min/day` / `> 1.24 kW` (ordinary units) or `> 95%` (percentage-unit, e.g. SOC) |
-| **Low avg duration** | `low.avgDailyMinutes` per day + threshold | `Low 6 min/day` / `< -997.8 W` (ordinary units) or `< 5%` (percentage-unit, e.g. SOC) |
+| **High avg duration** | `high.avgDailyMinutes` per day + threshold | `High 42.5 mins/day` / `> 1.24 kW` (ordinary units) or `> 95%` (percentage-unit, e.g. SOC) |
+| **Low avg duration** | `low.avgDailyMinutes` per day + threshold | `Low 6 mins/day` / `< -997.8 W` (ordinary units) or `< 5%` (percentage-unit, e.g. SOC) |
+
+Duration labels use the abbreviation **`mins`** (minutes), never `min`, to keep them distinct from the `Min` (minimum value) row.
 
 Formatting rules:
 
@@ -1424,8 +1427,8 @@ A table layout of the same `/api/stats` data, toggled via `viewToggleBtn` (`?vie
 | Max first seen | `max.timestamp` (ISO, seconds omitted) | "Date-time of the first occurrence of the maximum" |
 | Min | `min.value` + unit | §16.2 min-row text |
 | Min first seen | `min.timestamp` | "Date-time of the first occurrence of the minimum" |
-| High min/day | `high.avgDailyMinutes` + sub `> {threshold} {unit}` | §16.2 high-row text |
-| Low min/day | `low.avgDailyMinutes` + sub `< {threshold} {unit}` | §16.2 low-row text |
+| High mins/day | `high.avgDailyMinutes` + sub `> {threshold} {unit}` | §16.2 high-row text |
+| Low mins/day | `low.avgDailyMinutes` + sub `< {threshold} {unit}` | §16.2 low-row text |
 
 Cell tooltips: the High/Low cells carry the §16.2 high/low tooltips (method-aware); the Measurement cell carries the card-level tooltip ("Statistics for {label} … — N samples"). Rows are keyboard-focusable with the same CSS tooltip behavior as the cards. Empty range → same info-view message as the card view.
 
