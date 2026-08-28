@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "3.2.0";
+const BACKEND_VERSION = "4.0.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -21,7 +21,12 @@ const HOST = args.includes("--help")
   ? undefined
   : (parseArg("--host") ?? "localhost");
 const PORT = Number(parseArg("--port")) || 8090;
-const DB_PATH = parseArg("--db");
+function requireDbPath(): string {
+  const path = parseArg("--db");
+  if (path) return path;
+  console.error("Error: --db <path> is required. Use --help for usage.");
+  Deno.exit(1);
+}
 
 if (args.includes("--help")) {
   console.log(`Usage: deno run -A main.ts [--host <host>] [--port <port>] [--db <db_path>] [--help]
@@ -34,10 +39,8 @@ Options:
   Deno.exit(0);
 }
 
-if (!DB_PATH) {
-  console.error("Error: --db <path> is required. Use --help for usage.");
-  Deno.exit(1);
-}
+// requireDbPath exits when --db is missing, so this is a plain string
+const DB_PATH: string = requireDbPath();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,8 +57,13 @@ function buildColumns(): ColumnRecord[] {
   const rows = db.prepare(
     `SELECT column_name as name, display_label as label, unit, is_numeric
      FROM column_metadata ORDER BY sort_order ASC`,
-  ).all() as ColumnRecord[];
-  return rows;
+  ).all() as Record<string, unknown>[];
+  return rows.map((r) => ({
+    name: String(r.name),
+    label: String(r.label),
+    unit: String(r.unit ?? ""),
+    is_numeric: Number(r.is_numeric ?? 0),
+  }));
 }
 
 // In-memory cache built from column_metadata
@@ -274,7 +282,9 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     }
 
     // Parse timestamps and group into bins
-    const binMap = new Map<string, { sum: Record<string, number>; count: number }>();
+    // Per bin: total count + per-column sum/min/max/count so each column's
+    // stats only reflect rows that actually have a value for that column.
+    const binMap = new Map<string, { sum: Record<string, number>; min: Record<string, number>; max: Record<string, number>; count: Record<string, number>; total: number }>();
 
     for (const row of rows) {
       const ts = row.device_timestamp;
@@ -294,13 +304,18 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       ref.setHours(floored.getHours(), floored.getMinutes(), 0, 0);
       const key = ref.getTime().toString();
 
-      if (!binMap.has(key)) binMap.set(key, { sum: {}, count: 0 });
+      if (!binMap.has(key)) binMap.set(key, { sum: {}, min: {}, max: {}, count: {}, total: 0 });
       const bin = binMap.get(key)!;
-      bin.count++;
+      bin.total++;
 
       for (const col of numericCols) {
         const val = row[col];
-        if (typeof val === "number") bin.sum[col] = (bin.sum[col] || 0) + val;
+        if (typeof val === "number") {
+          bin.sum[col] = (bin.sum[col] || 0) + val;
+          bin.min[col] = bin.min[col] === undefined ? val : Math.min(bin.min[col], val);
+          bin.max[col] = bin.max[col] === undefined ? val : Math.max(bin.max[col], val);
+          bin.count[col] = (bin.count[col] || 0) + 1;
+        }
       }
     }
 
@@ -321,43 +336,44 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     // Build datasets and compute max values
     // Backend only serves data + label + unit.
     // Display fields (color, yAxisID, position) are computed by the frontend.
+    const maxPeaks: { label: string; value: number; timestamp: string }[] = [];
     const datasets = numericCols.map((col) => {
       const cols = getColumns();
       const meta = cols.find((c) => c.name === col);
       const label = meta?.label ?? col;
       const unit = meta?.unit ?? "";
-      const binCount = binMap.size;
 
       const data: number[] = [];
-      let max = -Infinity;
-      let maxIdx = -1;
+      const minData: number[] = [];
+      const maxData: number[] = [];
+      let peak = -Infinity;
+      let peakIdx = -1;
 
       for (let j = 0; j < sortedKeys.length; j++) {
         const bin = binMap.get(sortedKeys[j].toString())!;
-        const val = bin.sum[col];
-        const avg = val !== undefined ? val / bin.count : 0;
+        const binCount = bin.count[col] ?? 0;
+        const hasVal = binCount > 0;
+        const avg = hasVal ? bin.sum[col] / binCount : 0;
         data.push(avg);
-        if (avg > max) {
-          max = avg;
-          maxIdx = j;
+        minData.push(hasVal ? bin.min[col] : 0);
+        maxData.push(hasVal ? bin.max[col] : 0);
+        if (hasVal && avg > peak) {
+          peak = avg;
+          peakIdx = j;
         }
       }
 
-      return {
-        label,
-        data,
-        unit,
-        max: max !== -Infinity ? max : 0,
-        maxTimestamp: maxIdx >= 0 ? labels[maxIdx] : "",
-      };
+      if (peak !== -Infinity && peakIdx >= 0 && peak > 0) {
+        maxPeaks.push({ label, value: peak, timestamp: labels[peakIdx] });
+      }
+
+      return { label, data, min: minData, max: maxData, unit };
     });
 
     // Build maxValues map: label → { value, timestamp }
     const maxValues: Record<string, { value: number; timestamp: string }> = {};
-    for (const ds of datasets) {
-      if (ds.max > 0 && ds.maxTimestamp) {
-        maxValues[ds.label] = { value: ds.max, timestamp: ds.maxTimestamp };
-      }
+    for (const p of maxPeaks) {
+      maxValues[p.label] = { value: p.value, timestamp: p.timestamp };
     }
 
     res.json({ labels, datasets, maxValues });

@@ -37,6 +37,10 @@ export let histogramMaxAverageValues: Map<string, { value: number; timestamp: st
 interface HistogramDataset {
   label: string;
   data: number[];
+  /** Per-bin minimum values, parallel to `data` (design §10.2.1) */
+  min?: number[];
+  /** Per-bin maximum values, parallel to `data` (design §10.2.1) */
+  max?: number[];
   unit: string;
 }
 
@@ -102,6 +106,99 @@ function enrichDatasets(datasets: HistogramDataset[]): EnrichedDataset[] {
     yAxisID: yAxisID[ds.unit] ?? "y-0",
     position: position[ds.unit] ?? "left",
   }));
+}
+
+// ------------------------------------------------------------------
+// Per-bin value range rendering (design §10.2.1)
+// Each column gets its average bar plus a translucent floating bar
+// spanning [min, max]. Bins with zero spread (min === max) are skipped.
+// ------------------------------------------------------------------
+
+type HistogramBarDataset = {
+  label: string;
+  data: (number | [number, number] | null)[];
+  backgroundColor: string;
+  borderColor?: string;
+  borderWidth: number;
+  borderRadius: number;
+  barPercentage: number;
+  categoryPercentage: number;
+  yAxisID: string;
+  /** Custom marker for range datasets (excluded from legend/tooltip) */
+  _isRange?: boolean;
+  /** Raw per-bin arrays carried for the tooltip (average datasets only) */
+  _min?: number[];
+  _max?: number[];
+};
+
+function hasAnySpread(min: number[], max: number[]): boolean {
+  return min.some((mn, j) => mn !== max[j]);
+}
+
+/** [min, max] per bin, null for zero-spread bins (not drawn) */
+function buildRangeData(min: number[], max: number[]): (number | [number, number] | null)[] {
+  return min.map((mn, j) => (mn === max[j] ? null : [mn, max[j]]));
+}
+
+/**
+ * Build Chart.js datasets: for each column, the average bar; plus a
+ * translucent floating bar showing the per-bin value range when the
+ * backend provided min/max and at least one bin has spread.
+ */
+function buildHistogramDatasets(enriched: EnrichedDataset[]): HistogramBarDataset[] {
+  const out: HistogramBarDataset[] = [];
+  for (const ds of enriched) {
+    const label = ds.unit ? `${ds.label} (${ds.unit})` : ds.label;
+    out.push({
+      label,
+      data: ds.data,
+      backgroundColor: ds.color + "80",
+      borderColor: ds.color,
+      borderWidth: 1,
+      borderRadius: 2,
+      barPercentage: 0.9,
+      categoryPercentage: 0.85,
+      yAxisID: ds.yAxisID,
+      _min: ds.min,
+      _max: ds.max,
+    });
+    if (ds.min && ds.max && hasAnySpread(ds.min, ds.max)) {
+      out.push({
+        label: `${label} (range)`,
+        data: buildRangeData(ds.min, ds.max),
+        backgroundColor: ds.color + "33",
+        borderWidth: 0,
+        borderRadius: 2,
+        barPercentage: 0.9,
+        categoryPercentage: 0.85,
+        yAxisID: ds.yAxisID,
+        _isRange: true,
+      });
+    }
+  }
+  return out;
+}
+
+/** Range datasets are not legend/tooltip entries */
+function isRangeDataset(item: { dataset: unknown }): boolean {
+  return Boolean((item.dataset as HistogramBarDataset)._isRange);
+}
+
+function formatRangeValue(v: number): string {
+  return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+/** Tooltip label: `Label: avg (range min–max)`; range omitted when min === max */
+function histogramTooltipLabel(item: TooltipItem<"bar">): string {
+  const ds = item.dataset as unknown as HistogramBarDataset;
+  const value = typeof item.parsed?.y === "number" ? item.parsed.y : Number(item.formattedValue);
+  let text = ` ${item.dataset.label}: ${formatRangeValue(value)}`;
+  const mn = ds._min?.[item.dataIndex];
+  const mx = ds._max?.[item.dataIndex];
+  if (mn !== undefined && mx !== undefined && mn !== mx) {
+    text += ` (range ${formatRangeValue(mn)}–${formatRangeValue(mx)})`;
+  }
+  return text;
 }
 
 // ------------------------------------------------------------------
@@ -221,21 +318,14 @@ export async function renderHistogramChart(updateWaiting: (text: string) => void
 
   // Build the chart — wait for canvas to have dimensions
   await waitForFrame();
+  // Test hook: expose the live instance on the canvas for UI tests
+  (histogramChartCanvas as unknown as { __chartInstance?: Chart | null }).__chartInstance = null;
   histogramCombinedChartInstance = new Chart(histogramChartCanvas, {
     type: "bar",
     data: {
       labels: result.labels,
-      datasets: enriched.map((ds) => ({
-        label: ds.unit ? `${ds.label} (${ds.unit})` : ds.label,
-        data: ds.data,
-        backgroundColor: ds.color + "80",
-        borderColor: ds.color,
-        borderWidth: 1,
-        borderRadius: 2,
-        barPercentage: 0.9,
-        categoryPercentage: 0.85,
-        yAxisID: ds.yAxisID,
-      })),
+      // deno-lint-ignore no-explicit-any
+      datasets: buildHistogramDatasets(enriched) as any[],
     },
     options: {
       responsive: true,
@@ -252,18 +342,24 @@ export async function renderHistogramChart(updateWaiting: (text: string) => void
             boxWidth: 12,
             padding: 12,
             font: { size: 11 },
+            // Per-bin range datasets are auxiliary — keep the legend on the averages
+            filter: (item, data) => !isRangeDataset({ dataset: data.datasets[item.datasetIndex ?? -1] }),
           },
         },
         tooltip: {
+          // Range datasets are hidden from the tooltip; their min/max is
+          // appended to the average's label instead (design §10.2.1)
+          filter: (item) => !isRangeDataset(item),
           callbacks: {
             title: (items: TooltipItem<'bar'>[]) => `Time: ${items[0].label}`,
-            label: (item: TooltipItem<'bar'>) => ` ${item.dataset.label}: ${item.formattedValue}`,
+            label: histogramTooltipLabel,
           },
         },
       },
       scales,
     },
   });
+  (histogramChartCanvas as unknown as { __chartInstance?: Chart | null }).__chartInstance = histogramCombinedChartInstance;
   return { ok: true };
 }
 
@@ -396,23 +492,14 @@ export async function showSplitHistogram(): Promise<RenderOk> {
 
     chartPromises.push(
       waitForFrame().then(() => {
+        // Test hook: expose the live instance on the canvas for UI tests
+        (canvas as unknown as { __chartInstance?: Chart | null }).__chartInstance = null;
         return new Chart(canvas, {
           type: "bar",
           data: {
             labels: result.labels,
-            datasets: [
-              {
-                label: dataset.unit ? `${dataset.label} (${dataset.unit})` : dataset.label,
-                data: dataset.data,
-                backgroundColor: dataset.color + "80",
-                borderColor: dataset.color,
-                borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.9,
-                categoryPercentage: 0.85,
-                yAxisID: dataset.yAxisID,
-              },
-            ],
+            // deno-lint-ignore no-explicit-any
+            datasets: buildHistogramDatasets([dataset]) as any[],
           },
           options: {
             responsive: true,
@@ -425,9 +512,11 @@ export async function showSplitHistogram(): Promise<RenderOk> {
             plugins: {
               legend: { display: false },
               tooltip: {
+                // Range datasets hidden; min/max appended to the average label (design §10.2.1)
+                filter: (item) => !isRangeDataset(item),
                 callbacks: {
                   title: (items: TooltipItem<'bar'>[]) => `Time: ${items[0].label}`,
-                  label: (item: TooltipItem<'bar'>) => ` ${item.dataset.label}: ${item.formattedValue}`,
+                  label: histogramTooltipLabel,
                 },
               },
             },
@@ -439,6 +528,10 @@ export async function showSplitHistogram(): Promise<RenderOk> {
   });
 
   histogramSplitChartInstances = await Promise.all(chartPromises);
+  // Test hook: expose the live instances on their canvases for UI tests
+  for (const c of histogramSplitChartInstances) {
+    (c.canvas as unknown as { __chartInstance?: Chart | null }).__chartInstance = c;
+  }
   histogramIsSplitMode = true;
   // Button text/title handled by setView's updateButtonLabels
   return { ok: true };
