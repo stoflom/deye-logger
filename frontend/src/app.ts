@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "5.1.0";
+export const FRONTEND_VERSION = "5.2.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -459,7 +459,7 @@ async function setView(
 
     // Update view label in status bar
     const viewLabels: Record<ViewMode, string> = {
-      chart: "Chart",
+      chart: "Series",
       grid: "Data Grid",
       histogram: "Histogram",
       "histogram-grid": "Histogram Grid",

@@ -711,7 +711,7 @@ def test_view_label_in_status_bar(tester):
     print("\n[Test 9] View label in status bar")
 
     expected_labels = {
-        "chart": "Chart",
+        "chart": "Series",
         "grid": "Data Grid",
         "histogram": "Histogram",
         "histogram-grid": "Histogram Grid",
