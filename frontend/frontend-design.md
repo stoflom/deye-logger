@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v5.2
+> **Status:** v6.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -812,6 +812,14 @@ setView("histogram", { split: true })
   → enableAllControls()
 ```
 
+#### 10.2.1 Per-Bin Value Range Rendering
+
+Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to the average `data[]`) from the backend. The renderers (combined and split) show the bin's value range alongside the average bar:
+
+- **Shaded range:** a background bar per bin, drawn as a Chart.js **floating bar** (`[min, max]`) behind the average bar, in the dataset color at low opacity (≈20% fill, no border). Skipped for bins where `min === max` (zero spread) to avoid visual noise.
+- **Tooltip:** the `label` callback appends the range, e.g. `Daily Energy (kWh): 10.5 (range 9.8–10.7)`; omitted when `min === max`.
+- Missing/absent `min`/`max` arrays are treated as not available (no range rendered) — the renderer degrades gracefully to averages only.
+
 ### 10.3 Refresh Flow
 
 ```
@@ -939,7 +947,7 @@ User clicks Refresh from info-view:
 | `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
 | `/api/data` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (single day) |
 | `/api/data-range` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (range) |
-| `/api/histogram` | GET | fetchHistogramData() (histogram renderers) | 30s | Time-binned average data |
+| `/api/histogram` | GET | fetchHistogramData() (histogram renderers) | 30s | Time-binned average + per-bin min/max data |
 | `/api/stats` | GET | renderStatsView() | 30s | Per-column statistics (mean, max/min + first occurrence, high/low avg daily durations) |
 | `/api/refresh` | POST | renderRefreshView() | 120s | Trigger inverter data sync |
 | `/api/version` | GET | init() | 5s | Backend version string |
@@ -1462,3 +1470,4 @@ This section tracks changes to the design document itself. Every modification to
 | 4.2 | 2026-08-26 | §16.1, §16.2, §16.6 | High/low threshold sub-lines drop the `(N%)` cutoff suffix (shown in the top bar); percentage-unit columns now show the selected cutoff as an absolute percent limit (e.g. SOC `> 95%` / `< 5%`) with method text `the selected N% limit`; tooltip `{threshold-desc}` is method-aware (#60) |
 | 4.1 | 2026-08-26 | §1.1, §2.2, §6.1, §7, §8.3, §8.4, §10.5 | Design review against implementation (#59): added `stats-view.ts` to source files + esbuild/test notes; status-bar label list gains Stats Grid; `setView` union and `renderStatsView(updateWaiting, asGrid)` signatures updated; DOM refs table gains `histogramControls`/`dayFilterGroup`/`statsCutoffs`; stats flow reflects both variants; fixed stats-grid cutoff/dayFilter re-render handlers (kept current stats view) |
 | 5.2 | 2026-08-28 | §2.2 | Status bar view label for the `chart` view corrected from `Chart` to `Series`, matching the major-view name rename ("Chart" removed as too general); `FRONTEND_VERSION` → 5.2.0 (#80) |
+| 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |

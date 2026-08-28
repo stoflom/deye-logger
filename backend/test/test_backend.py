@@ -360,6 +360,52 @@ def test_histogram_all_days(t: TestResult) -> None:
         t.check(len(ds["data"]) == 24, f"Dataset {i} has 24 values (got {len(ds['data'])})")
 
 
+def test_histogram_bin_min_max(t: TestResult) -> None:
+    """Test GET /api/histogram returns per-bin min/max alongside averages (#81)."""
+    print("\n[Test 7b] GET /api/histogram (per-bin min/max arrays)")
+    # 2026-07-27 is Monday (day_index=1). Test data:
+    #   current_power = hour*10 + minute + 100  (records at :00/:15/:30/:45)
+    #   battery_soc   = 55 + hour*2             (constant within an hour)
+    _, result = http_get("/api/histogram", {
+        "from": "2026-07-27",
+        "to": "2026-07-27",
+        "columns": "current_power,battery_soc",
+        "binMinutes": "60",
+        "dayFilter": "all"
+    })
+    t.check(len(result["datasets"]) == 2, f"2 datasets (got {len(result['datasets'])})")
+    power = result["datasets"][0]
+    soc = result["datasets"][1]
+
+    for name, ds in (("current_power", power), ("battery_soc", soc)):
+        t.check("min" in ds, f"{name} dataset has 'min' array")
+        t.check("max" in ds, f"{name} dataset has 'max' array")
+        if "min" in ds and "max" in ds:
+            t.check(len(ds["min"]) == len(ds["data"]),
+                    f"{name} 'min' length matches 'data' ({len(ds.get('data', []))})")
+            t.check(len(ds["max"]) == len(ds["data"]),
+                    f"{name} 'max' length matches 'data' ({len(ds.get('data', []))})")
+
+    if "min" in power and "max" in power:
+        bad = []
+        for hour, (avg, mn, mx) in enumerate(zip(power["data"], power["min"], power["max"])):
+            # 4 samples per 60-min bin: minutes 0/15/30/45
+            if mn != hour * 10 + 100 or mx != hour * 10 + 45 + 100:
+                bad.append((hour, mn, mx))
+        t.check(len(bad) == 0,
+                f"current_power per-bin min/max match expected (mismatches at hours: {bad[:4]}…)")
+        t.check(abs(power["min"][3] - 130) < 1e-9 and abs(power["max"][3] - 175) < 1e-9,
+                f"hour-3 bin: min=130 max=175 (got min={power['min'][3]}, max={power['max'][3]})")
+        t.check(abs(power["data"][3] - 152.5) < 1e-9,
+                f"hour-3 bin average 152.5 (got {power['data'][3]})")
+    if "min" in soc and "max" in soc:
+        # SOC is constant within each hour → min == max == 55 + hour*2
+        t.check(all(soc["min"][h] == soc["max"][h] for h in range(len(soc["data"]))),
+                "battery_soc constant per hour: min == max for every bin")
+        t.check(abs(soc["min"][5] - (55 + 5 * 2)) < 1e-9,
+                f"hour-5 SOC min 65 (got {soc['min'][5]})")
+
+
 def test_histogram_day_filter_monday(t: TestResult) -> None:
     """Test GET /api/histogram with dayFilter=mon on a range containing Monday."""
     print("\n[Test 8] GET /api/histogram (dayFilter=mon, 3-day range)")
@@ -732,6 +778,7 @@ def main():
         test_data_range(test_result)
         test_data_validation(test_result)
         test_histogram_all_days(test_result)
+        test_histogram_bin_min_max(test_result)
         test_histogram_day_filter_monday(test_result)
         test_histogram_day_filter_sunday(test_result)
         test_histogram_day_filter_all_days(test_result)
