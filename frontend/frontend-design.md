@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v5.1
+> **Status:** v5.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -112,7 +112,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Element | ID | Purpose |
 | --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
-| View label | `#view-label` | Shows the current view name: Chart / Data Grid / Histogram / Histogram Grid / Stats / Stats Grid |
+| View label | `#view-label` | Shows the current view name: Series / Data Grid / Histogram / Histogram Grid / Stats / Stats Grid |
 | Range days | `#range-days` | Always visible. Shows the number of days in the selected date range as "N days" (or "1 day"). Count = number of calendar days from `from` to `to` inclusive; any fractional day (e.g. a partial first/last day of the range relative to available data) is **counted as a whole day** (`Math.ceil`). Updated whenever the date range changes, independent of the active view |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
@@ -1461,3 +1461,4 @@ This section tracks changes to the design document itself. Every modification to
 | 4.0 | 2026-08-26 | §3.1, §8.1, §9.1, §9.3, new §16.6 | New `stats-grid` view mode — table variant of the Stats view (rows = measurements, columns = statistics: samples, average, max/min + first-occurrence, high/low min-day), toggled via `viewToggleBtn` in the stats views; `?view=stats-grid` URL state (#58) |
 | 4.2 | 2026-08-26 | §16.1, §16.2, §16.6 | High/low threshold sub-lines drop the `(N%)` cutoff suffix (shown in the top bar); percentage-unit columns now show the selected cutoff as an absolute percent limit (e.g. SOC `> 95%` / `< 5%`) with method text `the selected N% limit`; tooltip `{threshold-desc}` is method-aware (#60) |
 | 4.1 | 2026-08-26 | §1.1, §2.2, §6.1, §7, §8.3, §8.4, §10.5 | Design review against implementation (#59): added `stats-view.ts` to source files + esbuild/test notes; status-bar label list gains Stats Grid; `setView` union and `renderStatsView(updateWaiting, asGrid)` signatures updated; DOM refs table gains `histogramControls`/`dayFilterGroup`/`statsCutoffs`; stats flow reflects both variants; fixed stats-grid cutoff/dayFilter re-render handlers (kept current stats view) |
+| 5.2 | 2026-08-28 | §2.2 | Status bar view label for the `chart` view corrected from `Chart` to `Series`, matching the major-view name rename ("Chart" removed as too general); `FRONTEND_VERSION` → 5.2.0 (#80) |

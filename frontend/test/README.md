@@ -87,7 +87,7 @@ Verifies button **visibility** (display), **enabled/disabled** (greyed-out), and
 | 6 | Error view | All controls greyed-out; error `Close` button enabled |
 | 7 | Chart↔Grid transition | Button labels and CSV visibility toggle correctly on view-toggle |
 | 8 | Chart↔Histogram transition | Histogram controls and button labels toggle correctly |
-| 9 | Status bar label | `#view-label` shows correct text (Chart, Data Grid, Histogram, Histogram Grid) |
+| 9 | Status bar label | `#view-label` shows correct text (Series, Data Grid, Histogram, Histogram Grid) |
 
 ## Troubleshooting
 
