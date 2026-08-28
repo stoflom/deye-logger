@@ -21,7 +21,12 @@ const HOST = args.includes("--help")
   ? undefined
   : (parseArg("--host") ?? "localhost");
 const PORT = Number(parseArg("--port")) || 8090;
-const DB_PATH = parseArg("--db");
+function requireDbPath(): string {
+  const path = parseArg("--db");
+  if (path) return path;
+  console.error("Error: --db <path> is required. Use --help for usage.");
+  Deno.exit(1);
+}
 
 if (args.includes("--help")) {
   console.log(`Usage: deno run -A main.ts [--host <host>] [--port <port>] [--db <db_path>] [--help]
@@ -34,10 +39,8 @@ Options:
   Deno.exit(0);
 }
 
-if (!DB_PATH) {
-  console.error("Error: --db <path> is required. Use --help for usage.");
-  Deno.exit(1);
-}
+// requireDbPath exits when --db is missing, so this is a plain string
+const DB_PATH: string = requireDbPath();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,8 +57,13 @@ function buildColumns(): ColumnRecord[] {
   const rows = db.prepare(
     `SELECT column_name as name, display_label as label, unit, is_numeric
      FROM column_metadata ORDER BY sort_order ASC`,
-  ).all() as ColumnRecord[];
-  return rows;
+  ).all() as Record<string, unknown>[];
+  return rows.map((r) => ({
+    name: String(r.name),
+    label: String(r.label),
+    unit: String(r.unit ?? ""),
+    is_numeric: Number(r.is_numeric ?? 0),
+  }));
 }
 
 // In-memory cache built from column_metadata
