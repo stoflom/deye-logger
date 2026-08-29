@@ -4,7 +4,13 @@
 
 - **All changes must be done in a `dev` branch.**
 - The `dev` branch is **NEVER** to be pushed to `origin`.
-- When development is finished (tested by the user), changes must be **merged into the `master` branch**.
+- Development proceeds by
+    - 1) investigation and planning tasks,
+    - 2) fixing design & commit in dev,
+    - 3) fixing code and commit in dev,
+    - 4) fixing test and commit in dev,
+    - 5) run [test, bug fixing, commit] loop until all tests are passed.
+- When changes have been tested by the user, all changes must be **merged into the `master` branch**.
 - The `master` branch is then **pushed to `origin`**.
 
 ## Design Documents
@@ -37,3 +43,4 @@ Each application has a **version number** consisting of `major.minor.subminor`:
 ## Testing
 
 - All tests are to be integrated into the suite under frontend/test or backend/test for future regression testing.
+- Typescript can be linted with globally installed compiler.
