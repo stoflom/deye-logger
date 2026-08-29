@@ -85,15 +85,19 @@ def test_histogram_controls_in_title_bar(tester):
     has_panel = tester.is_element_present(By.ID, "histogram-panel")
     assert not has_panel, "histogram-panel should not exist in DOM"
 
-    # Verify bin-size select and split button are visible
+    # Verify bin-size select and the major-view buttons are visible
     bin_size_select = tester.find_element(By.ID, "bin-size-select")
-    split_btn = tester.find_element(By.ID, "split-btn")
+    histogram_btn = tester.find_element(By.ID, "histogram-btn")
     assert bin_size_select is not None, "Bin size select should be visible"
-    assert split_btn is not None, "Split button should be visible"
+    assert histogram_btn is not None, "Histogram major-view button should be visible"
+
+    # Major-view buttons live on the top-right of the title row (.header-top, #84)
+    header_top = tester.find_element(By.CSS_SELECTOR, ".header-top .major-view-buttons")
+    assert header_top is not None, "Major-view buttons should be inside .header-top"
 
     print("  ✓ Histogram controls are inside title bar")
     print("  ✓ histogram-panel element correctly removed from DOM")
-    print("  ✓ Bin size and split button visible")
+    print("  ✓ Bin size select visible; major-view buttons in .header-top")
 
     take_screenshot(tester, "histogram-controls-in-header.png",
                    "Histogram controls in title bar")
@@ -261,13 +265,14 @@ def test_display_panel_scroll(tester):
     print(f"  #raw-data-chart-view min-height: {min_h}")
     assert min_h == "300px", f"Content panels should have min-height: 300px, got {min_h}"
 
-    # Verify #split-histogram-scroll has NO nested overflow
-    split_overflow = tester.execute_script(
-        "return window.getComputedStyle(document.getElementById('split-histogram-scroll')).overflowY;"
+    # v7.0 (#82): single scroll pane on #content-area — #histogram-scroll
+    # must NOT create a nested scrollbar (see style.css) (#86)
+    hist_overflow = tester.execute_script(
+        "return window.getComputedStyle(document.getElementById('histogram-scroll')).overflowY;"
     )
-    print(f"  #split-histogram-scroll overflow-y: {split_overflow}")
-    assert split_overflow == "visible", \
-        f"#split-histogram-scroll should NOT have nested scroll, got {split_overflow}"
+    print(f"  #histogram-scroll overflow-y: {hist_overflow}")
+    assert hist_overflow not in ("auto", "scroll"), \
+        f"#histogram-scroll should NOT have nested scroll (single scroll pane is #content-area), got {hist_overflow}"
 
     take_screenshot(tester, "scrollable-panel.png",
                    "Single scroll pane (#content-area) at small viewport")
@@ -379,9 +384,9 @@ def test_all_view_modes_with_histogram_controls(tester):
         print(f"  {view_mode}: controls display={display}")
 
         bin_select = tester.find_element(By.ID, "bin-size-select")
-        split_btn = tester.find_element(By.ID, "split-btn")
+        histogram_btn = tester.find_element(By.ID, "histogram-btn")
         day_filter = tester.find_element(By.ID, "day-filter-select")
-        print(f"  {view_mode}: bin-select={bin_select is not None}, split-btn={split_btn is not None}, day-filter={day_filter is not None}")
+        print(f"  {view_mode}: bin-select={bin_select is not None}, histogram-btn={histogram_btn is not None}, day-filter={day_filter is not None}")
 
         take_screenshot(tester, f"controls-{view_mode}.png",
                        f"Histogram controls in {view_mode} view")

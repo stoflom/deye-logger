@@ -62,7 +62,7 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 
 | # | Test | Description |
 |---|------|-------------|
-| 1 | Histogram controls in title bar | Bin-size select and Split button live inside `.header` |
+| 1 | Histogram controls in title bar | Bin-size select lives inside `.header`; major-view buttons in `.header-top` |
 | 2 | Title bar wrapping | Buttons wrap into multiple rows at narrow widths |
 | 3 | All view modes render | chart, grid, histogram, histogram-grid all render |
 | 4 | Summary cards scaling | Cards scale at all viewports, count is consistent |
@@ -81,8 +81,8 @@ Verifies button **visibility** (display), **enabled/disabled** (greyed-out), and
 |---|------|-------------|
 | 1 | Chart view | All nav controls enabled; CSV/histogram controls hidden; correct button labels |
 | 2 | Grid view | All nav controls enabled; CSV visible; correct button labels |
-| 3 | Histogram view | Histogram controls visible (bin-size, day-filter, split); CSV hidden; correct labels |
-| 4 | Histogram-grid view | Histogram controls visible; split hidden; CSV visible; correct labels |
+| 3 | Histogram view | Histogram controls visible (bin-size, day-filter); CSV hidden; correct labels |
+| 4 | Histogram-grid view | Histogram controls visible; CSV visible; correct labels |
 | 5 | Columns select | Only `columnsToggle` ("↻ Load Data") enabled; all others greyed-out |
 | 6 | Error view | All controls greyed-out; error `Close` button enabled |
 | 7 | Chart↔Grid transition | Button labels and CSV visibility toggle correctly on view-toggle |

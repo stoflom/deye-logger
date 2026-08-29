@@ -153,7 +153,7 @@ def main():
         # only grid views and the Select view hide them
         t.check(visible(tester, "#histogram-btn"), "histogram-btn visible (blue) in stats view")
         t.check(visible(tester, "#chart-btn"), "Series (chart-btn) visible (blue) in stats view")
-        t.check(not visible(tester, "#histogram-controls"), "bin-size/split controls hidden")
+        t.check(not visible(tester, "#histogram-controls"), "bin-size/day-filter controls hidden")
         t.check(not visible(tester, "#export-btn"), "CSV export hidden")
         t.check(visible(tester, "#day-filter-group"), "day filter group visible")
         t.check(visible(tester, "#stats-cutoffs"), "cutoff selects visible")

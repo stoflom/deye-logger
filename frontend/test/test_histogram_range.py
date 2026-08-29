@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
 Test script to verify the histogram per-bin value range rendering
-(frontend-design.md v6.0, §10.2.1 — #81).
+(frontend-design.md v7.1, §9.2/§10.2.1 — #82/#83).
 
 Covers:
-  - Combined histogram: per-column translucent floating-bar range datasets
-    ([min,max] per bin, null for zero-spread bins) alongside the average bars
-  - Range dataset data matches the /api/histogram min/max response exactly
-  - Range datasets are excluded from the legend
+  - One bar chart per selected column (`.histogram-chart-item canvas`)
+  - Range band: full-width translucent floating-bar dataset ([min,max] per
+    bin, null for zero-spread bins), `barPercentage:1, categoryPercentage:1,
+    grouped:false`, behind the average bar (order 1)
+  - Average bar: centred on top of the band at ~60% width
+    (`barPercentage:0.6, categoryPercentage:1, grouped:false`, order 0)
+  - Dataset values match the /api/histogram response exactly
   - Tooltip: range datasets filtered out; min/max appended to the average
     label as `(range min–max)`
-  - Split mode: each per-column chart carries the same range rendering
 
 Requires a running backend on :8090 with data for HISTO_DATE (see
 test_stats_view.py). Run:
@@ -31,7 +33,6 @@ if skill_path not in sys.path:
     sys.path.append(skill_path)
 
 from firefox_tester import FirefoxTester
-from selenium.webdriver.common.by import By
 
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
@@ -68,40 +69,64 @@ def api_histogram(columns: str) -> dict:
         return json.loads(res.read())
 
 
-def wait_for_chart(tester: FirefoxTester, canvas_id: str, timeout: int = 30):
-    """Poll until the test hook exposes a live Chart instance on the canvas."""
-    tester.execute_script("""
+def wait_for_charts(tester: FirefoxTester, timeout: int = 30):
+    """Poll until the test hook exposes a live Chart instance on a canvas."""
+    return tester.execute_script("""
         return new Promise((resolve) => {
-            const canvas = document.getElementById(arguments[0]);
             const t0 = Date.now();
             const poll = () => {
-                if (canvas && canvas.__chartInstance) return resolve(true);
-                if (Date.now() - t0 > arguments[1]) return resolve(false);
+                const c = document.querySelector(".histogram-chart-item canvas");
+                if (c && c.__chartInstance) return resolve(true);
+                if (Date.now() - t0 > arguments[0]) return resolve(false);
                 setTimeout(poll, 250);
             };
             poll();
         });
-    """, canvas_id, timeout * 1000)
+    """, timeout * 1000)
 
 
-def chart_datasets(tester: FirefoxTester, canvas_id: str):
-    """Return the chart's dataset array with the fields the tests need."""
+def chart_info(tester: FirefoxTester, canvas_id: str):
+    """Return the chart's datasets (with the fields the tests need) + options."""
     return tester.execute_script("""
         const c = document.getElementById(arguments[0]).__chartInstance;
         if (!c) return null;
-        return c.data.datasets.map(ds => ({
-            label: ds.label,
-            isRange: !!ds._isRange,
-            minArr: ds._min ? Array.from(ds._min) : null,
-            maxArr: ds._max ? Array.from(ds._max) : null,
-            data: ds.data,
-            backgroundColor: ds.backgroundColor,
-        }));
+        return {
+            title: c.canvas.parentElement.parentElement.querySelector(".histogram-chart-title")?.textContent ?? null,
+            legendDisplay: c.options.plugins.legend.display,
+            datasets: c.data.datasets.map(ds => ({
+                label: ds.label,
+                isRange: !!ds._isRange,
+                minArr: ds._min ? Array.from(ds._min) : null,
+                maxArr: ds._max ? Array.from(ds._max) : null,
+                data: ds.data,
+                backgroundColor: ds.backgroundColor,
+                barPercentage: ds.barPercentage,
+                categoryPercentage: ds.categoryPercentage,
+                grouped: ds.grouped,
+                order: ds.order,
+            })),
+        };
     """, canvas_id)
 
 
 def has_spread(mins, maxs) -> bool:
     return any(a != b for a, b in zip(mins, maxs))
+
+
+def approx_equal(a, b) -> bool:
+    """List equality with float tolerance (JS↔Python round-trip can shift
+    the last ULP, e.g. 905.4333333333332 vs ...333)."""
+    if a is None or b is None:
+        return a is b
+    if len(a) != len(b):
+        return False
+    for x, y in zip(a, b):
+        if x is None or y is None:
+            if x is not y:
+                return False
+        elif abs(x - y) > 1e-9 * max(1.0, abs(x), abs(y)):
+            return False
+    return True
 
 
 def range_entries_ok(range_data, mins, maxs) -> bool:
@@ -110,8 +135,9 @@ def range_entries_ok(range_data, mins, maxs) -> bool:
         if mins[j] == maxs[j]:
             if entry is not None:
                 return False
-        elif (not isinstance(entry, list)) or len(entry) != 2 \
-                or abs(entry[0] - mins[j]) > 1e-9 or abs(entry[1] - maxs[j]) > 1e-9:
+        elif (not isinstance(entry, list)) or len(entry) != 2:
+            return False
+        elif not approx_equal(entry, [mins[j], maxs[j]]):
             return False
     return True
 
@@ -122,74 +148,82 @@ def main():
 
     # Ground truth from the backend (chart label = API label + unit suffix)
     api = api_histogram(CROSS_CHECK_COLUMNS)
-    api_by_chart_label = {
-        (f"{ds['label']} ({ds['unit']})" if ds["unit"] else ds["label"]): ds
-        for ds in api["datasets"]
-    }
+    api_by_label = {ds["label"]: ds for ds in api["datasets"]}
 
     with FirefoxTester(headless=True) as tester:
-        # ── Test 1: combined histogram — range datasets ─────────────
-        print(f"\n[Test 1] Combined histogram range rendering ({HISTO_DATE}, bin {BIN_SIZE}m)")
+        # ── Test 1: per-column charts — range band + average geometry ──
+        print(f"\n[Test 1] Per-column histogram range rendering ({HISTO_DATE}, bin {BIN_SIZE}m)")
         tester.navigate(f"{BASE_URL}/?view=histogram&date={HISTO_DATE}&binSize={BIN_SIZE}")
-        wait_for_chart(tester, "histogram-canvas")
-        tester.screenshot(os.path.join(SCREENSHOT_DIR, "histogram-range-combined.png"))
+        ok = wait_for_charts(tester)
+        t.check(bool(ok), "per-column chart instance present")
+        tester.wait(1)
+        tester.screenshot(os.path.join(SCREENSHOT_DIR, "histogram-range-per-column.png"))
 
-        datasets = chart_datasets(tester, "histogram-canvas")
-        t.check(datasets is not None, "combined chart instance present on canvas")
-        if datasets is None:
-            return summary(t)
+        canvas_ids = tester.execute_script(
+            "return Array.from(document.querySelectorAll('.histogram-chart-item canvas'))"
+            ".map(c => c.id);")
+        t.check(len(canvas_ids) >= 1, f"per-column canvases present (got {len(canvas_ids)})")
 
-        avg_with_spread = 0
-        for i, ds in enumerate(datasets):
-            if ds["isRange"]:
-                t.check(ds["label"].endswith(" (range)"),
-                        f"range dataset {i} label ends with '(range)' (got '{ds['label']}')")
-                t.check(isinstance(ds["backgroundColor"], str) and ds["backgroundColor"].endswith("33"),
-                        f"range dataset {i} uses ~20% opacity fill (got {ds['backgroundColor']})")
+        with_spread = 0
+        checked = 0
+        for cid in canvas_ids or []:
+            info = chart_info(tester, cid)
+            if not info:
                 continue
 
-            paired = i + 1 < len(datasets) and datasets[i + 1]["isRange"]
-            api_ds = api_by_chart_label.get(ds["label"])
+            t.check(info["title"] is not None, f"{cid}: chart title present")
+            t.check(info["legendDisplay"] is False, f"{cid}: legend hidden")
 
-            if ds["minArr"] is not None and ds["maxArr"] is not None:
-                expected = has_spread(ds["minArr"], ds["maxArr"])
-                t.check(paired == expected,
-                        f"'{ds['label']}': range dataset present={paired}, expected {expected}")
-                if expected:
-                    avg_with_spread += 1
-                    t.check(range_entries_ok(datasets[i + 1]["data"], ds["minArr"], ds["maxArr"]),
-                            f"'{ds['label']}': range entries are [min,max] per spread bin, null otherwise")
+            api_ds = api_by_label.get(info["title"])
+            dss = info["datasets"]
+            avg = dss[-1]
+            has_range = len(dss) > 1 and bool(dss[0]["isRange"])
 
-            # Cross-check against the raw API for the known columns
+            # Geometry: average bar centred on the full-width range band (#83)
+            t.check(avg["barPercentage"] == 0.6 and avg["categoryPercentage"] == 1
+                    and avg["grouped"] is False and avg["order"] == 0,
+                    f"'{info['title']}': average bar ~60% width, centred (grouped:false)")
+
             if api_ds is not None:
-                t.check(ds["minArr"] is not None and ds["maxArr"] is not None,
-                        f"'{ds['label']}': chart carries min/max arrays")
-                if ds["minArr"] is not None and ds["maxArr"] is not None:
-                    t.check(ds["minArr"] == api_ds["min"] and ds["maxArr"] == api_ds["max"],
-                            f"'{ds['label']}': chart min/max equal /api/histogram values")
-                    if has_spread(api_ds["min"], api_ds["max"]):
-                        t.check(paired and range_entries_ok(datasets[i + 1]["data"],
-                                                            api_ds["min"], api_ds["max"]),
-                                f"'{ds['label']}': range dataset matches API min/max for all bins")
+                expected_spread = has_spread(api_ds["min"], api_ds["max"])
+                t.check(has_range == expected_spread,
+                        f"'{info['title']}': range dataset present={has_range}, expected {expected_spread}")
+                t.check(approx_equal(avg["minArr"], api_ds["min"])
+                        and approx_equal(avg["maxArr"], api_ds["max"]),
+                        f"'{info['title']}': chart min/max equal /api/histogram values")
+                t.check(approx_equal(avg["data"], api_ds["data"]),
+                        f"'{info['title']}': average values equal /api/histogram values")
+                if has_range and expected_spread:
+                    band = dss[0]
+                    t.check(band["label"].endswith(" (range)"),
+                            f"'{info['title']}': range dataset label ends with '(range)'")
+                    t.check(isinstance(band["backgroundColor"], str)
+                             and band["backgroundColor"].endswith("33"),
+                            f"'{info['title']}': range band uses ~20% opacity fill (got {band['backgroundColor']})")
+                    t.check(band["barPercentage"] == 1 and band["categoryPercentage"] == 1
+                            and band["grouped"] is False and band["order"] == 1,
+                            f"'{info['title']}': range band full-width behind average (grouped:false)")
+                    t.check(range_entries_ok(band["data"], api_ds["min"], api_ds["max"]),
+                            f"'{info['title']}': range band data matches API min/max for all bins")
+                if expected_spread:
+                    with_spread += 1
+                checked += 1
 
-        t.check(avg_with_spread >= 1, f"at least one column shows a range (got {avg_with_spread})")
+        t.check(checked >= 2, f"at least {CROSS_CHECK_COLUMNS} charts cross-checked (got {checked})")
+        t.check(with_spread >= 1, f"at least one column shows a range (got {with_spread})")
 
-        # Legend: no '(range)' entries
-        legend_items = tester.execute_script(
-            "const c = document.getElementById('histogram-canvas').__chartInstance;"
-            "return c ? c.legend.legendItems.map(i => i.text) : null;")
-        t.check(legend_items is not None, "legend items readable")
-        if legend_items:
-            t.check(all("(range)" not in item for item in legend_items),
-                    f"legend has no '(range)' entries (got {legend_items})")
-
-        # Tooltip: range datasets filtered out; range appended to the average label
+        # ── Test 2: tooltip — range appended to the average label ─────
+        print(f"\n[Test 2] Tooltip on a per-column chart")
         tip = tester.execute_script("""
-            const c = document.getElementById('histogram-canvas').__chartInstance;
-            if (!c) return null;
-            const idx = c.data.datasets.findIndex(ds => ds._isRange !== true
-                && ds._min && ds._min.some((m, j) => m !== ds._max[j]));
-            if (idx < 0) return null;
+            const canvas = Array.from(document.querySelectorAll(".histogram-chart-item canvas"))
+                .find(c => {
+                    const ch = c.__chartInstance;
+                    const avg = ch && ch.data.datasets[ch.data.datasets.length - 1];
+                    return avg && avg._min && avg._min.some((m, j) => m !== avg._max[j]);
+                });
+            if (!canvas) return null;
+            const c = canvas.__chartInstance;
+            const idx = c.data.datasets.findIndex(ds => ds._isRange !== true);
             const ds = c.data.datasets[idx];
             const j = ds._min.findIndex((m, k) => m !== ds._max[k]);
             c.setActiveElements([{ datasetIndex: idx, index: j }], { x: 10, y: 10 });
@@ -207,40 +241,6 @@ def main():
             t.check(any("(range " in line for line in tip["lines"]),
                     f"tooltip label appends '(range min–max)' (got {tip['lines']})")
 
-        # ── Test 2: split mode — per-column charts carry ranges ─────
-        print(f"\n[Test 2] Split mode range rendering ({HISTO_DATE}, bin {BIN_SIZE}m)")
-        tester.navigate(f"{BASE_URL}/?view=histogram&date={HISTO_DATE}&binSize={BIN_SIZE}&split=1")
-        try:
-            tester.wait_for_element(By.CSS_SELECTOR, ".split-histogram-item canvas", timeout=30)
-        except Exception:
-            pass
-        tester.wait(2)
-        tester.screenshot(os.path.join(SCREENSHOT_DIR, "histogram-range-split.png"))
-
-        canvas_ids = tester.execute_script(
-            "return Array.from(document.querySelectorAll('.split-histogram-item canvas'))"
-            ".map(c => c.id);")
-        t.check(len(canvas_ids) >= 1, f"split canvases present (got {len(canvas_ids)})")
-
-        checked = 0
-        for cid in canvas_ids or []:
-            datasets = chart_datasets(tester, cid)
-            if not datasets:
-                continue
-            avg = datasets[0]
-            api_ds = api_by_chart_label.get(avg["label"])
-            if api_ds is None:
-                continue
-            has_range = len(datasets) > 1 and bool(datasets[1].get("isRange"))
-            expected = has_spread(api_ds["min"], api_ds["max"])
-            t.check(has_range == expected,
-                    f"split '{avg['label']}': range dataset present={has_range}, expected {expected}")
-            if has_range and expected:
-                t.check(range_entries_ok(datasets[1]["data"], api_ds["min"], api_ds["max"]),
-                        f"split '{avg['label']}': range data matches API min/max")
-            checked += 1
-        t.check(checked >= 1, f"at least one split chart cross-checked (got {checked})")
-
     return summary(t)
 
 
@@ -250,7 +250,7 @@ def summary(t: TestResult) -> int:
     if t.failures:
         print("\nFailed tests:")
         for f in t.failures:
-            print(f"  - {f}")
+            print("  - " + f)
     print("=" * 70)
     return 1 if t.failed else 0
 

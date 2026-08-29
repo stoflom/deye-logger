@@ -41,6 +41,7 @@ if skill_path not in sys.path:
 
 from firefox_tester import FirefoxTester
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
 
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
@@ -215,6 +216,22 @@ EXPECTED_STATES = {
 
 # ── Helper Functions ────────────────────────────────────────────────
 
+def unhover(tester):
+    """Move the pointer off any button so :hover styles (e.g. .btn-view:hover's
+    grey background) don't interfere with button colour assertions.
+
+    After a Selenium click, geckodriver's internal pointer state can lag behind
+    the actual pointer, making a single move_to a zero-delta no-op that fires no
+    mousemove — leaving the stale :hover state in place (#86). Moving to several
+    distinct points guarantees at least one real mousemove, and every target is
+    in the middle content area (never over a header button)."""
+    ac = ActionChains(tester.driver)
+    body = tester.find_element(By.TAG_NAME, "body")
+    for i in range(3):
+        ac.move_to_element_with_offset(body, i * 5, i * 5).perform()
+    time.sleep(0.2)
+
+
 def take_screenshot(tester, filename, description=""):
     """Take screenshot and save to SCREENSHOT_DIR."""
     filepath = os.path.join(SCREENSHOT_DIR, filename)
@@ -313,6 +330,11 @@ def check_control(tester, control_name, expected, view_name):
     # Check blue (.active) styling — #3182ce = rgb(49, 130, 206)
     expected_blue = expected.get("blue")
     if expected_blue is not None:
+        # Clear any :hover and let the 0.15s background transition settle
+        # before sampling the computed colour (#86)
+        # Clear any :hover and let the 0.15s background transition settle
+        # before sampling the computed colour (#86)
+        unhover(tester)
         bg = tester.get_computed_style(By.ID, element_id, "background-color")
         actual_blue = bg == "rgb(49, 130, 206)"
         if actual_blue != expected_blue:
@@ -349,6 +371,7 @@ def test_grid_view_button_states(tester):
     """Test button states in grid view."""
     print("\n[Test 2] Grid view button states")
     navigate_to_view(tester, "grid")
+    unhover(tester)
 
     failures = []
     for control, expected in EXPECTED_STATES["grid"].items():
@@ -369,6 +392,7 @@ def test_histogram_view_button_states(tester):
     """Test button states in histogram view."""
     print("\n[Test 3] Histogram view button states")
     navigate_to_view(tester, "histogram")
+    unhover(tester)
 
     failures = []
     for control, expected in EXPECTED_STATES["histogram"].items():
@@ -396,6 +420,7 @@ def test_histogram_grid_view_button_states(tester):
     """Test button states in histogram-grid view."""
     print("\n[Test 4] Histogram-grid view button states")
     navigate_to_view(tester, "histogram-grid")
+    unhover(tester)
 
     failures = []
     for control, expected in EXPECTED_STATES["histogram-grid"].items():
@@ -642,6 +667,7 @@ def test_stats_view_button_states(tester):
     """Test button states in stats and stats-grid views + Grid/Back auto-return (#62)."""
     print("\n[Test 10] Stats view button states")
     navigate_to_view(tester, "stats")
+    unhover(tester)
 
     failures = []
     for control, expected in EXPECTED_STATES["stats"].items():
@@ -659,6 +685,7 @@ def test_stats_view_button_states(tester):
     grid_btn.click()
     tester.wait_for_element(By.ID, "summary-cards")
     time.sleep(0.5)
+    unhover(tester)  # pointer is on the Grid/Back button — clear :hover
 
     failures = []
     for control, expected in EXPECTED_STATES["stats-grid"].items():
