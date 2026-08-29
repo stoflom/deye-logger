@@ -166,7 +166,6 @@ export const {
   chartBtn,
   histogramToggleBtn,
   exportCsvBtn,
-  splitBtn,
   binSizeSelect,
   dayFilterSelect,
   waitingViewPanel,
@@ -184,8 +183,7 @@ export const {
   rawDataGridView,
   histogramView,
   histogramGridView,
-  splitHistogramView,
-  splitHistogramScroll,
+  histogramScroll,
   statsViewPanel,
   statsBtn,
   highCutoffSelect,
@@ -196,7 +194,6 @@ export const {
   rawDataGridContainer,
   histogramGridContainer,
   rawDataChartCanvas,
-  histogramChartCanvas,
   rowCountEl,
   versionBadgeEl,
   viewLabelEl,
@@ -257,7 +254,6 @@ const ALL_PANELS = [
   rawDataGridView,
   histogramView,
   histogramGridView,
-  splitHistogramView,
   statsViewPanel,
 ];
 
@@ -270,7 +266,6 @@ const PANEL_ID_MAP: Record<string, HTMLElement> = {
   "raw-data-grid": rawDataGridView,
   histogram: histogramView,
   "histogram-grid": histogramGridView,
-  "split-histogram": splitHistogramView,
   stats: statsViewPanel,
 };
 
@@ -290,7 +285,6 @@ export function hideAllDataPanels(): void {
     rawDataGridView,
     histogramView,
     histogramGridView,
-    splitHistogramView,
     statsViewPanel,
   ].forEach((panel) => panel.classList.remove("visible"));
 }
@@ -312,7 +306,6 @@ const ALL_CONTROLS: (HTMLElement | null)[] = [
   exportCsvBtn,
   binSizeSelect,
   dayFilterSelect,
-  splitBtn,
   statsBtn,
   highCutoffSelect,
   lowCutoffSelect,
@@ -349,7 +342,6 @@ const CONTROL_KEYS: Record<string, HTMLElement | null> = {
   exportCsv: exportCsvBtn,
   binSize: binSizeSelect,
   dayFilter: dayFilterSelect,
-  split: splitBtn,
   stats: statsBtn,
   highCutoff: highCutoffSelect,
   lowCutoff: lowCutoffSelect,
@@ -474,7 +466,6 @@ export interface ParsedUrlState {
   dateFrom: string;
   dateTo: string;
   binSize: string;
-  isSplit: boolean;
   dayFilter: string;
   highCutoff: string;
   lowCutoff: string;
@@ -490,27 +481,26 @@ export function getUrlState(): ParsedUrlState {
   const view = (rawView as ViewMode) ?? "chart";
   if (!validViews.includes(view)) {
     const today = todayStr();
-    return { view: "chart", dateFrom: appState.dateRangeFrom || today, dateTo: appState.dateRangeTo || today, binSize: "15", isSplit: false, dayFilter: "all", highCutoff: "95", lowCutoff: "5" };
+    return { view: "chart", dateFrom: appState.dateRangeFrom || today, dateTo: appState.dateRangeTo || today, binSize: "15", dayFilter: "all", highCutoff: "95", lowCutoff: "5" };
   }
 
   const dateFrom = params.get("from") || params.get("date") || appState.dateRangeFrom || todayStr();
   const dateTo = params.get("to") || params.get("date") || appState.dateRangeTo || todayStr();
   const binSize = params.get("binSize") || "15";
-  const isSplit = params.get("split") === "1";
   const dayFilter = params.get("dayFilter") || "all";
   const rawHigh = params.get("highCutoff") ?? "";
   const rawLow = params.get("lowCutoff") ?? "";
   const highCutoff = validHighCutoffs.includes(rawHigh) ? rawHigh : "95";
   const lowCutoff = validLowCutoffs.includes(rawLow) ? rawLow : "5";
 
-  return { view, dateFrom, dateTo, binSize, isSplit, dayFilter, highCutoff, lowCutoff };
+  return { view, dateFrom, dateTo, binSize, dayFilter, highCutoff, lowCutoff };
 }
 
 export function buildUrlString(
   view: string,
   from: string,
   to: string,
-  opts?: { binSize?: string; isSplit?: boolean; dayFilter?: string; highCutoff?: string; lowCutoff?: string },
+  opts?: { binSize?: string; dayFilter?: string; highCutoff?: string; lowCutoff?: string },
 ): string {
   const params = new URLSearchParams();
   params.set("view", view);
@@ -525,10 +515,6 @@ export function buildUrlString(
   const binSize = opts?.binSize;
   if (binSize && binSize !== "15") {
     params.set("binSize", binSize);
-  }
-
-  if (opts?.isSplit) {
-    params.set("split", "1");
   }
 
   const dayFilter = opts?.dayFilter;

@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "6.0.0";
+export const FRONTEND_VERSION = "7.0.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -35,7 +35,6 @@ import {
   hideStatsCutoffs,
   updateRangeDays,
   exportCsvBtn,
-  splitBtn,
   versionBadgeEl,
   viewLabelEl,
   rowCountEl,
@@ -66,7 +65,7 @@ import {
 
 import { renderRawDataChart, updateSummaryCards } from "./chart";
 import { initRawDataGrid, updateRawDataGrid, initHistogramGrid, updateHistogramGrid, getHistogramGridApi, buildHistogramGridCols } from "./data-grid";
-import { renderHistogramChart, histogramMaxAverageValues, fetchHistogramData, showSplitHistogram, isSplitModeActive, cleanupSplitMode, histogramResultToRows } from "./histogram-chart";
+import { renderHistogramCharts, histogramMaxAverageValues, fetchHistogramData, histogramResultToRows } from "./histogram-chart";
 import { renderStatsView } from "./stats-view";
 import { renderColumnCheckboxes } from "./columns";
 import { wireDateNavigation } from "./navigation";
@@ -78,7 +77,6 @@ interface SetViewOptions {
   replace?: boolean;   // use replaceState instead of pushState (default: false)
   refresh?: boolean;   // transient — trigger backend refresh before rendering
   columns?: boolean;   // show columns selection panel (pushes history entry with columns marker)
-  split?: boolean;     // URL-param — split histogram mode
 }
 
 // ------------------------------------------------------------------
@@ -141,8 +139,8 @@ async function renderRawDataGridView(updateWaiting: (text: string) => void): Pro
   return { ok: true };
 }
 
-async function renderHistogramChartView(updateWaiting: (text: string) => void): Promise<RenderOk> {
-  await renderHistogramChart(updateWaiting);
+async function renderHistogramView(updateWaiting: (text: string) => void): Promise<RenderOk> {
+  await renderHistogramCharts(updateWaiting);
   updateSummaryCards(histogramMaxAverageValues ?? null);
   rowCountEl.textContent = `${histogramMaxAverageValues?.size ?? 0} metrics`;
   return { ok: true };
@@ -165,14 +163,6 @@ async function renderHistogramGridView(updateWaiting: (text: string) => void): P
   } else {
     updateHistogramGrid(colDefs, rows);
   }
-  return { ok: true };
-}
-
-async function renderSplitHistogramView(updateWaiting: (text: string) => void): Promise<RenderOk> {
-  await renderHistogramChart(updateWaiting);
-  updateSummaryCards(histogramMaxAverageValues ?? null);
-  updateWaiting("Splitting charts…");
-  await showSplitHistogram();
   return { ok: true };
 }
 
@@ -216,7 +206,7 @@ async function renderRefreshView(updateWaiting: (text: string) => void): Promise
 // ------------------------------------------------------------------
 // Button label updater — called by setView at step 5
 // ------------------------------------------------------------------
-function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
+function updateButtonLabels(view: ViewMode): void {
   const isAnyGrid = view === "grid" || view === "histogram-grid" || view === "stats-grid";
   const isHistogramMode = view === "histogram" || view === "histogram-grid";
   const isStats = view === "stats" || view === "stats-grid";
@@ -264,11 +254,6 @@ function updateButtonLabels(view: ViewMode, isSplit: boolean): void {
     viewToggleBtn.classList.remove("active");
   }
 
-  // Split button — visible only in histogram (not histogram-grid)
-  splitBtn.style.display = view === "histogram" ? "" : "none";
-  splitBtn.textContent = isSplit ? "Combine" : "Split";
-  splitBtn.title = isSplit ? "Combine columns into single chart" : "Split columns into individual charts";
-
   // Title-bar control groups
   if (isHistogramMode) {
     showHistogramPanel();
@@ -297,7 +282,7 @@ async function setView(
   view: ViewMode,
   opts: SetViewOptions = {},
 ): Promise<void> {
-  const { replace = false, refresh: doRefresh = false, columns: showColumns = false, split: optSplit } = opts;
+  const { replace = false, refresh: doRefresh = false, columns: showColumns = false } = opts;
 
   // STEP 1: Disable all buttons (debounce protection)
   disableAllControls();
@@ -335,7 +320,7 @@ async function setView(
       // payload carries the columns marker for fast popstate restoration.
       const columnsUrl = window.location.pathname + window.location.search;
       const columnsHistoryMethod = replace ? history.replaceState : history.pushState;
-      columnsHistoryMethod.call(history, { view, isSplit: false, columns: true }, "", columnsUrl);
+      columnsHistoryMethod.call(history, { view, columns: true }, "", columnsUrl);
       return;
     }
 
@@ -358,13 +343,12 @@ async function setView(
         appState.dateRangeTo,
         {
           binSize: isHistogramModeRefresh ? binSizeSelect.value : undefined,
-          isSplit: false,
           dayFilter: isHistogramModeRefresh || isStatsRefresh ? dayFilterSelect.value : undefined,
           highCutoff: isStatsRefresh ? highCutoffSelect.value : undefined,
           lowCutoff: isStatsRefresh ? lowCutoffSelect.value : undefined,
         },
       );
-      history.pushState({ view, isSplit: false }, "", refreshUrl);
+      history.pushState({ view }, "", refreshUrl);
 
       await renderRefreshView((text) => waitingView.setText(text));
       // Fall through to normal render — no recursive call needed
@@ -373,7 +357,6 @@ async function setView(
     // --- Normal data render ---
     const isHistogramMode = view === "histogram" || view === "histogram-grid";
     const isStats = view === "stats" || view === "stats-grid";
-    const split = optSplit ?? false;
 
     // Sync date inputs with state
     dateFromInput.value = appState.dateRangeFrom;
@@ -392,15 +375,7 @@ async function setView(
     } else if (view === "histogram-grid") {
       await renderHistogramGridView((text) => waitingView.setText(text));
     } else if (view === "histogram") {
-      // Clean up split mode if coming from split
-      if (isSplitModeActive()) {
-        cleanupSplitMode();
-      }
-      if (split) {
-        await renderSplitHistogramView((text) => waitingView.setText(text));
-      } else {
-        await renderHistogramChartView((text) => waitingView.setText(text));
-      }
+      await renderHistogramView((text) => waitingView.setText(text));
     } else if (isStats) {
       await renderStatsView((text) => waitingView.setText(text), view === "stats-grid");
     }
@@ -446,8 +421,6 @@ async function setView(
       showPanel("raw-data-grid");
     } else if (view === "histogram-grid") {
       showPanel("histogram-grid");
-    } else if (view === "histogram" && split) {
-      showPanel("split-histogram");
     } else if (view === "histogram") {
       showPanel("histogram");
     } else if (isStats) {
@@ -478,14 +451,13 @@ async function setView(
       appState.dateRangeTo,
       {
         binSize: isHistogramMode ? binSizeSelect.value : undefined,
-        isSplit: split,
         dayFilter: isHistogramMode || isStats ? dayFilterSelect.value : undefined,
         highCutoff: isStats ? highCutoffSelect.value : undefined,
         lowCutoff: isStats ? lowCutoffSelect.value : undefined,
       },
     );
     const historyMethod = replace ? history.replaceState : history.pushState;
-    historyMethod.call(history, { view, isSplit: split }, "", url);
+    historyMethod.call(history, { view }, "", url);
 
     // Re-enable all controls
     enableAllControls();
@@ -493,7 +465,7 @@ async function setView(
 
     // STEP 5: Update button labels and visibility — after enableAllControls()
     // so the active major-view button's disabled (grey) state is preserved (#77)
-    updateButtonLabels(view, split);
+    updateButtonLabels(view);
 
   } catch (err) {
     // STEP 4d: Error — show error-view
@@ -560,28 +532,17 @@ statsBtn.addEventListener("click", () => {
   setView("stats");
 });
 
-// Split/combine toggle (histogram only)
-splitBtn.addEventListener("click", () => {
-  if (appState.activeView === "histogram") {
-    const currentSplit = isSplitModeActive();
-    setView("histogram", { split: !currentSplit });
-  }
-});
-
 // Bin size change — re-render current histogram view
 binSizeSelect.addEventListener("change", () => {
   if (appState.activeView === "histogram" || appState.activeView === "histogram-grid") {
-    const currentSplit = isSplitModeActive();
-    setView(appState.activeView, { split: currentSplit });
+    setView(appState.activeView);
   }
 });
 
 // Day filter change — re-render current histogram or stats view
 dayFilterSelect.addEventListener("change", () => {
   const v = appState.activeView;
-  if (v === "histogram" || v === "histogram-grid") {
-    setView(v, { split: isSplitModeActive() });
-  } else if (v === "stats" || v === "stats-grid") {
+  if (v === "histogram" || v === "histogram-grid" || v === "stats" || v === "stats-grid") {
     setView(v);
   }
 });
@@ -681,7 +642,7 @@ window.addEventListener("popstate", () => {
   }
   updateNavButtonStates();
 
-  setView(urlState.view, { replace: true, split: urlState.isSplit });
+  setView(urlState.view, { replace: true });
 });
 
 // ------------------------------------------------------------------
@@ -764,7 +725,7 @@ async function init(): Promise<void> {
   ];
 
   // Render initial view from URL immediately — don't wait for metadata
-  await setView(urlState.view, { replace: true, split: urlState.isSplit });
+  await setView(urlState.view, { replace: true });
 
   // Load metadata in background after render
   Promise.allSettled(metadataPromises);

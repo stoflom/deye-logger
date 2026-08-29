@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v7.0
+> **Status:** v7.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -792,7 +792,8 @@ setView("histogram")
 Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to the average `data[]`) from the backend. Each per-column chart renders the bin's value range as follows (v7.0 — #83):
 
 - **Shaded range band (background):** a **full-width** translucent bar per bin, drawn as a Chart.js **floating bar** (`[min, max]`), spanning the whole category slot (`barPercentage: 1`, `categoryPercentage: 1`), in the dataset color at low opacity (≈20% fill, no border), behind the average bar (`order: 1`). Skipped for bins where `min === max` (zero spread) to avoid visual noise.
-- **Average bar (foreground):** superimposed on top of the range band, **centred within it** at **~60% of the band's width** (`barPercentage: 0.6`, `categoryPercentage: 1`, `order: 0`) — both datasets sit on the same category, so the average bar is centred in the band automatically.
+- **Average bar (foreground):** superimposed on top of the range band, **centred within it** at **~60% of the band's width** (`barPercentage: 0.6`, `categoryPercentage: 1`, `order: 0`).
+- **Centre alignment:** both datasets use **`grouped: false`** — without it Chart.js lays the two bar datasets out **side-by-side** within the category slot (the range band ends up offset to one side of the average bar instead of behind it). With `grouped: false` both bars centre on the category; `barPercentage` alone then controls relative widths.
 - **Tooltip:** the `label` callback appends the range, e.g. `Daily Energy (kWh): 10.5 (range 9.8–10.7)`; omitted when `min === max`. Range datasets are filtered out of the tooltip and the legend (the legend stays on the averages).
 - Missing/absent `min`/`max` arrays are treated as not available (no range rendered) — the renderer degrades gracefully to averages only.
 
@@ -1447,4 +1448,5 @@ This section tracks changes to the design document itself. Every modification to
 | 4.1 | 2026-08-26 | §1.1, §2.2, §6.1, §7, §8.3, §8.4, §10.5 | Design review against implementation (#59): added `stats-view.ts` to source files + esbuild/test notes; status-bar label list gains Stats Grid; `setView` union and `renderStatsView(updateWaiting, asGrid)` signatures updated; DOM refs table gains `histogramControls`/`dayFilterGroup`/`statsCutoffs`; stats flow reflects both variants; fixed stats-grid cutoff/dayFilter re-render handlers (kept current stats view) |
 | 5.2 | 2026-08-28 | §2.2 | Status bar view label for the `chart` view corrected from `Chart` to `Series`, matching the major-view name rename ("Chart" removed as too general); `FRONTEND_VERSION` → 5.2.0 (#80) |
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
+| 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.0 | 2026-08-29 | §1.1, §2.1, §3, §5, §6, §8, §9, §10, §14, §15, §17 | Histogram: the combined view (all columns in one chart) and the Split/Combine sub-mode are **removed** — the histogram view renders one bar chart per selected column; `#split-btn`, the `?split` URL parameter and the `isSplit` history payload are gone (#82); the average bar is drawn centred on top of a full-width shaded range band at ~60% of its width (§10.2.1) (#83); the three major-view buttons move to the top right of the new title row (`.header-top`), same line as the logo, wrapping below the title on narrow viewports — all other controls stay in the controls row (#84); `FRONTEND_VERSION` → 7.0.0 |

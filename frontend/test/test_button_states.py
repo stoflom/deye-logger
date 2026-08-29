@@ -21,7 +21,6 @@ For each view, verifies:
   - Button visibility (display style)
   - Button enabled/disabled state
   - Button text labels
-  - Histogram controls visibility (bin-size, day-filter, split)
   - CSV export visibility
 
 Usage:
@@ -60,7 +59,6 @@ BUTTON_IDS = {
     "histogramToggle": "histogram-btn",
     "statsBtn": "stats-btn",
     "exportCsv": "export-btn",
-    "split": "split-btn",
 }
 SELECT_IDS = {
     "binSize": "bin-size-select",
@@ -88,8 +86,6 @@ EXPECTED_STATES = {
         "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid", "blue": False},
         # Export: hidden in non-grid views
         "exportCsv": {"enabled": True, "visible": False},
-        # Split: hidden in non-histogram views
-        "split": {"enabled": True, "visible": False},
         # Histogram controls: hidden in non-histogram modes
         "binSize": {"enabled": True, "visible": False},
         "dayFilter": {"enabled": True, "visible": False},
@@ -108,7 +104,6 @@ EXPECTED_STATES = {
         "viewToggle": {"enabled": True, "visible": True, "text": "Back", "blue": True},
         # Export: visible in grid views
         "exportCsv": {"enabled": True, "visible": True},
-        "split": {"enabled": True, "visible": False},
         "binSize": {"enabled": True, "visible": False},
         "dayFilter": {"enabled": True, "visible": False},
     },
@@ -126,8 +121,6 @@ EXPECTED_STATES = {
         "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid", "blue": False},
         # Export: hidden in histogram views
         "exportCsv": {"enabled": True, "visible": False},
-        # Split: visible only in histogram (not histogram-grid)
-        "split": {"enabled": True, "visible": True, "text": "Split"},
         # Histogram controls: visible in histogram modes
         "binSize": {"enabled": True, "visible": True},
         "dayFilter": {"enabled": True, "visible": True},
@@ -146,8 +139,6 @@ EXPECTED_STATES = {
         "viewToggle": {"enabled": True, "visible": True, "text": "Back", "blue": True},
         # Export: visible in grid views (histogram-grid is a grid)
         "exportCsv": {"enabled": True, "visible": True},
-        # Split: hidden in histogram-grid
-        "split": {"enabled": True, "visible": False},
         # Histogram controls: visible in histogram modes
         "binSize": {"enabled": True, "visible": True},
         "dayFilter": {"enabled": True, "visible": True},
@@ -165,7 +156,6 @@ EXPECTED_STATES = {
         # Grid utility: opens stats-grid (table) (grey in major views)
         "viewToggle": {"enabled": True, "visible": True, "text": "📋 Grid", "blue": False},
         "exportCsv": {"enabled": True, "visible": False},
-        "split": {"enabled": True, "visible": False},
         "binSize": {"enabled": True, "visible": False},
         "dayFilter": {"enabled": True, "visible": True},
     },
@@ -183,7 +173,6 @@ EXPECTED_STATES = {
         "viewToggle": {"enabled": True, "visible": True, "text": "Back", "blue": True},
         # Export: visible in grid views (stats-grid is a grid)
         "exportCsv": {"enabled": True, "visible": True},
-        "split": {"enabled": True, "visible": False},
         "binSize": {"enabled": True, "visible": False},
         "dayFilter": {"enabled": True, "visible": True},
     },
@@ -203,7 +192,6 @@ EXPECTED_STATES = {
         "statsBtn": {"enabled": False, "visible": False},
         "viewToggle": {"enabled": False, "visible": True, "blue": False},  # grey (inherited from chart)
         "exportCsv": {"enabled": False, "visible": False},  # hidden (inherited from chart)
-        "split": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "binSize": {"enabled": False, "visible": False},  # hidden inside histogram-controls (display:none)
         "dayFilter": {"enabled": False, "visible": False},  # hidden inside histogram-controls (display:none)
     },
@@ -220,7 +208,6 @@ EXPECTED_STATES = {
         "histogramToggle": {"enabled": False, "visible": True},
         "statsBtn": {"enabled": False, "visible": True},
         "exportCsv": {"enabled": False, "visible": False},  # hidden (inherited from chart)
-        "split": {"enabled": False, "visible": False},  # hidden (inherited from chart)
         "binSize": {"enabled": False, "visible": False},  # hidden inside histogram-controls
         "dayFilter": {"enabled": False, "visible": False},  # hidden inside histogram-controls
     },
@@ -422,13 +409,6 @@ def test_histogram_grid_view_button_states(tester):
                        "Histogram-grid view button failures")
         raise AssertionError(f"Histogram-grid view: {len(failures)} button state failures")
 
-    # Split button should be hidden in histogram-grid
-    split_visible = is_element_visible(tester, "split-btn")
-    if split_visible:
-        print("  ✗ split-btn should be hidden in histogram-grid view")
-        raise AssertionError("split-btn visible in histogram-grid")
-    print("  ✓ split-btn correctly hidden in histogram-grid")
-
     take_screenshot(tester, "buttons-histogram-grid.png", "Histogram-grid view buttons")
     print("  ✓ All button states correct for histogram-grid view")
 
@@ -618,10 +598,8 @@ def test_button_transition_normal_to_histogram(tester):
 
     # Histogram controls should be visible
     assert get_histogram_controls_visible(tester), "histogram-controls should be visible"
-    assert is_element_visible(tester, "split-btn"), "split-btn should be visible"
     assert is_element_visible(tester, "bin-size-select"), "bin-size-select should be visible"
     assert is_element_visible(tester, "day-filter-select"), "day-filter-select should be visible"
-    print("  ✓ Histogram controls visible (bin-size, day-filter, split)")
 
     # histogram → histogram-grid via Grid utility, auto-return via Back (#62)
     grid_btn = tester.find_element(By.ID, "view-toggle")
@@ -653,7 +631,6 @@ def test_button_transition_normal_to_histogram(tester):
 
     # Histogram controls should be hidden
     assert not get_histogram_controls_visible(tester), "histogram-controls should be hidden"
-    assert not is_element_visible(tester, "split-btn"), "split-btn should be hidden"
     print("  ✓ Histogram controls hidden in chart view")
 
     take_screenshot(tester, "buttons-transition-histogram.png",

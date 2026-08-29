@@ -16,7 +16,16 @@
        TITLE BAR — always visible, persistent
        ============================================================ -->
   <div class="header">
-    <h1>☀️ <span>Deye</span> Logger Viewer</h1>
+    <!-- Title row — logo (left) + major-view buttons (top right); wraps on narrow viewports -->
+    <div class="header-top">
+      <h1>☀️ <span>Deye</span> Logger Viewer</h1>
+      <!-- Major views (blue) — active view's button is disabled (grey); hidden in grid and Select views -->
+      <div class="major-view-buttons">
+        <button class="btn-view btn-major" id="chart-btn" title="Show the time-series line chart">📈 Series</button>
+        <button class="btn-view btn-major" id="histogram-btn" title="Show binned average histogram">📊 Histogram</button>
+        <button class="btn-view btn-major" id="stats-btn" title="Show per-column statistics for the selected range">📈 Stats</button>
+      </div>
+    </div>
     <div class="controls">
       <label for="date-from">From</label>
       <input type="date" id="date-from">
@@ -27,16 +36,12 @@
       <button class="btn-view" id="today-btn" title="Go to today's date">Today</button>
       <button class="btn-view" id="refresh-btn" title="Update database from inverter">↻ Refresh</button>
 
-      <!-- Major views (blue) — active view's button is disabled (grey); hidden in grid and Select views -->
-      <button class="btn-view btn-major" id="chart-btn" title="Show the time-series line chart">📈 Series</button>
-      <button class="btn-view btn-major" id="histogram-btn" title="Show binned average histogram">📊 Histogram</button>
-      <button class="btn-view btn-major" id="stats-btn" title="Show per-column statistics for the selected range">📈 Stats</button>
       <!-- Utilities (grey) -->
       <button class="columns-toggle" id="columns-toggle" title="Select columns to display">☰ Select</button>
       <button class="btn-view" id="view-toggle" title="Show the chart data as a grid">📋 Grid</button>
       <button class="btn-export" id="export-btn" style="display:none" title="Export data as CSV">⬇ Download (CSV)</button>
 
-      <!-- Histogram controls — visible only in histogram modes (bin size + split) -->
+      <!-- Histogram controls — visible only in histogram modes -->
       <div class="histogram-controls" id="histogram-controls" style="display:none">
         <div class="histogram-control-group">
           <label for="bin-size-select">Bin size</label>
@@ -48,7 +53,6 @@
             <option value="60">1 hour</option>
           </select>
         </div>
-        <button class="btn-view" id="split-btn" title="Split into individual charts">Split</button>
       </div>
 
       <!-- Day filter — visible in histogram modes AND stats view -->
@@ -158,23 +162,16 @@
       <div id="grid-container" class="ag-theme-quartz"></div>
     </div>
 
-    <!-- Histogram combined view -->
+    <!-- Histogram view — one bar chart per selected column -->
     <div id="histogram-view" class="content-panel histogram-view">
-      <div class="chart-canvas-wrap">
-        <canvas id="histogram-canvas"></canvas>
+      <div id="histogram-scroll">
+        <!-- One histogram-chart-item (title + canvas) per selected column -->
       </div>
     </div>
 
     <!-- Histogram grid view -->
     <div id="histogram-grid-view" class="content-panel histogram-grid-view">
       <div id="histogram-grid-container" class="ag-theme-quartz"></div>
-    </div>
-
-    <!-- Split histogram view -->
-    <div id="split-histogram-view" class="content-panel split-histogram-view">
-      <div id="split-histogram-scroll">
-        <!-- Individual histogram canvases go here -->
-      </div>
     </div>
 
     <!-- Stats view — grid of per-column stat cards -->

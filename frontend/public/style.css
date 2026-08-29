@@ -30,11 +30,19 @@ body {
   z-index: 10;
 }
 
+/* Title row — logo left, major-view buttons top right; wraps on narrow viewports */
 .header-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.major-view-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .header h1 {
@@ -770,10 +778,10 @@ body {
 }
 
 /* ============================================================
-   HISTOGRAM VIEW
+   HISTOGRAM VIEW — one bar chart per selected column
    ============================================================ */
 .histogram-view {
-  padding: 16px 24px;
+  padding: 16px 24px 24px;
   background: white;
 }
 
@@ -784,19 +792,11 @@ body {
   background: white;
 }
 
-/* ============================================================
-   SPLIT HISTOGRAM VIEW
-   ============================================================ */
-.split-histogram-view {
-  padding: 16px 24px 24px;
-  background: white;
-}
-
-#split-histogram-scroll {
+#histogram-scroll {
   /* No inner scroll — single scroll pane on #content-area */
 }
 
-.split-histogram-item {
+.histogram-chart-item {
   background: #f7fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -804,11 +804,11 @@ body {
   margin-bottom: 16px;
 }
 
-.split-histogram-item:last-child {
+.histogram-chart-item:last-child {
   margin-bottom: 0;
 }
 
-.split-histogram-title {
+.histogram-chart-title {
   font-size: 13px;
   font-weight: 700;
   color: #4a5568;
@@ -817,13 +817,13 @@ body {
   letter-spacing: 0.04em;
 }
 
-.split-histogram-canvas-wrap {
+.histogram-chart-canvas-wrap {
   position: relative;
   width: 100%;
   height: 250px;
 }
 
-.split-histogram-canvas-wrap canvas {
+.histogram-chart-canvas-wrap canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -903,7 +903,6 @@ body {
   .stats-view { --card-scale: 0.7; }
   .summary-card { padding: calc(12px * var(--card-scale, 1)); }
   .raw-data-chart-view, .histogram-view { padding: 8px; }
-  .split-histogram-view { padding: 8px 12px 12px; }
   /* Two-column compact cards */
   .summary-cards.visible { grid-template-columns: repeat(2, 1fr); }
   #columns-view-inner { padding: 12px; }

@@ -35,7 +35,6 @@ export const chartBtn = getRequiredEl<HTMLButtonElement>("chart-btn", "#chart-bt
 export const histogramToggleBtn = getRequiredEl<HTMLButtonElement>("histogram-btn", "#histogram-btn");
 export const statsBtn = getRequiredEl<HTMLButtonElement>("stats-btn", "#stats-btn");
 export const exportCsvBtn = getRequiredEl<HTMLButtonElement>("export-btn", "#export-btn");
-export const splitBtn = getRequiredEl<HTMLButtonElement>("split-btn", "#split-btn");
 export const binSizeSelect = getRequiredEl<HTMLSelectElement>("bin-size-select", "#bin-size-select");
 export const dayFilterSelect = getRequiredEl<HTMLSelectElement>("day-filter-select", "#day-filter-select");
 export const highCutoffSelect = getRequiredEl<HTMLSelectElement>("high-cutoff-select", "#high-cutoff-select");
@@ -61,8 +60,7 @@ export const rawDataChartView = getRequiredEl<HTMLElement>("raw-data-chart-view"
 export const rawDataGridView = getRequiredEl<HTMLElement>("raw-data-grid-view", "#raw-data-grid-view");
 export const histogramView = getRequiredEl<HTMLElement>("histogram-view", "#histogram-view");
 export const histogramGridView = getRequiredEl<HTMLElement>("histogram-grid-view", "#histogram-grid-view");
-export const splitHistogramView = getRequiredEl<HTMLElement>("split-histogram-view", "#split-histogram-view");
-export const splitHistogramScroll = getRequiredEl<HTMLElement>("split-histogram-scroll", "#split-histogram-scroll");
+export const histogramScroll = getRequiredEl<HTMLElement>("histogram-scroll", "#histogram-scroll");
 export const statsViewPanel = getRequiredEl<HTMLElement>("stats-view", "#stats-view");
 
 // --- Grid containers ---
@@ -71,7 +69,6 @@ export const histogramGridContainer = getRequiredEl<HTMLElement>("histogram-grid
 
 // --- Canvas elements ---
 export const rawDataChartCanvas = getRequiredEl<HTMLCanvasElement>("chart-canvas", "#chart-canvas");
-export const histogramChartCanvas = getRequiredEl<HTMLCanvasElement>("histogram-canvas", "#histogram-canvas");
 
 // --- Status bar ---
 export const rowCountEl = getRequiredEl<HTMLElement>("row-count", "#row-count");
