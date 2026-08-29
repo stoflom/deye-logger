@@ -341,6 +341,8 @@ export async function renderHistogramCharts(updateWaiting: (text: string) => voi
           font: { size: 9 },
           callback: (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 0 }),
         },
+        // Percentage units (SOC) always span 0–100 (design §15.8, #85)
+        ...(dataset.unit === "%" ? { min: 0, max: 100 } : {}),
         grid: {
           color: dataset.position === "left" ? "#e2e8f0" : "rgba(0,0,0,0.08)",
         },

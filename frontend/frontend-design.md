@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v7.1
+> **Status:** v7.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -1325,6 +1325,14 @@ Both the raw data grid and histogram grid display units in column header labels.
 
 If no unit is defined in the metadata, the label is shown without parentheses (e.g. `Time`). The `device_timestamp` column is always labeled "Time" without a unit.
 
+### 15.8 Chart Axis Rules (Full-Day Axes)
+
+Charts must not scale their axes to the available data only (v7.2 — #85):
+
+- **Series x-axis (full-day grid):** the x-axis **always spans the entire selected range** — single day: 00:00 to 24:00; multi-day: 00:00 of `from` to 24:00 of `to` — at a fixed grid step: **5 min** (1 day), **30 min** (2–7 days), **60 min** (>7 days). Data rows are floored into their grid bucket (last sample in a bucket wins); **empty buckets are `null`** so the line simply has gaps instead of a shrunken axis. Label format is unchanged (single day: `HH:MM`; range: `MM-DD HH:MM`). Tooltip titles resolve the timestamp from the grid bucket's source row.
+- **Percentage y-axis (0–100%):** any y-axis whose unit is `%` (e.g. SOC) is **always drawn from 0 to 100** in both the series chart and the per-column histogram charts. Other units continue to auto-scale.
+- **Histogram x-axis (full-day bins):** the `/api/histogram` response **always contains the full 00:00–24:00 bin grid** (1440/binMinutes bins; rows from multiple days are binned together by time-of-day) — empty bins carry `null` in `data`/`min`/`max` and render as gaps (no bar, no range band). The frontend does not pad; the backend owns the grid (backend design v4.1, §2.6).
+
 ---
 
 ## 16. Stats View
@@ -1449,4 +1457,5 @@ This section tracks changes to the design document itself. Every modification to
 | 5.2 | 2026-08-28 | §2.2 | Status bar view label for the `chart` view corrected from `Chart` to `Series`, matching the major-view name rename ("Chart" removed as too general); `FRONTEND_VERSION` → 5.2.0 (#80) |
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
+| 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
 | 7.0 | 2026-08-29 | §1.1, §2.1, §3, §5, §6, §8, §9, §10, §14, §15, §17 | Histogram: the combined view (all columns in one chart) and the Split/Combine sub-mode are **removed** — the histogram view renders one bar chart per selected column; `#split-btn`, the `?split` URL parameter and the `isSplit` history payload are gone (#82); the average bar is drawn centred on top of a full-width shaded range band at ~60% of its width (§10.2.1) (#83); the three major-view buttons move to the top right of the new title row (`.header-top`), same line as the logo, wrapping below the title on narrow viewports — all other controls stay in the controls row (#84); `FRONTEND_VERSION` → 7.0.0 |

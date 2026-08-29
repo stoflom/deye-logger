@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "4.0.0";
+const BACKEND_VERSION = "4.1.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -319,10 +319,18 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       }
     }
 
-    const sortedKeys = [...binMap.keys()].map(Number).sort((a, b) => a - b);
-    if (sortedKeys.length === 0) {
+    // Full-day bin grid: always emit all 1440/binMinutes bins from 00:00 to
+    // 24:00 (multi-day rows are binned together by time-of-day) so the
+    // x-axis spans the whole day; empty bins carry nulls (#85, design §2.6).
+    if (binMap.size === 0) {
       res.json({ labels: [], datasets: [], maxValues: {} });
       return;
+    }
+    const sortedKeys: number[] = [];
+    for (let b = 0; b < Math.ceil(1440 / binMinutes); b++) {
+      const t = new Date(2000, 0, 1);
+      t.setMinutes(b * binMinutes, 0, 0);
+      sortedKeys.push(t.getTime());
     }
 
     // Build labels
@@ -343,20 +351,20 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       const label = meta?.label ?? col;
       const unit = meta?.unit ?? "";
 
-      const data: number[] = [];
-      const minData: number[] = [];
-      const maxData: number[] = [];
+      const data: (number | null)[] = [];
+      const minData: (number | null)[] = [];
+      const maxData: (number | null)[] = [];
       let peak = -Infinity;
       let peakIdx = -1;
 
       for (let j = 0; j < sortedKeys.length; j++) {
-        const bin = binMap.get(sortedKeys[j].toString())!;
-        const binCount = bin.count[col] ?? 0;
-        const hasVal = binCount > 0;
-        const avg = hasVal ? bin.sum[col] / binCount : 0;
+        const bin = binMap.get(sortedKeys[j].toString());
+        const binCount = bin?.count[col] ?? 0;
+        const hasVal = bin !== undefined && binCount > 0;
+        const avg = hasVal ? bin.sum[col] / binCount : null;
         data.push(avg);
-        minData.push(hasVal ? bin.min[col] : 0);
-        maxData.push(hasVal ? bin.max[col] : 0);
+        minData.push(hasVal ? bin.min[col] : null);
+        maxData.push(hasVal ? bin.max[col] : null);
         if (hasVal && avg > peak) {
           peak = avg;
           peakIdx = j;

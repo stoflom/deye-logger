@@ -104,6 +104,51 @@ globalThis.addEventListener("resize", onChartResize);
 // Chart.js rendering — pure renderer.
 // Caller owns the lifecycle (waiting-view, button control).
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// Full-range x-axis grid (design §15.8, #85)
+// The x-axis always spans the whole selected range (single day: 00:00–24:00)
+// at a fixed step — 5 min (1 day), 30 min (2–7 days), 60 min (>7 days).
+// Rows floor into their grid bucket (last sample wins); empty buckets are
+// null. Returns the grid labels plus one source row (or null) per bucket.
+// ------------------------------------------------------------------
+function buildFullDayGrid(
+  rows: Array<Record<string, unknown>>,
+): { labels: string[]; gridRows: Array<Record<string, unknown> | null> } {
+  const start = new Date(`${appState.dateRangeFrom}T00:00:00`);
+  // Inclusive calendar-day count (single day: from === to → 1 full day),
+  // same convention as updateRangeDays()
+  const days = Math.ceil((new Date(`${appState.dateRangeTo}T00:00:00`).getTime() - start.getTime()) / 86_400_000) + 1;
+  const totalMinutes = days * 1440;
+
+  const stepMinutes = days <= 1 ? 5 : days <= 7 ? 30 : 60;
+  const bucketCount = Math.ceil(totalMinutes / stepMinutes) || 1;
+
+  const fmtDay = (d: Date): string =>
+    `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const labels: string[] = [];
+  for (let i = 0; i < bucketCount; i++) {
+    const d = new Date(start.getTime() + i * stepMinutes * 60_000);
+    const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    labels.push(isDateRange() ? `${fmtDay(d)} ${hhmm}` : hhmm);
+  }
+
+  const gridRows: Array<Record<string, unknown> | null> = new Array(bucketCount).fill(null);
+  for (const row of rows) {
+    const ts = row.device_timestamp;
+    const t = typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : new Date(String(ts)).getTime();
+    if (isNaN(t)) continue;
+    const idx = Math.floor((t - start.getTime()) / (stepMinutes * 60_000));
+    if (idx >= 0 && idx < bucketCount) gridRows[idx] = row; // last sample wins
+  }
+
+  return { labels, gridRows };
+}
+
+// ------------------------------------------------------------------
+// Chart.js rendering — pure renderer.
+// Caller owns the lifecycle (waiting-view, button control).
+// ------------------------------------------------------------------
 export function renderRawDataChart(): void {
   // Destroy existing chart
   if (appState.rawDataChartInstance) {
@@ -115,29 +160,9 @@ export function renderRawDataChart(): void {
     return;
   }
 
-  // Helper: accept ISO strings or numeric epoch (seconds or ms)
-  function formatTimestamp(ts: unknown): string {
-    if (ts === null || ts === undefined || ts === "") return "";
-    if (typeof ts === "number") {
-      const ms = ts > 1e12 ? ts : ts * 1000;
-      const d = new Date(ms).toISOString();
-      if (d.length > 16) {
-        const day = d.slice(5, 10);
-        const time = d.slice(11, 16);
-        return isDateRange() ? `${day} ${time}` : time;
-      }
-      return d;
-    }
-    const s = String(ts);
-    if (s.length > 10) {
-      const day = s.slice(5, 10);
-      const time = s.slice(11, 16);
-      return isDateRange() ? `${day} ${time}` : time;
-    }
-    return s;
-  }
-
-  const labels = appState.rawDataRows.map((row: Record<string, unknown>) => formatTimestamp(row.device_timestamp));
+  // Full-range x-axis grid — axis always spans the whole selected range
+  // (single day: 00:00–24:00), data floors into buckets (design §15.8, #85)
+  const { labels, gridRows } = buildFullDayGrid(appState.rawDataRows);
 
   const numericCols = getNumericColumnNames(appState.selectedColumnNames, appState.rawDataRows, appState.columnMetadata, null);
 
@@ -180,7 +205,7 @@ export function renderRawDataChart(): void {
   };
   for (const [unit, axisId] of Object.entries(unitAxisMap)) {
     const position = unitPosition[unit];
-    scales[axisId] = {
+    const axisCfg: Record<string, unknown> = {
       position,
       title: {
         display: !!unit,
@@ -188,14 +213,18 @@ export function renderRawDataChart(): void {
         font: { size: 11, weight: "bold" },
       },
       ticks: { font: { size: 10 } },
+      // Percentage units (SOC) always span 0–100 (design §15.8, #85)
+      ...(unit === "%" ? { min: 0, max: 100 } : {}),
       grid: { color: position === "left" ? "#e2e8f0" : "rgba(0,0,0,0.08)" },
       border: {
         color: position === "left" ? "#94a3b8" : "rgba(0,0,0,0.08)",
       },
     };
+    scales[axisId] = axisCfg;
   }
 
-  // Step 3: Build datasets referencing the pre-created axes
+  // Step 3: Build datasets referencing the pre-created axes — one point per
+  // full-day grid bucket; empty buckets are null (design §15.8, #85)
   const datasets = numericCols.map((col, i) => {
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.name === col);
     const unit = extractUnit(meta, col);
@@ -203,7 +232,8 @@ export function renderRawDataChart(): void {
 
     return {
       label: unit ? `${meta ? meta.label : col} (${unit})` : meta ? meta.label : col,
-      data: appState.rawDataRows.map((row: Record<string, unknown>) => row[col] as number),
+      data: gridRows.map((row: Record<string, unknown> | null) =>
+        row && typeof row[col] === "number" ? (row[col] as number) : null),
       borderColor: CHART_PALETTE[i % CHART_PALETTE.length],
       backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length] + "20",
       borderWidth: 1.5,
@@ -233,8 +263,7 @@ export function renderRawDataChart(): void {
         tooltip: {
           callbacks: {
             title: (items) => {
-              const idx = items[0].dataIndex;
-              const ts = appState.rawDataRows[idx]?.device_timestamp;
+              const ts = gridRows[items[0].dataIndex]?.device_timestamp;
               return typeof ts === "string" ? ts : "";
             },
             label: (item) => ` ${item.dataset.label}: ${item.formattedValue}`,
@@ -251,4 +280,6 @@ export function renderRawDataChart(): void {
       if (appState.rawDataChartInstance) appState.rawDataChartInstance.resize();
     });
   });
+
+  (rawDataChartCanvas as unknown as { __chartInstance?: unknown }).__chartInstance = appState.rawDataChartInstance;
 }

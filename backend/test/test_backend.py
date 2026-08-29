@@ -140,9 +140,12 @@ def create_test_database(db_path: str) -> None:
 
     # Insert data: 15-minute intervals throughout each day
     # Each day has data at 00:00, 00:15, 00:30, ..., 23:45 (96 records per day)
+    # EXCEPT 2026-08-02 (Sunday): sparse day with data only 00:00–05:45
+    # (24 records) — used to verify the full-day histogram bin grid (#85)
     # Values are chosen so we can verify averaging behavior
     for date_str, day_name, day_index in TEST_DATES:
-        for hour in range(24):
+        hours = range(0, 6) if date_str == "2026-08-02" else range(24)
+        for hour in hours:
             for minute in range(0, 60, 15):
                 timestamp = f"{date_str} {hour:02d}:{minute:02d}:00"
                 # day_of_week = day_index (we know it)
@@ -404,6 +407,43 @@ def test_histogram_bin_min_max(t: TestResult) -> None:
                 "battery_soc constant per hour: min == max for every bin")
         t.check(abs(soc["min"][5] - (55 + 5 * 2)) < 1e-9,
                 f"hour-5 SOC min 65 (got {soc['min'][5]})")
+
+
+def test_histogram_full_day_grid(t: TestResult) -> None:
+    """Test GET /api/histogram always returns the full 00:00–24:00 bin grid (#85)."""
+    print("\n[Test 7c] GET /api/histogram (full-day bin grid, sparse day)")
+    # 2026-08-02 (Sunday) has data only 00:00–05:45 in the test DB.
+    # The response must still span the whole day with nulls for empty bins.
+    _, result = http_get("/api/histogram", {
+        "from": "2026-08-02",
+        "to": "2026-08-02",
+        "columns": "current_power,battery_soc",
+        "binMinutes": "60",
+        "dayFilter": "all"
+    })
+    t.check(len(result["labels"]) == 24, f"Sparse day still returns full 24-hour grid (got {len(result['labels'])})")
+    t.check(result["labels"][0] == "00:00", f"Grid starts at 00:00 (got {result['labels'][0]})")
+    t.check(result["labels"][-1] == "23:00", f"Grid ends at 23:00 (last 60-min bin, got {result['labels'][-1]})")
+    for i, ds in enumerate(result["datasets"]):
+        # Hours 0–5 have data, hours 6–23 are empty → null
+        for h in range(6):
+            t.check(ds["data"][h] is not None, f"Dataset {i} hour-{h} bin has a value (got {ds['data'][h]})")
+        for h in range(6, 24):
+            t.check(ds["data"][h] is None, f"Dataset {i} hour-{h} bin is null (got {ds['data'][h]})")
+            t.check(ds["min"][h] is None and ds["max"][h] is None,
+                    f"Dataset {i} hour-{h} bin min/max are null (got {ds['min'][h]}/{ds['max'][h]})")
+    # A full day (2026-07-27) must have no nulls at any bin size
+    _, result_full = http_get("/api/histogram", {
+        "from": "2026-07-27",
+        "to": "2026-07-27",
+        "columns": "current_power,battery_soc",
+        "binMinutes": "15",
+        "dayFilter": "all"
+    })
+    t.check(len(result_full["labels"]) == 96, f"Full day at 15-min bins has 96 bins (got {len(result_full['labels'])})")
+    for i, ds in enumerate(result_full["datasets"]):
+        t.check(all(v is not None for v in ds["data"]),
+                f"Dataset {i} full day has no null bins")
 
 
 def test_histogram_day_filter_monday(t: TestResult) -> None:
@@ -779,6 +819,7 @@ def main():
         test_data_validation(test_result)
         test_histogram_all_days(test_result)
         test_histogram_bin_min_max(test_result)
+        test_histogram_full_day_grid(test_result)
         test_histogram_day_filter_monday(test_result)
         test_histogram_day_filter_sunday(test_result)
         test_histogram_day_filter_all_days(test_result)

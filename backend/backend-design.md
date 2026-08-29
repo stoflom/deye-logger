@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v4.0
+> **Status:** v4.1
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -288,6 +288,8 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
 
 Computes time-binned averages of telemetry data across a date range. Designed for the histogram chart view. The results are pre-aggregated: each bin contains the average, minimum and maximum of each numeric column, so the client can display the value range (spread) per bin alongside the mean.
 
+The response **always contains the full 00:00–24:00 bin grid** (1440/binMinutes bins) — rows from multiple days are binned together by time-of-day — so the chart x-axis always spans the whole day. Bins with no data for a column carry `null` in `data`/`min`/`max` (v4.1, #85).
+
 **Request:**
 
 ```
@@ -345,14 +347,14 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 | `labels` | string[] | Time labels for each bin in `HH:MM` format (e.g., `["00:00", "00:15", "00:30"]`) |
 | `datasets` | object[] | One dataset per numeric column (metadata columns like `device_timestamp`, `inverter_sn`, `fetch_timestamp` are excluded). Each dataset contains: |
 | `datasets[].label` | string | Human-readable column label (from `column_metadata.display_label`) |
-| `datasets[].data` | number[] | Averaged values for each bin. No `null` values — only bins with data for that column are included. |
-| `datasets[].min` | number[] | Minimum value for each bin (parallel to `data`). Shows the low end of the bin's value range. |
-| `datasets[].max` | number[] | Maximum value for each bin (parallel to `data`). Shows the high end of the bin's value range. |
+| `datasets[].data` | (number \| null)[] | Averaged values for each bin of the full 00:00–24:00 grid. `null` for bins with no data for that column (rendered as gaps). |
+| `datasets[].min` | (number \| null)[] | Minimum value for each bin (parallel to `data`); `null` for empty bins. Shows the low end of the bin's value range. |
+| `datasets[].max` | (number \| null)[] | Maximum value for each bin (parallel to `data`); `null` for empty bins. Shows the high end of the bin's value range. |
 | `datasets[].unit` | string | Unit extracted from the column metadata (`column_metadata.unit`). Returns `""` if no unit. |
 | `maxValues` | object | Map of column label → `{ value: number, timestamp: string }` for peak display in summary cards. Only includes columns that had numeric data. |
 
 **Empty Response:**
-If no data or no numeric columns are found, returns:
+If no rows match the query (or no numeric columns are found), returns:
 
 ```json
 { "labels": [], "datasets": [], "maxValues": {} }
@@ -575,6 +577,9 @@ Client → GET /api/histogram?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&binMinut
            ↓
        Group rows into time bins (floor timestamps to bin boundary)
            ↓
+       Build the full 00:00–24:00 bin grid (1440/binMinutes bins);
+       bins with no rows carry null (v4.1, #85)
+           ↓
        Compute per-bin average, min and max for each numeric column
            ↓
        Retrieve labels and units from column_metadata table
@@ -702,3 +707,4 @@ This section tracks changes to the design document itself. Every modification to
 | 3.1 | 2026-08-26 | §2.7, §5.4 | Percentage-unit columns (`unit === "%"`, e.g. SOC) use the direct data percentile (type-7 linear interpolation) as the high/low threshold instead of `mean ± z·σ`, which can leave the 0–100% bounds; `high`/`low` objects gain a `method` field (`"mean-sigma"` \| `"percentile"`) (#56) |
 | 3.2 | 2026-08-26 | §2.7, §5.4 | Percentage-unit columns now use the **selected cutoff value directly** as the threshold in percent (`method` value `"percentile"` → `"cutoff"`) instead of the data percentile — a data percentile is meaningless for a bounded 0–100% column (SOC high 95 → threshold 95%, not the 95th-percentile value ≈ 100%); SOC high/low now read `> 95%` / `< 5%` (#60) |
 | 4.0 | 2026-08-28 | §2.6, §5.3 | `/api/histogram` datasets now include per-bin `min` and `max` arrays alongside the average `data` arrays — the bin loop tracks per-column min/max in addition to sum/count, letting the frontend render the per-bin value range (shaded range / tooltip) (#81) |
+| 4.1 | 2026-08-29 | §2.6, §5.3 | `/api/histogram` always returns the full 00:00–24:00 bin grid (1440/binMinutes bins; multi-day rows binned together by time-of-day); bins with no data carry `null` in `data`/`min`/`max` so the frontend x-axis always spans the whole day (#85) |
