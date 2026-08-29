@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v6.0
+> **Status:** v7.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -48,7 +48,7 @@ The application is a single-page app with three vertical regions:
 | `app.ts` | Entry point, `setView()`, button handlers, init, popstate |
 | `chart.ts` | Chart.js line chart rendering, summary cards |
 | `data-grid.ts` | AG Grid rendering (raw data + histogram grid) |
-| `histogram-chart.ts` | Histogram bar chart, split-mode charts, data fetching |
+| `histogram-chart.ts` | Histogram per-column bar charts, data fetching |
 | `stats-view.ts` | Stats view renderer — stat cards (§16.1) and stats-grid table (§16.6), CSS tooltips (§16.2) |
 | `navigation.ts` | Date navigation (prev/next/today/date-picker) |
 | `columns.ts` | Column selection panel, checkbox rendering |
@@ -65,25 +65,28 @@ These objects are **always rendered and visible** regardless of the current view
 
 ### 2.1 Title Bar (`<div class="header">`)
 
-The title bar contains **all application buttons and controls** in a single horizontal area. When horizontal space runs out, buttons **wrap into additional rows** automatically (CSS `flex-wrap: wrap`). The title bar grows vertically as needed to accommodate wrapped rows, pushing the rest of the page content down. This is different from a fixed-height title bar — the title bar height is **dynamic**.
+The title bar consists of **two rows**, each of which **wraps into additional lines** automatically when horizontal space runs out (CSS `flex-wrap: wrap`). The title bar grows vertically as needed to accommodate wrapped lines, pushing the rest of the page content down. This is different from a fixed-height title bar — the title bar height is **dynamic**.
+
+1. **Title row (`.header-top`)** — the app title `<h1>` on the left, and the three **major-view buttons** (`📈 Series`, `📊 Histogram`, `📈 Stats`) on the **top right, on the same line as the logo** (v7.0 — #84). When the viewport is too narrow, the title row wraps: the button group drops below the title.
+2. **Controls row (`.controls`)** — all other buttons and controls in a single horizontal area: date inputs + `‹`/`›`/`Today`, `↻ Refresh`, `☰ Select`, `📋 Grid`, `⬇ Download (CSV)`, histogram `Bin size`, `Day` day-of-week selector, stats `High`/`Low` cutoffs. When space runs out, the controls row wraps into additional rows.
 
 **Compact buttons:** the title-bar buttons (`.btn-view`, `.btn-export`, `.columns-toggle`) use compact horizontal padding (`8px 10px`) to save width; button labels are short (`Series`, `Histogram`, `Stats`, `Grid`, `Select`, `Back`) with tooltips providing the full description.
 
 **Button groups (v5.0 — fixes #62):** the title-bar buttons are organized into three clearly-segmented groups:
 
-1. **Major views (blue)** — `Series` (line chart; the name references *Time Series*, replacing the too-general "Chart"), `Histogram`, `Stats`. Always visible on the three major views; the **active** view's button is **disabled (grey)** (see §2.3) and the **other two** are **blue** and clickable to switch major views. These buttons are **hidden** in all grid views and in the Select (columns) view.
+1. **Major views (blue)** — `Series` (line chart; the name references *Time Series*, replacing the too-general "Chart"), `Histogram`, `Stats`. Placed in a `.major-view-buttons` container on the **top right of the title row**, same line as the logo (v7.0 — #84). Always visible on the three major views; the **active** view's button is **disabled (grey)** (see §2.3) and the **other two** are **blue** and clickable to switch major views. These buttons are **hidden** in all grid views and in the Select (columns) view.
 2. **Utilities (grey, always visible)** — date inputs + `Today` + `‹`/`›`, `↻ Refresh`, `Select`, `Grid`. Exception: the `Grid` button becomes **blue (`.active`)** while inside a grid view, when it reads `Back` (v5.1 — #76).
-3. **Contextual controls** — `Bin size` (histogram view only), `Day` day-of-week selector, `High`/`Low` cutoffs (stats views), `Split` (histogram view), `⬇ Download (CSV)` (grid views only).
+3. **Contextual controls** — `Bin size` (histogram view only), `Day` day-of-week selector, `High`/`Low` cutoffs (stats views), `⬇ Download (CSV)` (grid views only).
 
 **Grid utility button:** `#view-toggle` is no longer a major-view toggle. It **opens the data grid for the data of the currently-selected view** (chart → grid, histogram → histogram-grid, stats → stats-grid). Inside a grid view it reads **`Back`**, is styled **blue (`.active`)** to emphasize the way back (v5.1 — #76, mirroring `#columns-toggle` in the Select view), and **automatically returns to the view that opened the grid**. Grid views show no major-view switching buttons — they only go back. `Day` + `Today`/`‹`/`›` and `⬇ Download (CSV)` remain available on the grids.
 
-**Button ordering in wrapped rows:** Buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next row. This means the bin-size and split buttons may appear on a second row when the viewport is narrow.
+**Button ordering in wrapped rows:** Within each row, buttons are laid out left-to-right in the order listed below. When a row fills, remaining buttons flow to the next line. This means the bin-size control may appear on a second line of the controls row when the viewport is narrow, and the major-view buttons may wrap below the title on the title row.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  ☀️ Deye Logger Viewer  │ [date] │ [date] │ ‹ › Today │ ↻ │
-│  📈 Series │ 📊 Histogram │ 📈 Stats │ ☰ Select │ 📋 Grid │
-│  ⬇ Download │ Bin: 15 ▼ │ Day: All ▼ │ High: 95% ▼ │ Low: 5% ▼ │ Split │
+│  ☀️ Deye Logger Viewer                    │ 📈 Series │ 📊 Histogram │ 📈 Stats │
+│  [date] │ [date] │ ‹ › Today │ ↻ │ ☰ Select │ 📋 Grid │
+│  ⬇ Download │ Bin: 15 ▼ │ Day: All ▼ │ High: 95% ▼ │ Low: 5% ▼ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -97,7 +100,7 @@ The title bar contains **all application buttons and controls** in a single hori
 | Refresh button | `#refresh-btn` | Trigger backend data refresh |
 | Series button | `#chart-btn` | Major-view button: shows the line (time-series) chart. Active (disabled grey) in chart/grid views, blue in the other major views, hidden in grid/Select views |
 | Histogram button | `#histogram-btn` | Major-view button: shows the binned-average histogram. Active (disabled grey) in histogram/histogram-grid views, blue in the other major views, hidden in grid/Select views |
-| Stats button | `#stats-btn` | Major-view button: shows per-column statistics. Active (disabled grey) in stats/stats-grid views, blue in the other major views, hidden in grid/Select views |
+| Stats button | `#stats-btn` | Major-view button: shows per-column statistics. Active (disabled grey) in stats/stats-grid views, blue in the other major views, hidden in grid/Select views. All three major-view buttons sit in the `.major-view-buttons` container on the top right of the title row (§2.1) |
 | Grid button (utility) | `#view-toggle` | `📋 Grid` — opens the data grid for the currently-selected view (chart→grid, histogram→histogram-grid, stats→stats-grid). In grid views reads **`Back`** (blue, `.active`) and returns automatically to the view that opened the grid |
 | Columns button (utility) | `#columns-toggle` | `☰ Select` — opens the column selection panel. While the panel is open reads **`Back`**; closing returns to the view that opened it |
 | CSV export | `#export-btn` | `⬇ Download (CSV)` — export current grid as CSV (visible in grid views only) |
@@ -105,7 +108,6 @@ The title bar contains **all application buttons and controls** in a single hori
 | Day filter | `#day-filter-select` | Day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat`. Visible in histogram modes, the Stats view **and their grid views**; limits histogram bins or statistics calculations to that weekday |
 | High cutoff | `#high-cutoff-select` | Stats high-threshold percentile dropdown: `50` / `75` / `90` / `95` / `99` (default `95`); visible only in the Stats views |
 | Low cutoff | `#low-cutoff-select` | Stats low-threshold percentile dropdown: `1` / `5` / `10` / `25` / `50` (default `5`); visible only in the Stats views |
-| Split button | `#split-btn` | Split/combine histogram buttons (visible only in histogram view) |
 
 ### 2.2 Status Bar (`<div class="status-bar">`)
 
@@ -144,7 +146,6 @@ These objects define the **page state** and must be pushed to URL history so tha
 | `from` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range start) |
 | `to` | ISO date string | Date inputs, nav buttons | `getUrlState()` (range end) |
 | `binSize` | `5`, `10`, `15`, `30`, `60` | `#bin-size-select` | `getUrlState()`, histogram fetch |
-| `split` | `1` (presence = true) | Split button | `getUrlState()`, `setView()` |
 | `dayFilter` | `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` | `#day-filter-select` | `getUrlState()`, histogram fetch, stats fetch |
 | `highCutoff` | `50`, `75`, `90`, `95`, `99` | `#high-cutoff-select` | `getUrlState()`, stats fetch |
 | `lowCutoff` | `1`, `5`, `10`, `25`, `50` | `#low-cutoff-select` | `getUrlState()`, stats fetch |
@@ -154,7 +155,6 @@ These objects define the **page state** and must be pushed to URL history so tha
 - Single day: `?view=chart&date=2025-07-20`
 - Range: `?view=chart&from=2025-07-18&to=2025-07-20`
 - Histogram with custom bin: `?view=histogram&date=2025-07-20&binSize=30`
-- Histogram split: `?view=histogram&date=2025-07-20&split=1`
 - Histogram with day filter: `?view=histogram&date=2025-07-20&dayFilter=mon`
 - Stats view: `?view=stats&date=2025-07-20&highCutoff=90&lowCutoff=10&dayFilter=sun`
 - Stats grid variant: `?view=stats-grid&date=2025-07-20` (same params, table layout instead of cards)
@@ -167,7 +167,6 @@ These objects define the **page state** and must be pushed to URL history so tha
 | Property | Type | Purpose |
 | ---------- | ------ | --------- |
 | `view` | string | Current view mode |
-| `isSplit` | boolean | Whether histogram is in split mode (redundant with URL but available for fast popstate) |
 | `error` | boolean | Whether this is an error-state entry |
 | `errorMessage` | string | Error message to restore if `error=true` |
 | `columns` | boolean | Whether this entry shows the columns selection panel (URL unchanged — panel is not bookmarkable) |
@@ -192,7 +191,6 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | `dayFilterSelect` change | Yes (on success) | Re-renders current view (histogram or stats) |
 | `highCutoffSelect` / `lowCutoffSelect` change | Yes (on success) | Re-renders stats view with new cutoffs |
 | Stats button click | Yes (on success) | Enters `stats` view (the button is disabled/hidden in stats views — returns happen via the grid `Back` button) |
-| Split/Combine toggle | Yes (on success) | `split=1` in URL |
 | `popstate` (browser back/forward) | No (`replace`) | Restores view without double-push |
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
 | `popstate` → columns state | No (`replace`) | Detects `{ columns: true }` marker — re-shows columns panel |
@@ -233,13 +231,12 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 | **Columns view** | `#columns-view` | `setView(view, { columns: true })` | Yes (`columns: true` marker, URL unchanged) |
 | **Chart view** | `#raw-data-chart-view` | `setView("chart")` | Yes |
 | **Grid view** | `#raw-data-grid-view` | `setView("grid")` | Yes |
-| **Histogram view** | `#histogram-view` | `setView("histogram")` (not split) | Yes |
+| **Histogram view** | `#histogram-view` | `setView("histogram")` — one bar chart per selected column (§9.2) | Yes |
 | **Histogram grid view** | `#histogram-grid-view` | `setView("histogram-grid")` | Yes |
-| **Split histogram view** | `#split-histogram-view` | `setView("histogram", { split: true })` | Yes (`split=1`) |
 | **Stats view** | `#stats-view` | `setView("stats")` | Yes |
 | **Stats grid view** | `#stats-view` (same panel, table layout) | `setView("stats-grid")` | Yes |
 
-**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, split-histogram, stats }` is visible (`stats-grid` reuses the `stats` panel). `setView` enforces this.
+**Invariant:** At any moment, exactly one of `{ waiting, error, info, columns, chart, grid, histogram, histogram-grid, stats }` is visible (`stats-grid` reuses the `stats` panel). `setView` enforces this.
 
 ---
 
@@ -252,7 +249,6 @@ interface SetViewOptions {
   replace?: boolean;      // use replaceState instead of pushState (default: false)
   refresh?: boolean;      // transient — trigger backend refresh before rendering
   columns?: boolean;      // show columns selection panel (pushes history entry with columns marker)
-  split?: boolean;        // URL-param — split histogram mode
 }
 
 function setView(
@@ -308,13 +304,12 @@ setView(view, opts?)
   │     │       init/update AG Grid → appState.rawDataGridApi
   │     │       return { ok: true }
   │     │
-  │     ├─ view === "histogram" (split from opts or URL)
-  │     │     → non-split: renderHistogramChartView(updateWaiting)
-  │     │     → split:    renderSplitHistogramView(updateWaiting)
+  │     ├─ view === "histogram"
+  │     │     → renderHistogramView(updateWaiting)
   │     │       updateWaiting("Fetching histogram data…")
   │     │       GET /api/histogram → histogramLastApiResult (via fetchHistogramData())
-  │     │       updateWaiting("Drawing histogram…")
-  │     │       draw combined chart; split mode also draws individual charts
+  │     │       updateWaiting("Drawing histograms…")
+  │     │       draw one bar chart per selected column → histogramChartInstances
   │     │       return { ok: true }
   │     │
   │     ├─ view === "histogram-grid"
@@ -340,7 +335,7 @@ setView(view, opts?)
   │     │     → waitingView.hide()
   │     │     → showPanel("columns")
   │     │     → enableOnlyControls(["columnsToggle"])
-  │     │     → pushState({ view, isSplit: false, columns: true }) with current URL unchanged
+  │     │     → pushState({ view, columns: true }) with current URL unchanged
   │     │       (replaceState when called with replace: true, e.g. from popstate)
   │     │
   │     ├─ { ok: true } AND opts.refresh === true
@@ -380,7 +375,7 @@ setView(view, opts?)
   │     │     → waitingView.hide()
   │     │     → showPanel(view) — show appropriate data-view
   │     │     → show summary-cards (add .visible class to #summary-cards)
-  │     │     → updateButtonLabels(view, split)
+  │     │     → updateButtonLabels(view)
   │     │     → update view label (#view-label)
   │     │     → buildUrlString() → history.pushState/replaceState
   │     │     → enableAllControls()
@@ -393,13 +388,12 @@ setView(view, opts?)
   │             → enableOnlyControls([])
   │             → errorViewCloseBtn.disabled = false
   │
-  └─ STEP 5: updateButtonLabels(view, split)
+  └─ STEP 5: updateButtonLabels(view)
         chartBtn/histogramBtn/statsBtn.visible  ← major views only — hidden in grid views and the columns (Select) view
         chartBtn/histogramBtn/statsBtn.disabled ← the ACTIVE major view is disabled (grey); the other two are blue and enabled (see §2.3)
         viewToggleBtn.label             ← `Grid` on major views / `Back` in grid views
         columnsToggleBtn.label          ← `Select` (closed) / `Back` (columns view)
         exportCsvBtn.visible          ← grid views only
-        splitBtn.visible               ← histogram view only
         binSizeSelect.visible           ← histogram modes only
         dayFilterSelect.visible          ← histogram modes, stats views and their grid views
         highCutoffSelect.visible        ← stats views only
@@ -434,18 +428,17 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 
 | Call Site | Trigger | Flags | Notes |
 | ----------- | --------- | ------- | ------- |
-| `init()` → `setView(urlState.view, { split: urlState.isSplit })` | Page load | `split` from URL | Initial render |
+| `init()` → `setView(urlState.view, { replace: true })` | Page load | — | Initial render |
 | `viewToggleBtn` click (Grid utility) | Grid button | — | Major view: `setView(<grid variant>)` — chart→grid, histogram→histogram-grid, stats→stats-grid. Grid view: button reads `Back` → `setView(<view that opened the grid>)` — the opener is derived from the grid variant (grid→chart, histogram-grid→histogram, stats-grid→stats, preserving the stats cards↔table state) |
 | `histogramBtn` click | Histogram major-view button | — | From chart or grid → `setView("histogram")`. Disabled (grey) in histogram/histogram-grid views; hidden in grid and Select views |
 | Date nav buttons/pickers | Date change | — | `setView(appState.activeView)` — re-render with new dates |
-| `popstate` | Browser back/forward | `{ replace: true, split: urlState.isSplit }` | Restores from URL state |
+| `popstate` | Browser back/forward | `{ replace: true }` | Restores from URL state |
 | `popstate` → error | Error state detected | — | Shows error-view directly (no render) |
 | `popstate` → columns | `{ columns: true }` marker detected | `{ columns: true, replace: true }` | Re-shows columns panel (no data fetch) |
-| `binSizeSelect` change | Bin size dropdown | `split` from URL | Re-renders current histogram view |
-| `dayFilterSelect` change | Day filter dropdown | `split` from URL | Re-renders current histogram or stats view |
+| `binSizeSelect` change | Bin size dropdown | — | Re-renders current histogram view |
+| `dayFilterSelect` change | Day filter dropdown | — | Re-renders current histogram or stats view |
 | `highCutoffSelect` / `lowCutoffSelect` change | Cutoff dropdowns (stats views) | — | `setView(current)` (stats or stats-grid) — re-renders with new thresholds |
 | `statsBtn` click | Stats major-view button | — | From chart or histogram → `setView("stats")`. Disabled (grey) in stats views; hidden in grid and Select views |
-| `splitBtn` click | Split/combine toggle | `{ split: !histogramIsSplitMode }` | Toggles split mode |
 | `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
 | `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Pushes history entry with `columns: true` marker (URL unchanged) |
 | `columnsToggleBtn` click (close) | Close columns panel (label `Back`) | — | `setView(appState.activeView)` — full re-fetch, returns to the view that opened the panel |
@@ -462,7 +455,7 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 
 ```
 setView("chart", { refresh: true })
-  → pushState({ view: "chart", isSplit: false })          ← pre-refresh snapshot
+  → pushState({ view: "chart" })                          ← pre-refresh snapshot
   → waiting-view: "Querying Deye Cloud…"
   → POST /api/refresh → TIMEOUT or 500
   → catch Error
@@ -495,7 +488,7 @@ setView("chart")
 
 ```typescript
 // Normal entry:
-{ view: "chart", isSplit: false }
+{ view: "chart" }
 
 // Error entry:
 { error: true, view: "chart", errorMessage: "Query timeout after 30s" }
@@ -525,7 +518,7 @@ window.addEventListener("popstate", () => {
 
   // Normal restoration from URL — no double-push
   const urlState = getUrlState();
-  setView(urlState.view, { replace: true, split: urlState.isSplit });
+  setView(urlState.view, { replace: true });
 });
 ```
 
@@ -574,10 +567,8 @@ try {
 
 | Variable | Type | Persistence | Description |
 | ---------- | ------ | ------------- | ------------- |
-| `histogramCombinedChartInstance` | `Chart \| null` | Transient (render) | Chart.js instance for the combined bar chart |
-| `histogramSplitChartInstances` | `Chart[]` | Transient (render) | Array of Chart.js instances for split individual charts |
-| `histogramIsSplitMode` | `boolean` | URL-stateful (`?split=1`) | Whether histogram is currently in split mode |
-| `histogramLastApiResult` | `HistogramResponse \| null` | Transient (cache) | Cached histogram API response for split rendering |
+| `histogramChartInstances` | `Chart[]` | Transient (render) | Array of Chart.js instances — one bar chart per selected column |
+| `histogramLastApiResult` | `HistogramResponse \| null` | Transient (cache) | Cached histogram API response |
 | `histogramLastColumnNames` | `string[]` | Transient (cache) | Column names used in the last histogram API call |
 | `histogramMaxAverageValues` | `Map \| null` | Transient (render) | Per-metric max average value + timestamp from histogram |
 | — | — | — | The day-of-week filter is **not** stored in module state — `fetchHistogramData()` reads `#day-filter-select` directly at fetch time; the URL parameter `?dayFilter=X` is the stateful source |
@@ -615,10 +606,9 @@ other modules → shared.ts + dom-refs.ts
 | `columnsViewPanel` | `#columns-view` | Column selection panel |
 | `rawDataChartView` | `#raw-data-chart-view` | Raw data line chart container |
 | `rawDataGridView` | `#raw-data-grid-view` | Raw data grid container |
-| `histogramView` | `#histogram-view` | Combined histogram bar chart container |
+| `histogramView` | `#histogram-view` | Histogram container — one bar chart per selected column |
 | `histogramGridView` | `#histogram-grid-view` | Histogram grid table container |
-| `splitHistogramView` | `#split-histogram-view` | Split histogram container |
-| `splitHistogramScroll` | `#split-histogram-scroll` | Container for split charts (no inner scroll — single scroll pane on `#content-area`) |
+| `histogramScroll` | `#histogram-scroll` | Container for the per-column charts (no inner scroll — single scroll pane on `#content-area`) |
 | `statsViewPanel` | `#stats-view` | Stats view container — stat cards (stats) or stats table (stats-grid, `.stats-grid-mode`) (direct child of `#content-area`) |
 | `summaryCardsPanel` | `#summary-cards` | Summary cards container (direct child of `#content-area`; **hidden** in stats view) |
 
@@ -636,10 +626,9 @@ other modules → shared.ts + dom-refs.ts
 | `viewToggleBtn` | `#view-toggle` | Toggle view mode button |
 | `histogramToggleBtn` | `#histogram-btn` | Toggle histogram mode button |
 | `exportCsvBtn` | `#export-btn` | CSV export button |
-| `splitBtn` | `#split-btn` | Split/combine histogram button |
 | `binSizeSelect` | `#bin-size-select` | Histogram bin size dropdown |
 | `dayFilterSelect` | `#day-filter-select` | Day-of-week filter dropdown (histogram modes and stats view) |
-| `histogramControls` | `#histogram-controls` | Histogram-only control group (bin size + split) |
+| `histogramControls` | `#histogram-controls` | Histogram-only control group (bin size) |
 | `dayFilterGroup` | `#day-filter-group` | Day-filter control group (visible in histogram modes **and** stats views) |
 | `statsCutoffs` | `#stats-cutoffs` | Stats high/low cutoff group (stats views only) |
 | `highCutoffSelect` | `#high-cutoff-select` | Stats high-threshold percentile dropdown (stats view only) |
@@ -674,15 +663,11 @@ Overlay navigation — grey utility buttons; the blue `Back` (`.active`) returns
         any data view ─Select─▶ Columns view ───Back──▶ the view that opened it
 ```
 
-### 9.2 Histogram Sub-Mode (split)
+### 9.2 Histogram View
 
-```
-histogram (combined)  ←─splitBtn─→  histogram (split charts)
-                                  │
-                              ?split=1 in URL (bookmarkable)
-```
+The histogram view (`setView("histogram")`) renders **one bar chart per selected column** — each chart shows that column's binned averages with the per-bin min/max range band behind the average bar (§10.2.1).
 
-Split mode is now a URL parameter (`?split=1`). It is bookmarkable and navigable via back/forward.
+The previous combined view (all columns in one chart) and the Split/Combine sub-mode (`?split=1`, `#split-btn`) were **removed** in v7.0 (#82): the per-column layout is the only histogram view, and no split state exists in the URL or history.
 
 ### 9.3 Button Specification Table
 
@@ -700,7 +685,6 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Grid (utility) | `viewToggleBtn` | `📋 Grid` (major views, grey) / `Back` (grid views, blue `.active`) | Always | Action (open grid for current view / auto-return) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Columns (utility) | `columnsToggleBtn` | `☰ Select` (closed) / `Back` (open) | Always | Toggle (open↔close columns-view) | — | Controls columns-view visibility (opening pushes history entry) | Stateless (columns persist to localStorage) |
 | CSV Export | `exportCsvBtn` | `⬇ Download (CSV)` | Grid views only | Stateless action | `appState.rawDataGridApi` or `histogramGridApi` | — | Stateless action |
-| Split | `splitBtn` | `Split` / `Combine` | Histogram view only | Toggle (combined↔split) | `histogramIsSplitMode`, URL `?split=1` | `histogramIsSplitMode`, URL `?split=1` | URL-stateful (via `split`) |
 | Bin Size | `binSizeSelect` | `5` / `10` / `15` / `30` / `60` | Histogram mode (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?binSize=N` | URL-stateful (via `binSize`) |
 | Day Filter | `dayFilterSelect` | `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat` | Histogram mode **and** stats view (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?dayFilter=X` | URL-stateful (via `dayFilter`) |
 | High Cutoff | `highCutoffSelect` | `50` / `75` / `90` / `95` / `99` (default `95`) | Stats view only (in title bar) | Stateless action (triggers re-render) | Current selection | URL `?highCutoff=N` | URL-stateful (via `highCutoff`) |
@@ -739,13 +723,6 @@ The grid views show **no** major-view-switching buttons — only `Back` (blue, `
 | ------------------- | ------------ | ------------- | -------- |
 | Closed | `☰ Select` | "Select columns to display" | `setView(activeView, { columns: true })` |
 | Open | `Back` | "Close the panel and return to the view that opened it" | `setView(appState.activeView)` |
-
-#### Split Button Labels (`splitBtn`)
-
-| `histogramIsSplitMode` | Button Text | Button Title | Action |
-| ---------------------- | ------------ | ------------- | -------- |
-| `false` | `Split` | "Split columns into individual charts" | `setView("histogram", { split: true })` |
-| `true` | `Combine` | "Combine columns into single chart" | `setView("histogram", { split: false })` |
 
 ---
 
@@ -792,32 +769,31 @@ setView("chart")
 ### 10.2 Histogram Data Views
 
 ```
-setView("histogram", { split: true })
+setView("histogram")
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
-  → renderSplitHistogramView(updateWaiting)
+  → renderHistogramView(updateWaiting)
       → updateWaiting("Fetching histogram data…")
       → GET /api/histogram?from=X&to=Y&columns=...&binMinutes=N&dayFilter=X
       → histogramLastApiResult = response
       → histogramMaxAverageValues = maxValues
-      → updateWaiting("Drawing histogram…")
-      → draw combined bar chart → histogramCombinedChartInstance
-      → if split: draw individual charts → histogramSplitChartInstances
-      → histogramIsSplitMode = true
+      → updateWaiting("Drawing histograms…")
+      → draw one bar chart per selected column → histogramChartInstances
       → return { ok: true }
   → hidePanel("waiting")
-  → showPanel("split-histogram")
+  → showPanel("histogram")
   → show summary-cards (add .visible class to #summary-cards)
-  → push URL history (?split=1)
+  → push URL history
   → enableAllControls()
 ```
 
 #### 10.2.1 Per-Bin Value Range Rendering
 
-Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to the average `data[]`) from the backend. The renderers (combined and split) show the bin's value range alongside the average bar:
+Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to the average `data[]`) from the backend. Each per-column chart renders the bin's value range as follows (v7.0 — #83):
 
-- **Shaded range:** a background bar per bin, drawn as a Chart.js **floating bar** (`[min, max]`) behind the average bar, in the dataset color at low opacity (≈20% fill, no border). Skipped for bins where `min === max` (zero spread) to avoid visual noise.
-- **Tooltip:** the `label` callback appends the range, e.g. `Daily Energy (kWh): 10.5 (range 9.8–10.7)`; omitted when `min === max`.
+- **Shaded range band (background):** a **full-width** translucent bar per bin, drawn as a Chart.js **floating bar** (`[min, max]`), spanning the whole category slot (`barPercentage: 1`, `categoryPercentage: 1`), in the dataset color at low opacity (≈20% fill, no border), behind the average bar (`order: 1`). Skipped for bins where `min === max` (zero spread) to avoid visual noise.
+- **Average bar (foreground):** superimposed on top of the range band, **centred within it** at **~60% of the band's width** (`barPercentage: 0.6`, `categoryPercentage: 1`, `order: 0`) — both datasets sit on the same category, so the average bar is centred in the band automatically.
+- **Tooltip:** the `label` callback appends the range, e.g. `Daily Energy (kWh): 10.5 (range 9.8–10.7)`; omitted when `min === max`. Range datasets are filtered out of the tooltip and the legend (the legend stays on the averages).
 - Missing/absent `min`/`max` arrays are treated as not available (no range rendered) — the renderer degrades gracefully to averages only.
 
 ### 10.3 Refresh Flow
@@ -826,7 +802,7 @@ Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to t
 refreshBtn click → setView(appState.activeView, { refresh: true })
   → disableAllControls()
   → showPanel("waiting") → waitingView.show()
-  → pushState({ view: activeView, isSplit: false })     ← pre-refresh snapshot (for error recovery)
+  → pushState({ view: activeView })                     ← pre-refresh snapshot (for error recovery)
   → renderRefreshView(updateWaiting)
       → updateWaiting("Querying Deye Cloud…")
       → POST /api/refresh
@@ -864,7 +840,7 @@ columnsToggleBtn click (open) → setView(appState.activeView, { columns: true }
   → hidePanel("waiting")
   → showPanel("columns")
   → enableOnlyControls(["columnsToggle"])
-  → pushState({ view, isSplit: false, columns: true }) with current URL unchanged
+  → pushState({ view, columns: true }) with current URL unchanged
 
 Browser back from columns panel → pops columns entry → popstate on previous data-view entry
   → setView(previous view, { replace: true }) — restores data view (fixes #47)
@@ -1057,11 +1033,11 @@ On initial page load the browser must show visual feedback **before** any async 
 ```
 Page loaded
   → document ready (module evaluated)
-  → Parse URL parameters → appState (view, dates, binSize, dayFilter, split)
+  → Parse URL parameters → appState (view, dates, binSize, dayFilter)
   → Synchronously: show waiting-view with text "Loading…"
   → Title bar is already rendered (in HTML) — always visible
   → Status bar is already rendered (in HTML) — always visible (empty state OK)
-  → Immediately: call setView(view, { replace: true, split })
+  → Immediately: call setView(view, { replace: true })
     → setView's step 2: waiting-view already visible → show() is idempotent
     → Normal render path (fetch data, draw chart/grid, etc.)
     → On success: waiting-view hidden, data view shown
@@ -1130,7 +1106,7 @@ When `init()` (see §14.3) finishes loading metadata and calls `setView()`, the 
 init() (§14.3)
   → parse URL parameters
   → show waiting-view ("Loading…")    ← §14.3 step 2
-  → call setView(view, { replace: true, split })  ← §14.3 step 3 (immediately)
+  → call setView(view, { replace: true })  ← §14.3 step 3 (immediately)
   → load /api/version, /api/columns, /api/dates in background  ← §14.3 step 4 (non-blocking)
       → setView step 2: waiting-view.show() (idempotent)
       → fetch data → 0 rows
@@ -1152,7 +1128,7 @@ The URL is **not** changed or pushed. The user sees the info message and can:
 init() (§14.3)
   → parse URL parameters
   → show waiting-view ("Loading…")    ← §14.3 step 2
-  → call setView(urlState.view, { replace: true, split: urlState.isSplit })  ← §14.3 step 3 (immediately)
+  → call setView(urlState.view, { replace: true })  ← §14.3 step 3 (immediately)
       → Normal render flow (see setView() lifecycle in §10.1–10.3)
       → waiting-view.text updates: "Fetching data…" → "Drawing chart…"
       → Data renders using appState.selectedColumnNames (from localStorage)
@@ -1197,7 +1173,7 @@ The display panel is the content area shown inside the respective view container
 
 | Sub-section | Purpose | Rendered By |
 |-------------|---------|-------------|
-| **Summary Cards Bar** (`#summary-cards`) | Per-metric max (or max average) value + timestamp | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramChartView`/`renderSplitHistogramView`, `renderHistogramGridView`) |
+| **Summary Cards Bar** (`#summary-cards`) | Per-metric max (or max average) value + timestamp | Renderers (`renderRawDataChartView`, `renderRawDataGridView`, `renderHistogramView`, `renderHistogramGridView`) |
 | **Chart / Grid Area** | The primary visualisation — Chart.js chart or AG Grid data table | Renderers |
 
 **Order invariant:** Summary cards are **always** rendered above the chart/grid area. The DOM order never changes.
@@ -1287,7 +1263,7 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
   → waitingView.hide()
   → showPanel(view)                    // show chart/grid/histogram/histogram-grid container
   → show #summary-cards (add .visible class)
-  → updateButtonLabels(view, split)
+  → updateButtonLabels(view)
   → update #view-label
   → buildUrlString() → pushState
   → enableAllControls()
@@ -1304,9 +1280,9 @@ The display panel is rendered by every data-view renderer. The `setView` lifecyc
 | **No panel visibility toggling** | Renderers draw into their container; `setView` controls which content panel is visible (via `.visible` class). |
 | **Charts/grids fill remaining space** | Content panels have `flex: 1` and `min-height: 300px` so they maintain a usable minimum height and force `#content-area` to scroll when vertical space is tight. Chart.js and AG Grid are initialized with dimensions from `getBoundingClientRect()`. |
 
-### 15.6 Histogram Split Mode Display Panel
+### 15.6 Histogram View Display Panel
 
-In split histogram mode (`?split=1`), the display panel structure is the same as other histogram views. Bin-size and split/combine controls are in the **title bar** (not in the display panel), so they are always visible regardless of scroll position.
+The histogram panel (`#histogram-view`) contains **one chart per selected column**. The bin-size control is in the **title bar** (not in the display panel), so it is always visible regardless of scroll position.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -1315,9 +1291,9 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 │  │ Summary Cards Bar (#summary-cards)   ││
 │  │ ┌──────┐ ┌──────┐ ┌──────┐ …        ││
 │  ├──────────────────────────────────────┤│
-│  │ #split-histogram-view                ││
+│  │ #histogram-view                      ││
 │  │  ┌───────────────────────────────┐   ││
-│  │  │ #split-histogram-scroll      │   ││  ← no inner scroll
+│  │  │ #histogram-scroll            │   ││  ← no inner scroll
 │  │  │ ┌───────────────────────────┐ │   ││
 │  │  │ │  Chart 1                  │ │   ││
 │  │  │ ├───────────────────────────┤ │   ││
@@ -1331,10 +1307,10 @@ In split histogram mode (`?split=1`), the display panel structure is the same as
 └──────────────────────────────────────────┘
 ```
 
-- Summary cards behave identically to non-split mode.
-- Bin-size and split/combine controls are in the **title bar** (`#bin-size-select`, `#split-btn`) — always visible regardless of scroll position.
-- The chart area contains **multiple charts** (one per metric) instead of a single chart.
-- There is **no inner scroll** on `#split-histogram-scroll`. The single scroll pane is `#content-area`, which contains both the summary cards and all charts. Users scroll the entire content area to view charts below the summary cards.
+- Summary cards behave identically to other views.
+- The bin-size control is in the **title bar** (`#bin-size-select`) — always visible regardless of scroll position.
+- The chart area contains **multiple charts** (one per metric).
+- There is **no inner scroll** on `#histogram-scroll`. The single scroll pane is `#content-area`, which contains both the summary cards and all charts. Users scroll the entire content area to view charts below the summary cards.
 - Responsive behavior (scaling, vertical stacking, scroll) applies the same way as other views.
 
 ### 15.7 Grid Column Labels
@@ -1471,3 +1447,4 @@ This section tracks changes to the design document itself. Every modification to
 | 4.1 | 2026-08-26 | §1.1, §2.2, §6.1, §7, §8.3, §8.4, §10.5 | Design review against implementation (#59): added `stats-view.ts` to source files + esbuild/test notes; status-bar label list gains Stats Grid; `setView` union and `renderStatsView(updateWaiting, asGrid)` signatures updated; DOM refs table gains `histogramControls`/`dayFilterGroup`/`statsCutoffs`; stats flow reflects both variants; fixed stats-grid cutoff/dayFilter re-render handlers (kept current stats view) |
 | 5.2 | 2026-08-28 | §2.2 | Status bar view label for the `chart` view corrected from `Chart` to `Series`, matching the major-view name rename ("Chart" removed as too general); `FRONTEND_VERSION` → 5.2.0 (#80) |
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
+| 7.0 | 2026-08-29 | §1.1, §2.1, §3, §5, §6, §8, §9, §10, §14, §15, §17 | Histogram: the combined view (all columns in one chart) and the Split/Combine sub-mode are **removed** — the histogram view renders one bar chart per selected column; `#split-btn`, the `?split` URL parameter and the `isSplit` history payload are gone (#82); the average bar is drawn centred on top of a full-width shaded range band at ~60% of its width (§10.2.1) (#83); the three major-view buttons move to the top right of the new title row (`.header-top`), same line as the logo, wrapping below the title on narrow viewports — all other controls stay in the controls row (#84); `FRONTEND_VERSION` → 7.0.0 |
