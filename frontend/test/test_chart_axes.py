@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Test script to verify full-day chart axes (frontend-design.md §15.8, #85).
+Test script to verify full-range chart axes (frontend-design.md §15.8, #85, #88).
 
 Covers:
-  1. Series chart x-axis always spans the whole selected range
-     (single day: 00:00–24:00 at 5-min grid → 288 labels).
-  2. Series chart x-axis in a 2-day range (30-min grid → 96 labels,
-     first "07-27 00:00", last "07-28 23:30").
+  1. Series chart x-axis is a linear time axis spanning the whole selected
+     range (single day: 00:00–24:00) at a 5-min tick step.
+  2. Series chart x-axis in a 2-day range spans both days at a 30-min tick
+     step. (Series data is raw per-point since v7.4/#88 — see
+     test_series_raw_points.py.)
   3. Percentage-unit (SOC) y-axis fixed to 0–100 in the series chart.
   4. Histogram x-axis always shows the full 00:00–24:00 bin grid
      (15-min default → 96 labels).
@@ -22,6 +23,7 @@ Screenshots are saved to frontend/test/screenshots/
 
 import sys
 import os
+from datetime import datetime
 from urllib.parse import urlencode
 
 # Add the skill directory to sys.path to allow importing
@@ -77,11 +79,12 @@ def wait_for_series_chart(tester, timeout: int = 30):
 
 
 def series_chart_info(tester):
-    """Labels + axis configs of the Series chart."""
+    """X-axis extent/step + y-axis configs of the Series chart."""
     return tester.execute_script("""
         const c = document.getElementById("chart-canvas");
         if (!c || !c.__chartInstance) return null;
         const ch = c.__chartInstance;
+        const x = ch.options.scales.x;
         const scales = {};
         for (const [id, s] of Object.entries(ch.options.scales)) {
             if (id === "x") continue;
@@ -91,7 +94,13 @@ def series_chart_info(tester):
                 max: "max" in s ? s.max : undefined,
             };
         }
-        return { labels: ch.data.labels, scales };
+        return {
+            xType: x.type || "category",
+            xMin: "min" in x ? x.min : undefined,
+            xMax: "max" in x ? x.max : undefined,
+            xStepMs: x.ticks && "stepSize" in x.ticks ? x.ticks.stepSize : undefined,
+            scales,
+        };
     """)
 
 
@@ -142,8 +151,8 @@ def histogram_charts_info(tester):
 
 # ── Tests ───────────────────────────────────────────────────────────
 def test_series_single_day_axis(tester, t: TestResult):
-    """Series x-axis spans the full day 00:00–24:00 (5-min grid)."""
-    print("\n[Test 1] Series x-axis: full-day grid (single day)")
+    """Series x-axis is linear, spans the full day 00:00–24:00, 5-min ticks."""
+    print("\n[Test 1] Series x-axis: full-day linear time axis (single day)")
     tester.navigate(f"{BASE_URL}/?{urlencode({'date': TEST_DATE, 'view': 'chart'})}")
     tester.wait_for_element(By.ID, "summary-cards")
     ok = wait_for_series_chart(tester)
@@ -152,17 +161,20 @@ def test_series_single_day_axis(tester, t: TestResult):
         take_screenshot(tester, "axes-series-missing.png", "Series chart not ready")
         return
 
+    day0 = int(datetime(2026, 7, 27, 0, 0, 0).timestamp() * 1000)
     info = series_chart_info(tester)
-    labels = info["labels"]
-    t.check(len(labels) == 288, f"288 labels (24h at 5-min grid), got {len(labels)}")
-    t.check(labels[0] == "00:00", f"First label 00:00, got {labels[0]}")
-    t.check(labels[-1] == "23:55", f"Last label 23:55, got {labels[-1]}")
-    take_screenshot(tester, "axes-series-single-day.png", "Series single-day full grid")
+    t.check(info["xType"] == "linear", f"x-axis type linear, got {info['xType']}")
+    t.check(info["xMin"] == day0, f"x-axis starts 00:00 (got {info['xMin']}, want {day0})")
+    t.check(info["xMax"] == day0 + 86_400_000,
+            f"x-axis ends 24:00 (got {info['xMax']}, want {day0 + 86_400_000})")
+    t.check(info["xStepMs"] == 5 * 60_000,
+            f"x-axis tick step 5 min (got {info['xStepMs']})")
+    take_screenshot(tester, "axes-series-single-day.png", "Series single-day full range")
 
 
 def test_series_range_axis(tester, t: TestResult):
-    """Series x-axis spans the full 2-day range (30-min grid)."""
-    print("\n[Test 2] Series x-axis: full 2-day range (30-min grid)")
+    """Series x-axis is linear, spans the full 2-day range, 30-min ticks."""
+    print("\n[Test 2] Series x-axis: full 2-day linear time axis (30-min ticks)")
     tester.navigate(f"{BASE_URL}/?{urlencode({'from': '2026-07-27', 'to': '2026-07-28', 'view': 'chart'})}")
     tester.wait_for_element(By.ID, "summary-cards")
     ok = wait_for_series_chart(tester)
@@ -170,11 +182,14 @@ def test_series_range_axis(tester, t: TestResult):
     if not ok:
         return
 
+    day0 = int(datetime(2026, 7, 27, 0, 0, 0).timestamp() * 1000)
     info = series_chart_info(tester)
-    labels = info["labels"]
-    t.check(len(labels) == 96, f"96 labels (2 days at 30-min grid), got {len(labels)}")
-    t.check(labels[0] == "07-27 00:00", f"First label '07-27 00:00', got {labels[0]}")
-    t.check(labels[-1] == "07-28 23:30", f"Last label '07-28 23:30', got {labels[-1]}")
+    t.check(info["xType"] == "linear", f"x-axis type linear, got {info['xType']}")
+    t.check(info["xMin"] == day0, f"x-axis starts 07-27 00:00 (got {info['xMin']}, want {day0})")
+    t.check(info["xMax"] == day0 + 2 * 86_400_000,
+            f"x-axis ends 07-29 00:00 (got {info['xMax']}, want {day0 + 2 * 86_400_000})")
+    t.check(info["xStepMs"] == 30 * 60_000,
+            f"x-axis tick step 30 min (got {info['xStepMs']})")
 
 
 def test_series_soc_axis(tester, t: TestResult):

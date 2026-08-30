@@ -73,6 +73,22 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 | 9 | Histogram controls in histogram modes | Present in both histogram and histogram-grid views |
 | 10 | Single scroll pane structure | `#summary-cards` is a direct child of `#content-area`, scrollable |
 
+### `test_chart_axes.py` — Full-range chart axes (design §15.8, #85, #88)
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | Series single-day axis | x-axis is a linear time axis spanning 00:00–24:00 with 5-min tick step |
+| 2 | Series 2-day axis | x-axis spans the full 2-day range with 30-min tick step |
+| 3 | Series SOC axis | % (SOC) y-axis fixed to 0–100 |
+| 4 | Histogram axes | Full 00:00–24:00 bin grid (96 × 15-min bins); SOC axis 0–100 |
+
+### `test_series_raw_points.py` — Series raw data, no smoothing (design §15.8, #88)
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | Every point plotted | Per column, dataset point count / min / max equal the raw `/api/data` values (no binning, peaks preserved), points in ascending timestamp order within the day; x-axis still spans the full day |
+| 2 | No smoothing | Every dataset has `tension === 0` and `showLine === true` (straight segments) |
+
 ### `test_button_states.py` — Button states per view
 
 Verifies button **visibility** (display), **enabled/disabled** (greyed-out), and **text labels** across the six major views per [frontend-design.md §9.3](../frontend-design.md#93-button-specification-table).
