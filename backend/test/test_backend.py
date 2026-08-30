@@ -680,17 +680,19 @@ def test_stats(t: TestResult) -> None:
             f"max with first-occurrence ts (got {s['max']})")
     t.check(s["min"] == {"value": 100, "timestamp": "2026-07-27 00:00:00"},
             f"min with first-occurrence ts (got {s['min']})")
-    t.check(abs(s["high"]["threshold"] - 354.6642) < 0.001, f"high threshold=mean+1.645σ (got {s['high']['threshold']})")
-    t.check(s["high"]["avgDailyMinutes"] == 15.0, f"high avg 15 min/day (got {s['high']['avgDailyMinutes']})")
-    t.check(abs(s["low"]["threshold"] - 120.3358) < 0.001, f"low threshold=mean-1.645σ (got {s['low']['threshold']})")
-    t.check(s["low"]["avgDailyMinutes"] == 15.0, f"low avg 15 min/day (got {s['low']['avgDailyMinutes']})")
+    # #87: range-based thresholds — max=375, min=100, range=275
+    t.check(abs(s["high"]["threshold"] - 361.25) < 1e-9, f"high threshold=max−0.05×range=361.25 (got {s['high']['threshold']})")
+    t.check(s["high"]["avgDailyMinutes"] == 0.0, f"high avg 0 min/day (375 is an isolated sample) (got {s['high']['avgDailyMinutes']})")
+    t.check(abs(s["low"]["threshold"] - 113.75) < 1e-9, f"low threshold=min+0.05×range=113.75 (got {s['low']['threshold']})")
+    t.check(s["low"]["avgDailyMinutes"] == 0.0, f"low avg 0 min/day (100 is an isolated sample) (got {s['low']['avgDailyMinutes']})")
 
     # #60: battery_soc is a %-unit column → the selected cutoff is used as an
     # absolute percent limit (high cutoff 95 → threshold 95%, low 5 → 5%),
     # NOT a data percentile.
     b = result["stats"][1]
     t.check(b["column"] == "battery_soc" and b["unit"] == "%", f"Second entry is battery_soc (%) (got {b['column']})")
-    t.check(s["high"]["method"] == "mean-sigma", f"current_power method=mean-sigma (got {s['high'].get('method')})")
+    t.check(s["high"]["method"] == "range" and s["low"]["method"] == "range",
+            f"current_power method=range (got {s['high'].get('method')}/{s['low'].get('method')})")
     t.check(b["high"]["method"] == "cutoff" and b["low"]["method"] == "cutoff",
             f"SOC method=cutoff (got {b['high'].get('method')}/{b['low'].get('method')})")
     t.check(abs(b["mean"] - 78.0) < 1e-9, f"SOC mean=78 (got {b['mean']})")
@@ -707,7 +709,12 @@ def test_stats(t: TestResult) -> None:
     t.check(s["count"] == 480, f"5-day count=480 (got {s['count']})")
     t.check(s["max"]["timestamp"] == "2026-07-31 23:45:00", f"max first occurrence on last day (got {s['max']['timestamp']})")
     t.check(s["min"]["timestamp"] == "2026-07-27 00:00:00", f"min first occurrence on first day (got {s['min']['timestamp']})")
-    t.check(s["high"]["avgDailyMinutes"] == 60.0, f"5-day high avg 60 min/day (got {s['high']['avgDailyMinutes']})")
+    # #87: max=775, min=100, range=675 → high 95 = 775 − 33.75 = 741.25;
+    # Fri samples strictly above: 750, 765 (22:30/22:45) and 745, 760, 775
+    # (23:15/23:30/23:45) → 3 qualifying 15-min intervals = 45 min on 1 of 5
+    # days = 9.0 min/day
+    t.check(abs(s["high"]["threshold"] - 741.25) < 1e-9, f"5-day high threshold=741.25 (got {s['high']['threshold']})")
+    t.check(s["high"]["avgDailyMinutes"] == 9.0, f"5-day high avg 9.0 min/day (got {s['high']['avgDailyMinutes']})")
 
     # dayFilter: fri on 5-day range → 96 samples; sun → empty
     _, result = http_get("/api/stats", {
@@ -721,14 +728,14 @@ def test_stats(t: TestResult) -> None:
     })
     t.check(result["stats"] == [], f"dayFilter=sun on Mon-Fri range → empty (got {result['stats']})")
 
-    # Custom cutoffs: 90/10 use z=1.282
+    # #87: custom cutoffs 90/10 over the observed range (max=775, min=100, range=675)
     _, result = http_get("/api/stats", {
         "from": "2026-07-27", "to": "2026-07-31", "columns": "current_power", "highCutoff": "90", "lowCutoff": "10"
     })
     s = result["stats"][0]
     t.check(s["high"]["cutoff"] == 90 and s["low"]["cutoff"] == 10, "Echoes requested cutoffs")
-    t.check(abs(s["high"]["threshold"] - 640.4974) < 0.001, f"highCutoff=90 → mean+1.282σ (got {s['high']['threshold']})")
-    t.check(abs(s["low"]["threshold"] - 234.5026) < 0.001, f"lowCutoff=10 → mean-1.282σ (got {s['low']['threshold']})")
+    t.check(abs(s["high"]["threshold"] - 707.5) < 1e-9, f"highCutoff=90 → max−0.10×range=707.5 (got {s['high']['threshold']})")
+    t.check(abs(s["low"]["threshold"] - 167.5) < 1e-9, f"lowCutoff=10 → min+0.10×range=167.5 (got {s['low']['threshold']})")
 
     # Invalid values fall back to defaults
     _, result = http_get("/api/stats", {
