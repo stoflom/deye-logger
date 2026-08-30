@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v4.1
+> **Status:** v4.2
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -380,14 +380,17 @@ GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,cu
 | `to` | Yes | End date in YYYY-MM-DD format (inclusive) |
 | `columns` | Yes | Comma-separated list of column keys. Only columns matching known keys are included. `device_timestamp` is automatically prepended if any valid column is requested. |
 | `dayFilter` | No | Day-of-week filter. Default: `all`. Values: `all`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat`. When set, only rows falling on that day of week participate in **all** statistics. Same semantics as `/api/histogram`. Invalid values are treated as `all`. |
-| `highCutoff` | No | Percentile for the "high" threshold. Default: `95`. Allowed values: `50`, `75`, `90`, `95`, `99`. For ordinary units the high threshold is `mean + z * stdDev` where `z` is the standard-normal deviate for the percentile (see table below); for **percentage-unit columns** (`unit === "%"`, e.g. Battery SOC) the selected cutoff value itself is used as the threshold, expressed in percent (see §2.7 "Percentage-unit columns"). Invalid values fall back to the default. |
-| `lowCutoff` | No | Percentile for the "low" threshold. Default: `5`. Allowed values: `1`, `5`, `10`, `25`, `50`. For ordinary units the low threshold is `mean - z * stdDev`; for percentage-unit columns the selected cutoff value itself is used as the threshold, expressed in percent. Invalid values fall back to the default. |
+| `highCutoff` | No | Cutoff for the "high" threshold. Default: `95`. Allowed values: `50`, `75`, `90`, `95`, `99`. For ordinary units the high threshold is computed from the **observed range**: `max − (1 − highCutoff/100) × range` — the threshold sits `(100 − highCutoff)%` of the full range below the observed maximum (see §2.7 "Range-based thresholds"). For **percentage-unit columns** (`unit === "%"`, e.g. Battery SOC) the selected cutoff value itself is used as the threshold, expressed in percent (see §2.7 "Percentage-unit columns"). Invalid values fall back to the default. |
+| `lowCutoff` | No | Cutoff for the "low" threshold. Default: `5`. Allowed values: `1`, `5`, `10`, `25`, `50`. For ordinary units the low threshold is `min + (lowCutoff/100) × range` — the threshold sits `lowCutoff%` of the full range above the observed minimum. For percentage-unit columns the selected cutoff value itself is used as the threshold, expressed in percent. Invalid values fall back to the default. |
 
-**Percentile → z mapping** (one-tailed standard normal):
+**Range-based thresholds** (ordinary units): the data is often non-normally distributed and non-negative, so `mean ± z·σ` is a poor basis for "high/low" thresholds (#87). Instead, both thresholds are inset inward from the respective extreme of the **observed range** over the whole selected range:
 
-| Cutoff | 50 | 75 | 90 | 95 | 99 | 1 | 5 | 10 | 25 |
-| -------- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ---- |
-| z | 0.000 | 0.674 | 1.282 | 1.645 | 2.326 | 2.326 | 1.645 | 1.282 | 0.674 |
+    range = max − min
+
+- high threshold = `max − (1 − highCutoff/100) × range`
+- low threshold = `min + (lowCutoff/100) × range`
+
+Example (cutoffs `95`/`5`, max `100`, min `20`, range `80`): high threshold `100 − 0.05 × 80 = 96`, low threshold `20 + 0.05 × 80 = 24` — i.e. time spent above `96` and below `24`.
 
 **Validation:**
 
@@ -409,8 +412,8 @@ GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,cu
       "stdDev": 678.90,
       "max": { "value": 5120.0, "timestamp": "2025-07-22 13:30:00" },
       "min": { "value": -310.0, "timestamp": "2025-07-20 01:05:00" },
-      "high": { "cutoff": 95, "threshold": 1237.84, "avgDailyMinutes": 42.5, "method": "mean-sigma" },
-      "low":  { "cutoff": 5,  "threshold": -997.84, "avgDailyMinutes": 6.0, "method": "mean-sigma" }
+      "high": { "cutoff": 95, "threshold": 4848.5, "avgDailyMinutes": 42.5, "method": "range" },
+      "low":  { "cutoff": 5,  "threshold": -38.5, "avgDailyMinutes": 6.0, "method": "range" }
     },
     {
       "column": "battery_soc",
@@ -428,7 +431,7 @@ GET /api/stats?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_soc,cu
 }
 ```
 
-Note the second entry: `battery_soc` is a percentage-unit column, so the thresholds are the selected cutoff values themselves, in percent (high cutoff `95` → threshold `95`, i.e. 95%; low cutoff `5` → threshold `5`, i.e. 5%), with `"method": "cutoff"` — not `mean ± z·σ`.
+The first entry shows the range-based thresholds for an ordinary unit (max `5120`, min `−310`, range `5430`): high `5120 − 0.05 × 5430 = 4848.5`, low `−310 + 0.05 × 5430 = −38.5`, with `"method": "range"`. Note the second entry: `battery_soc` is a percentage-unit column, so the thresholds are the selected cutoff values themselves, in percent (high cutoff `95` → threshold `95`, i.e. 95%; low cutoff `5` → threshold `5`, i.e. 5%), with `"method": "cutoff"` — not the range-based formula.
 
 **Response Fields:**
 
@@ -443,7 +446,7 @@ Note the second entry: `battery_soc` is a percentage-unit column, so the thresho
 | `stats[].stdDev` | number | Population standard deviation: `sqrt(Σ(x − mean)² / n)`. `0` when `count < 2` |
 | `stats[].max` | object | `{ value, timestamp }` — maximum value and the **first occurrence** (earliest timestamp) at which it is observed |
 | `stats[].min` | object | `{ value, timestamp }` — minimum value and the **first occurrence** (earliest timestamp) at which it is observed |
-| `stats[].high` | object | `{ cutoff, threshold, avgDailyMinutes, method }` — the cutoff used, the computed high threshold, the average per-day duration (minutes) the value spent **strictly above** the threshold (see §5.4), and the method: `"mean-sigma"` (`mean + z·σ`, ordinary units) or `"cutoff"` (the selected cutoff value used directly as the threshold, in percent, for percentage-unit columns) |
+| `stats[].high` | object | `{ cutoff, threshold, avgDailyMinutes, method }` — the cutoff used, the computed high threshold, the average per-day duration (minutes) the value spent **strictly above** the threshold (see §5.4), and the method: `"range"` (ordinary units — `max − (1 − highCutoff/100) × range`) or `"cutoff"` (the selected cutoff value used directly as the threshold, in percent, for percentage-unit columns) |
 | `stats[].low` | object | Same as `high` but **strictly below** the low threshold |
 
 **Empty Response:**
@@ -455,9 +458,9 @@ If no data exists or no selected numeric column has samples, returns:
 
 **Edge cases:**
 
-- `count < 2`: `stdDev = 0`, both thresholds equal `mean`, durations are `0`.
+- `count < 2`: `stdDev = 0`, `range = 0`, both thresholds equal `max = min`, durations are `0`.
 
-**Percentage-unit columns** (`unit === "%"` in `column_metadata`, e.g. Battery SOC): the normal-deviate formula is invalid for bounded percentages — `mean + z·σ` can exceed 100% (or the low threshold go below 0%), which is physically meaningless. For these columns the threshold is the **selected cutoff value itself, in percent** (`"method": "cutoff"`): a high cutoff of `95` means the value is compared against `95%` (i.e. minutes the value was above 95%), and a low cutoff of `5` means it is compared against `5%` (minutes below 5%). This is *not* a data percentile — it is the absolute limit the user selected, so the threshold is independent of the sampled values. The high/low *duration* semantics (strictly beyond threshold, consecutive-pair rule, day split) are unchanged — only the threshold value differs.
+**Percentage-unit columns** (`unit === "%"` in `column_metadata`, e.g. Battery SOC): the range-based formula is also unsuitable for bounded percentages — the observed range is an arbitrary slice of 0–100%, so insetting it would be meaningless. For these columns the threshold is the **selected cutoff value itself, in percent** (`"method": "cutoff"`): a high cutoff of `95` means the value is compared against `95%` (i.e. minutes the value was above 95%), and a low cutoff of `5` means it is compared against `5%` (minutes below 5%). This is *not* a data percentile — it is the absolute limit the user selected, so the threshold is independent of the sampled values. The high/low *duration* semantics (strictly beyond threshold, consecutive-pair rule, day split) are unchanged — only the threshold value differs.
 - A calendar day with samples but none on the relevant side of a threshold contributes `0` minutes but **is counted** in the average denominator ("average per day with data").
 - When `dayFilter` is active, per-day grouping is still by calendar day; only matching weekdays contribute rows.
 
@@ -613,10 +616,11 @@ Client → GET /api/stats?from=YYYY-MM-DD&to=YYYY-MM-DD&columns=...&dayFilter=X&
            collect non-null samples ordered by device_timestamp
            ├─ mean, population stdDev
            ├─ max / min value + earliest timestamp at which each is first observed
+           ├─ range = max − min
            ├─ highThreshold = (unit === "%") ? highCutoff   (the selected cutoff, in %)
-           │                                 : mean + z(highCutoff) * stdDev
+           │                                 : max − (1 − highCutoff/100) × range
            ├─ lowThreshold  = (unit === "%") ? lowCutoff    (the selected cutoff, in %)
-           │                                : mean - z(lowCutoff)  * stdDev
+           │                                : min + (lowCutoff/100) × range
            ├─ per calendar day with samples, duration on a side =
            │     Σ (t[i+1] − t[i]) over consecutive sample pairs where
            │     BOTH samples are strictly beyond that threshold
@@ -708,3 +712,4 @@ This section tracks changes to the design document itself. Every modification to
 | 3.2 | 2026-08-26 | §2.7, §5.4 | Percentage-unit columns now use the **selected cutoff value directly** as the threshold in percent (`method` value `"percentile"` → `"cutoff"`) instead of the data percentile — a data percentile is meaningless for a bounded 0–100% column (SOC high 95 → threshold 95%, not the 95th-percentile value ≈ 100%); SOC high/low now read `> 95%` / `< 5%` (#60) |
 | 4.0 | 2026-08-28 | §2.6, §5.3 | `/api/histogram` datasets now include per-bin `min` and `max` arrays alongside the average `data` arrays — the bin loop tracks per-column min/max in addition to sum/count, letting the frontend render the per-bin value range (shaded range / tooltip) (#81) |
 | 4.1 | 2026-08-29 | §2.6, §5.3 | `/api/histogram` always returns the full 00:00–24:00 bin grid (1440/binMinutes bins; multi-day rows binned together by time-of-day); bins with no data carry `null` in `data`/`min`/`max` so the frontend x-axis always spans the whole day (#85) |
+| 4.2 | 2026-08-30 | §2.7, §5.4 | High/low thresholds for ordinary-unit columns are computed from the **observed range** instead of `mean ± z·σ` (which is meaningless for non-normally distributed, non-negative data): high = `max − (1 − highCutoff/100) × range`, low = `min + (lowCutoff/100) × range`, `range = max − min`; the percentile → z mapping is removed; `method` value `"mean-sigma"` → `"range"`. Percentage-unit columns (e.g. SOC) are unchanged — the 0–100% range is absolute, so the selected cutoff applies directly (`"cutoff"`) (#87) |
