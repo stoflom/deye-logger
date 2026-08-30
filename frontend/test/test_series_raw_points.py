@@ -25,7 +25,7 @@ import json
 import os
 import sys
 import urllib.request
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 # Add the skill directory to sys.path to allow importing
 skill_path = "/home/stoflom/.pi/agent/skills/firefox-testing"
@@ -62,7 +62,7 @@ class TestResult:
 def fetch_raw_rows():
     """Ground truth: all raw rows for the test date from the API."""
     url = (f"{BASE_URL}/api/data?date={TEST_DATE}"
-           f"&columns={urlencode(','.join(NUMERIC_COLUMNS))}")
+           f"&columns={quote(','.join(NUMERIC_COLUMNS), safe='')}")
     with urllib.request.urlopen(url, timeout=30) as res:
         payload = json.loads(res.read().decode())
     return payload["rows"]
@@ -202,6 +202,7 @@ def main():
     print("\n[Setup] Starting Firefox (headless mode)...")
 
     t = TestResult()
+    uncaught = None
     with FirefoxTester(headless=True) as tester:
         tester.navigate(f"{BASE_URL}/?{urlencode({'date': TEST_DATE})}")
         print(f"[Setup] Page title: {tester.get_title()}")
@@ -213,6 +214,8 @@ def main():
             tester.wait_for_element(By.ID, "summary-cards")
             wait_for_series_chart(tester)
             test_series_no_smoothing(tester, t)
+        except Exception as exc:  # re-raised after summary so errors are visible
+            uncaught = exc
         finally:
             print("\n" + "=" * 70)
             print(f"Results: {t.passed}/{t.passed + t.failed} passed, {t.failed} failed")
@@ -221,7 +224,10 @@ def main():
                 for f in t.failures:
                     print(f"  - {f}")
             print("=" * 70)
-            sys.exit(1 if t.failed > 0 else 0)
+
+    if uncaught is not None:
+        raise uncaught
+    sys.exit(1 if t.failed > 0 else 0)
 
 
 if __name__ == "__main__":
