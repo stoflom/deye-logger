@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v7.2
+> **Status:** v7.3
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -106,8 +106,8 @@ The title bar consists of **two rows**, each of which **wraps into additional li
 | CSV export | `#export-btn` | `⬇ Download (CSV)` — export current grid as CSV (visible in grid views only) |
 | Bin size | `#bin-size-select` | Histogram bin size dropdown: `5` / `10` / `15` / `30` / `60` (hidden in non-histogram modes) |
 | Day filter | `#day-filter-select` | Day-of-week dropdown: `All` / `Sun` / `Mon` / `Tue` / `Wed` / `Thu` / `Fri` / `Sat`. Visible in histogram modes, the Stats view **and their grid views**; limits histogram bins or statistics calculations to that weekday |
-| High cutoff | `#high-cutoff-select` | Stats high-threshold percentile dropdown: `50` / `75` / `90` / `95` / `99` (default `95`); visible only in the Stats views |
-| Low cutoff | `#low-cutoff-select` | Stats low-threshold percentile dropdown: `1` / `5` / `10` / `25` / `50` (default `5`); visible only in the Stats views |
+| High cutoff | `#high-cutoff-select` | Stats high-threshold cutoff dropdown: `50` / `75` / `90` / `95` / `99` (default `95`); ordinary units: threshold = `max − (100−x)%` of the observed max–min range, %-unit columns: `x%` directly (backend design §2.7); visible only in the Stats views |
+| Low cutoff | `#low-cutoff-select` | Stats low-threshold cutoff dropdown: `1` / `5` / `10` / `25` / `50` (default `5`); ordinary units: threshold = `min + x%` of the observed max–min range, %-unit columns: `x%` directly (backend design §2.7); visible only in the Stats views |
 
 ### 2.2 Status Bar (`<div class="status-bar">`)
 
@@ -631,8 +631,8 @@ other modules → shared.ts + dom-refs.ts
 | `histogramControls` | `#histogram-controls` | Histogram-only control group (bin size) |
 | `dayFilterGroup` | `#day-filter-group` | Day-filter control group (visible in histogram modes **and** stats views) |
 | `statsCutoffs` | `#stats-cutoffs` | Stats high/low cutoff group (stats views only) |
-| `highCutoffSelect` | `#high-cutoff-select` | Stats high-threshold percentile dropdown (stats view only) |
-| `lowCutoffSelect` | `#low-cutoff-select` | Stats low-threshold percentile dropdown (stats view only) |
+| `highCutoffSelect` | `#high-cutoff-select` | Stats high-threshold cutoff dropdown (stats view only) |
+| `lowCutoffSelect` | `#low-cutoff-select` | Stats low-threshold cutoff dropdown (stats view only) |
 | `statsBtn` | `#stats-btn` | Stats view toggle button |
 | `rowCountEl` | `#row-count` | Row/metric count display |
 | `viewLabelEl` | `#view-label` | Current view name display |
@@ -1376,7 +1376,7 @@ Duration labels use the abbreviation **`mins`** (minutes), never `min`, to keep 
 Formatting rules:
 
 - Units come from the response (`unit`, `""` if none); number formatting reuses the existing value/unit helpers (`extractUnit()`-style spacing, up to 2 decimals, unit-aware magnitude where already applied to other views).
-- Threshold rows are secondary/muted text and show the *effective* threshold used by the backend (from the response `high.threshold` / `low.threshold`): for ordinary units the `mean ± z·σ` value (e.g. `> 1.24 kW`), for percentage-unit columns the selected cutoff in percent (e.g. `> 95%` for SOC). The cutoff is **not** repeated in braces on the card (the earlier `(95%)` suffix is dropped), since it is already shown in the top bar where it is selected.
+- Threshold rows are secondary/muted text and show the *effective* threshold used by the backend (from the response `high.threshold` / `low.threshold`): for ordinary units the observed-range-based value (e.g. `> 1.24 kW`), for percentage-unit columns the selected cutoff in percent (e.g. `> 95%` for SOC). The cutoff is **not** repeated in braces on the card (the earlier `(95%)` suffix is dropped), since it is already shown in the top bar where it is selected.
 - The card grid is recreated from scratch on every render (same contract as `#summary-cards`: clear container, rebuild elements).
 
 **Per-measurement accent color:** each stat card carries the same accent color its measurement uses in the line chart, so the grid is not monochrome (the summary cards pattern). The palette is a single shared 16-color array (`CHART_PALETTE`, moved from `chart.ts` into `shared.ts`; `chart.ts` imports it) and cycles in dataset order (`CHART_PALETTE[i % CHART_PALETTE.length]`). The accent is applied via a `--stat-accent` CSS variable on the card: it colors the card's 3px top border and the header text; all other card text keeps the neutral palette.
@@ -1394,7 +1394,7 @@ Every card and every stat row carries a **tooltip explaining its content** (cust
 | High row | `Average time per day the value was above the high threshold ({method}). Threshold: {value} {unit}{threshold-desc}. Days with samples but no high readings count as 0.` |
 | Low row | `Average time per day the value was below the low threshold ({method}). Threshold: {value} {unit}{threshold-desc}. Days with samples but no low readings count as 0.` |
 
-`{method}` echoes the response `high.method` / `low.method` (backend design §2.7): `mean + z·σ` for ordinary units; `the selected {cutoff}% limit (percentage-unit column)` when `method === "cutoff"` (e.g. SOC — `mean + z·σ` can leave the 0–100% bounds, so the selected cutoff is used as an absolute percent limit). `{threshold-desc}` is `at the {cutoff}th percentile` for `mean-sigma` and empty for `cutoff` (the value already carries the `%` unit).
+`{method}` echoes the response `high.method` / `low.method` (backend design §2.7): `based on the observed max/min range` for ordinary units (`method === "range"`); `the selected {cutoff}% limit (percentage-unit column)` when `method === "cutoff"` (e.g. SOC — the 0–100% range is absolute, so the selected cutoff is used directly as a percent limit). `{threshold-desc}` is `top {100−cutoff}% of the observed range` on high rows and `bottom {cutoff}% of the observed range` on low rows when `method === "range"`, and empty for `cutoff` (the value already carries the `%` unit).
 
 Placeholders are filled from the response data and current date range at render time. Tooltips must also be keyboard-accessible (rows are focusable, `:focus-visible` shows the same tooltip as hover).
 
@@ -1404,8 +1404,8 @@ Placeholders are filled from the response data and current date range at render 
 | -------- | -------------------- |
 | Date inputs / prev / next / Today | Re-fetch stats for the new range; `#range-days` updates |
 | Day filter | Restricts *all* statistics (mean, max, min, durations) to that weekday (backend-side) |
-| High cutoff | Changes the high threshold percentile → backend re-computes `high` |
-| Low cutoff | Changes the low threshold percentile → backend re-computes `low` |
+| High cutoff | Changes the high-threshold cutoff → backend re-computes `high` from the observed range |
+| Low cutoff | Changes the low-threshold cutoff → backend re-computes `low` from the observed range |
 | Columns (☰ Select) | Cards are rendered for the selected numeric columns only; non-numeric columns never produce a card |
 | Refresh | Re-syncs data, then re-fetches stats |
 
@@ -1458,4 +1458,5 @@ This section tracks changes to the design document itself. Every modification to
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
+| 7.3 | 2026-08-30 | §2.1, §8.4, §16.1, §16.2, §16.3 | High/low thresholds for ordinary units are now based on the **observed range** (backend v4.2, #87): cutoff dropdowns re-described (high: `max − (100−x)%` of the max–min range, low: `min + x%`); tooltip `{method}` text `mean + z·σ` → `based on the observed max/min range` and `{threshold-desc}` `at the {cutoff}th percentile` → `top {100−cutoff}% of the observed range` (high rows) / `bottom {cutoff}% of the observed range` (low rows); percentage-unit columns (SOC) unchanged; `FRONTEND_VERSION` → 7.3.0 |
 | 7.0 | 2026-08-29 | §1.1, §2.1, §3, §5, §6, §8, §9, §10, §14, §15, §17 | Histogram: the combined view (all columns in one chart) and the Split/Combine sub-mode are **removed** — the histogram view renders one bar chart per selected column; `#split-btn`, the `?split` URL parameter and the `isSplit` history payload are gone (#82); the average bar is drawn centred on top of a full-width shaded range band at ~60% of its width (§10.2.1) (#83); the three major-view buttons move to the top right of the new title row (`.header-top`), same line as the logo, wrapping below the title on narrow viewports — all other controls stay in the controls row (#84); `FRONTEND_VERSION` → 7.0.0 |
