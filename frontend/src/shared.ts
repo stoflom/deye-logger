@@ -30,8 +30,8 @@ export interface StatsThreshold {
   cutoff: number;
   threshold: number;
   avgDailyMinutes: number;
-  /** "mean-sigma" | "percentile" (percentage-unit columns) — design §16.2 */
-  method: "mean-sigma" | "percentile";
+  /** "range" (observed max/min range) | "cutoff" (percentage-unit columns) — design §16.2 */
+  method: "range" | "cutoff";
 }
 
 export interface StatsEntry {
