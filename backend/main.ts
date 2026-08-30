@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "4.1.0";
+const BACKEND_VERSION = "4.2.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -391,14 +391,14 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
 });
 
 // ── Stats — per-column statistics over a date range ─────────
-// Percentile → one-tailed standard-normal deviate z (design §2.7)
-const HIGH_CUTOFF_Z: Record<number, number> = { 50: 0, 75: 0.674, 90: 1.282, 95: 1.645, 99: 2.326 };
-const LOW_CUTOFF_Z: Record<number, number> = { 1: 2.326, 5: 1.645, 10: 1.282, 25: 0.674, 50: 0 };
+// Allowed cutoff values (design §2.7)
+const HIGH_CUTOFFS = [50, 75, 90, 95, 99];
+const LOW_CUTOFFS = [1, 5, 10, 25, 50];
 
-// Parse a cutoff param against its allowed table; invalid → default
-function parseCutoffParam(raw: string | undefined, table: Record<number, number>, defaultValue: number): number {
+// Parse a cutoff param against its allowed list; invalid → default
+function parseCutoffParam(raw: string | undefined, allowed: number[], defaultValue: number): number {
   const n = parseInt(raw ?? "", 10);
-  return table[n] !== undefined ? n : defaultValue;
+  return allowed.includes(n) ? n : defaultValue;
 }
 
 interface StatSample { ms: number; day: string; v: number; ts: string }
@@ -460,8 +460,8 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
     const targetDay = validDays.includes(dayFilter) ? dayFilter : "all";
     const dayIndex = targetDay === "all" ? -1 : ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(targetDay);
 
-    const highCutoff = parseCutoffParam(req.query.highCutoff as string, HIGH_CUTOFF_Z, 95);
-    const lowCutoff = parseCutoffParam(req.query.lowCutoff as string, LOW_CUTOFF_Z, 5);
+    const highCutoff = parseCutoffParam(req.query.highCutoff as string, HIGH_CUTOFFS, 95);
+    const lowCutoff = parseCutoffParam(req.query.lowCutoff as string, LOW_CUTOFFS, 5);
 
     const fromTs = `${from} 00:00:00`;
     const toTs = `${to} 23:59:59`;
@@ -518,14 +518,16 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
       for (const s of samples) sq += (s.v - mean) ** 2;
       const stdDev = n > 1 ? Math.sqrt(sq / n) : 0;
 
-      // Percentage-unit columns (e.g. SOC) use the selected cutoff value
-      // directly as the threshold, in percent — mean ± z·σ can leave the
-      // 0–100% bounds (design §2.7). High cutoff 95 → threshold 95% (95),
-      // low cutoff 5 → threshold 5% (5).
+      // Ordinary units: thresholds are inset from the observed range extremes
+      // (design §2.7, #87) — high = max − (1 − highCutoff/100) × range,
+      // low = min + (lowCutoff/100) × range, range = max − min.
+      // Percentage-unit columns (e.g. SOC) keep the 0–100% range absolute:
+      // the selected cutoff value is used directly as the threshold, in percent.
       const isPct = (m.unit ?? "") === "%";
-      const highThreshold = isPct ? highCutoff : mean + HIGH_CUTOFF_Z[highCutoff] * stdDev;
-      const lowThreshold = isPct ? lowCutoff : mean - LOW_CUTOFF_Z[lowCutoff] * stdDev;
-      const method = isPct ? "cutoff" : "mean-sigma";
+      const range = max - min;
+      const highThreshold = isPct ? highCutoff : max - (1 - highCutoff / 100) * range;
+      const lowThreshold = isPct ? lowCutoff : min + (lowCutoff / 100) * range;
+      const method = isPct ? "cutoff" : "range";
 
       stats.push({
         column: col,
