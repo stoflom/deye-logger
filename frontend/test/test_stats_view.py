@@ -211,7 +211,8 @@ def main():
         tester.wait(2)
         # children: 1=header, 2=avg, 3=max, 4=min, 5=high, 6=low
         tip = tester.find_element(By.CSS_SELECTOR, ".stat-card:first-child .stat-row:nth-child(5)").get_attribute("data-tooltip")
-        t.check("90th percentile" in (tip or ""), "high-row tooltip echoes 90th percentile cutoff")
+        # #87: highCutoff=90 → threshold at top 10% of the observed range
+        t.check("top 10% of the observed range" in (tip or ""), "high-row tooltip echoes observed-range cutoff")
 
         tester.screenshot(os.path.join(SCREENSHOT_DIR, "stats-view-cutoffs.png"))
 
@@ -296,7 +297,7 @@ def main():
         t.check(name_color is not None and "rgb" in name_color, f"measurement cell colored (got {name_color})")
         # High/Low cells carry method-aware tooltips
         hi_tip = cells[7].get_attribute("data-tooltip") or ""
-        t.check("high threshold" in hi_tip and "percentile" in hi_tip, f"high cell tooltip (got '{hi_tip[:60]}…')")
+        t.check("high threshold" in hi_tip and "observed range" in hi_tip, f"high cell tooltip (got '{hi_tip[:60]}…')")
         # #59: cutoff change in stats-grid keeps the grid variant
         tester.select_dropdown_option(By.ID, "high-cutoff-select", "value=90")
         try:
