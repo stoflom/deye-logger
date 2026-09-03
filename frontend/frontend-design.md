@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v7.3
+> **Status:** v8.0
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -115,6 +115,7 @@ The title bar consists of **two rows**, each of which **wraps into additional li
 | --------- | ----- | --------- |
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
 | View label | `#view-label` | Shows the current view name: Series / Data Grid / Histogram / Histogram Grid / Stats / Stats Grid |
+| Refresh indicator | `#refresh-status` | Hidden by default. Shows **"↻ refreshing ..."** while a background database refresh is running; cleared when the refresh completes or fails (v8.0 — #89) |
 | Range days | `#range-days` | Always visible. Shows the number of days in the selected date range as "N days" (or "1 day"). Count = number of calendar days from `from` to `to` inclusive; any fractional day (e.g. a partial first/last day of the range relative to available data) is **counted as a whole day** (`Math.ceil`). Updated whenever the date range changes, independent of the active view |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
@@ -195,8 +196,8 @@ Event → setView(view, opts) → renderAsync() → success → pushState → sh
 | `popstate` → error state | No (re-shows error) | Detects `{ error: true }` marker |
 | `popstate` → columns state | No (`replace`) | Detects `{ columns: true }` marker — re-shows columns panel |
 | Initial load | Yes (on success) | Sets initial history entry |
-| Refresh success | Yes (on success) | Re-renders current view (dates unchanged) |
-| Refresh failure | — | History pushed *before* refresh so `history.back()` restores pre-refresh state |
+| Refresh success (background) | Yes (via the re-render) | Background refresh completes → `setView(activeView)` re-renders the current view (dates unchanged) (v8.0 — #89) |
+| Refresh failure (background) | Yes (with `error` marker) | Single error entry pushed; `Close` → `history.back()` → popstate re-renders the current view (v8.0 — #89) |
 | Open columns panel | **Yes** | Same URL, payload `{ columns: true }` — browser back returns to previous data view |
 | Close columns panel (`Back`) | Yes (on success) | Full data re-fetch with new columns |
 | Any render failure | Yes (with `error` marker) | Shows error-view |
@@ -215,7 +216,8 @@ These actions produce a side effect but **do not change URL history state**. The
 | **Save as Default** | Button in columns-view | Persists current column set to `localStorage`. |
 | **Reset Default** | Button in columns-view | Clears custom default, restores hardcoded defaults. |
 | **Clear columns** | Button in columns-view | Clears all selections except `device_timestamp`. |
-| **Default columns** | Button in columns-view | Restores default column set.
+| **Default columns** | Button in columns-view | Restores default column set. |
+| **Refresh (background)** | `#refresh-btn` | Runs `POST /api/refresh` + `GET /api/dates` asynchronously — the current view stays visible and interactive with a **"refreshing ..."** status-bar indicator; on completion the current view is re-rendered via `setView(activeView)` (v8.0 — #89) |
 
 ---
 
@@ -247,9 +249,10 @@ Below the title bar and state bar, **exactly one panel is visible at any time**.
 ```typescript
 interface SetViewOptions {
   replace?: boolean;      // use replaceState instead of pushState (default: false)
-  refresh?: boolean;      // transient — trigger backend refresh before rendering
   columns?: boolean;      // show columns selection panel (pushes history entry with columns marker)
 }
+// NOTE (v8.0 — #89): the `refresh` option is removed — refresh is a background
+// operation (runBackgroundRefresh(), §10.3) that no longer routes through setView.
 
 function setView(
   view: "chart" | "grid" | "histogram" | "histogram-grid" | "stats" | "stats-grid",
@@ -277,15 +280,6 @@ setView(view, opts?)
   │     │       appState.columnMetadata loaded in init (background) —
   │     │       lazy-fetched from /api/columns here if not yet available
   │     │       render checkboxes into columnsViewPanel
-  │     │       return { ok: true }
-  │     │
-  │     ├─ opts.refresh === true
-  │     │     → push current view state to history (so `history.back()` restores pre-refresh state on error)
-  │     │     → renderRefreshView(updateWaiting)
-  │     │       updateWaiting("Querying Deye Cloud…")
-  │     │       POST /api/refresh
-  │     │       updateWaiting("Fetching latest dates…")
-  │     │       GET /api/dates → update minAvailableDate, maxAvailableDate
   │     │       return { ok: true }
   │     │
   │     ├─ view === "chart"
@@ -337,12 +331,6 @@ setView(view, opts?)
   │     │     → enableOnlyControls(["columnsToggle"])
   │     │     → pushState({ view, columns: true }) with current URL unchanged
   │     │       (replaceState when called with replace: true, e.g. from popstate)
-  │     │
-  │     ├─ { ok: true } AND opts.refresh === true
-  │     │     → refresh succeeded — fall through to normal render (no recursive call)
-  │     │     → (normal render succeeds) → pushState with same URL → show data-view
-  │     │     → (refresh fails / normal render fails) → catch Error → pushState({ error: true }) → show error-view
-  │     │     → User clicks Close → history.back() → pops error entry → pops pre-refresh entry → popstate restores pre-refresh view
   │     │
   │     ├─ { ok: true } (normal data render)
   │     │     → Check for empty data result:
@@ -439,7 +427,7 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 | `dayFilterSelect` change | Day filter dropdown | — | Re-renders current histogram or stats view |
 | `highCutoffSelect` / `lowCutoffSelect` change | Cutoff dropdowns (stats views) | — | `setView(current)` (stats or stats-grid) — re-renders with new thresholds |
 | `statsBtn` click | Stats major-view button | — | From chart or histogram → `setView("stats")`. Disabled (grey) in stats views; hidden in grid and Select views |
-| `refreshBtn` click | Data refresh | `{ refresh: true }` | Refreshes backend then re-renders |
+| `refreshBtn` click | Data refresh | — | Not via `setView` — triggers `runBackgroundRefresh()` (§10.3): background `POST /api/refresh` with a "refreshing ..." status-bar indicator while the view stays active; re-renders the current view on completion (v8.0 — #89) |
 | `columnsToggleBtn` click (open) | Open columns panel | `{ columns: true }` | Pushes history entry with `columns: true` marker (URL unchanged) |
 | `columnsToggleBtn` click (close) | Close columns panel (label `Back`) | — | `setView(appState.activeView)` — full re-fetch, returns to the view that opened the panel |
 | `errorViewCloseBtn` click | Dismiss error | — | `history.back()` — popstate recreates previous |
@@ -451,23 +439,21 @@ async function renderXxxView(updateWaiting: (text: string) => void): Promise<Ren
 
 ### 7.1 Behavior
 
-#### 7.1.1 Refresh Failure
+#### 7.1.1 Refresh Failure (background refresh — v8.0, #89)
 
 ```
-setView("chart", { refresh: true })
-  → pushState({ view: "chart" })                          ← pre-refresh snapshot
-  → waiting-view: "Querying Deye Cloud…"
+refreshBtn click → runBackgroundRefresh()
+  → current view stays visible and interactive; "refreshing ..." in status bar
   → POST /api/refresh → TIMEOUT or 500
   → catch Error
-  → pushState({ error: true, view: "chart", errorMessage: "Server error 500" })
-  → show error-view
+  → pushState({ error: true, view, errorMessage: "Server error 500" }) ← single error entry
+  → show error-view (modal overlay)
   → User clicks Close
   → history.back()                                       ← pops error entry
-  → history.back()                                       ← pops pre-refresh entry
-  → popstate fires → setView("chart", { replace: true }) ← restores pre-refresh view
+  → popstate fires → setView(current view, { replace: true }) ← re-renders view
 ```
 
-**Key invariant:** A pre-refresh state is always pushed to history *before* `renderRefreshView()` runs. This ensures that `history.back()` from the error-view has a valid entry to restore. The refresh operation itself does not change the URL (the same view is re-rendered), so the pre-push and post-refresh URL are identical.
+**Key invariant (v8.0):** The URL does not change while a refresh runs, so only the error entry is pushed on failure. A single `history.back()` from the error-view returns to the current view entry, which popstate re-renders.
 
 #### 7.1.2 Normal Render Failure (non-refresh)
 
@@ -562,6 +548,7 @@ try {
 | `appState.rawDataGridApi` | `GridApi \| null` | Transient (render) | AG Grid API for the raw data grid |
 | `appState.statsResult` | `StatsResponse \| null` | Transient (render) | Last `/api/stats` response (per-column stat objects) for the stats view |
 | `appState.activeView` | ViewMode | URL-stateful | Current data view: chart, grid, histogram, histogram-grid, stats, stats-grid |
+| `appState.refreshing` | `boolean` | Transient (operation) | True while a background database refresh is in flight; `#refresh-btn` is disabled and "refreshing ..." is shown in the status bar (v8.0 — #89) |
 
 ### 8.2 Histogram Module Variables (`histogram-chart.ts`)
 
@@ -678,7 +665,7 @@ Every button in the title bar is documented with its text, visibility, toggle/ac
 | Prev Day | `prevDayBtn` | `‹` | Always | Action (shift -1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.minAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Next Day | `nextDayBtn` | `›` | Always | Action (shift +1 day) | `appState.dateRangeFrom`, `appState.dateRangeTo`, `appState.maxAvailableDate` | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`/`from`/`to`) |
 | Today | `todayBtn` | `Today` | Always | Action (set to today) | — | `appState.dateRangeFrom`, `appState.dateRangeTo` (URL) | URL-stateful (via `date`) |
-| Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `setView(activeView, { refresh: true })`; pushes pre-refresh snapshot to history for error recovery | URL-stateful (pre-refresh snapshot) |
+| Refresh | `refreshBtn` | `↻ Refresh` | Always | Action (debounced) | — | Triggers `runBackgroundRefresh()` — background `POST /api/refresh` with "refreshing ..." status-bar indicator; the view stays active; the current view re-renders on completion (v8.0 — #89) | URL-stateful (error entry only on failure) |
 | Series (major view) | `chartBtn` | `📈 Series` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Series) | — | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Histogram (major view) | `histogramToggleBtn` | `📊 Histogram` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Histogram) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
 | Stats (major view) | `statsBtn` | `📈 Stats` | Major views only — hidden in grid and Select views; disabled (grey) when active | Action (switch to Stats) | `appState.activeView` | `appState.activeView` (URL) | URL-stateful (via `view`) |
@@ -797,34 +784,39 @@ Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to t
 - **Tooltip:** the `label` callback appends the range, e.g. `Daily Energy (kWh): 10.5 (range 9.8–10.7)`; omitted when `min === max`. Range datasets are filtered out of the tooltip and the legend (the legend stays on the averages).
 - Missing/absent `min`/`max` arrays are treated as not available (no range rendered) — the renderer degrades gracefully to averages only.
 
-### 10.3 Refresh Flow
+### 10.3 Refresh Flow (background — v8.0, #89)
+
+Refresh no longer routes through `setView`. Clicking `↻ Refresh` starts
+`runBackgroundRefresh()` while the current view stays visible and interactive —
+the waiting view (spinner) is **not** used for refresh (it remains the loading
+view for all data-fetching `setView()` paths):
 
 ```
-refreshBtn click → setView(appState.activeView, { refresh: true })
-  → disableAllControls()
-  → showPanel("waiting") → waitingView.show()
-  → pushState({ view: activeView })                     ← pre-refresh snapshot (for error recovery)
-  → renderRefreshView(updateWaiting)
-      → updateWaiting("Querying Deye Cloud…")
-      → POST /api/refresh
-      → updateWaiting("Fetching latest dates…")
-      → GET /api/dates → update appState.minAvailableDate, appState.maxAvailableDate
-      → return { ok: true }
-  → refresh succeeded — fall through to normal render:
-  → renderRawDataChartView(updateWaiting)
-      → return { ok: true }
-  → hidePanel("waiting")
-  → showPanel("raw-data-chart")
-  → push URL history
-  → enableAllControls()
+refreshBtn click → runBackgroundRefresh()
+  → guard: appState.refreshing === true → ignore (button is disabled while in flight)
+  → appState.refreshing = true
+  → disable #refresh-btn only — all other controls stay enabled
+  → show "↻ refreshing ..." in the status bar (#refresh-status)
+  → POST /api/refresh (120s timeout)
+  → GET /api/dates → update appState.minAvailableDate, appState.maxAvailableDate
+      (and #date-from/#date-to min/max bounds)
+  → appState.refreshing = false
+  → clear #refresh-status, re-enable #refresh-btn
+  → setView(appState.activeView)  ← re-render current view so the new data is shown
 
 Refresh failure path:
-  → renderRefreshView throws Error
-  → catch Error
-  → pushState({ error: true, view, errorMessage })
+  → POST /api/refresh throws (timeout / HTTP error / non-zero exit code)
+  → appState.refreshing = false
+  → clear #refresh-status, re-enable #refresh-btn
+  → pushState({ error: true, view, errorMessage })     ← single error entry
   → show error-view
-  → User clicks Close → history.back() → pops error → pops pre-refresh → popstate restores view
+  → User clicks Close → history.back() → popstate re-renders current view
 ```
+
+**Invariants:**
+- The screen stays active for the whole refresh: no waiting view, no control disabling beyond `#refresh-btn`.
+- The URL does not change while the refresh runs; history is pushed only on completion (via the re-render) or on failure (the single error entry).
+- The waiting view (spinner) is unchanged — still used by all data-loading `setView()` paths.
 
 ### 10.4 Columns Flow
 
@@ -902,13 +894,11 @@ setView("chart")
   → enableAllControls()
   → NO history push (transient)
 
-User clicks Refresh from info-view:
-  → setView("chart", { refresh: true })
-  → disableAllControls()
-  → showPanel("waiting") → waitingView.show()
-  → pushState({ view: "chart" })                        ← pre-refresh snapshot
-  → renderRefreshView → POST /api/refresh → success
-  → fall through to renderRawDataChartView → data now present
+User clicks Refresh from info-view (background — v8.0, #89):
+  → runBackgroundRefresh() — current screen stays as-is; "refreshing ..." in status bar
+  → POST /api/refresh → success
+  → GET /api/dates (update min/max bounds)
+  → setView("chart") → renderRawDataChartView → data now present
   → showPanel("raw-data-chart")
   → push URL history
   → enableAllControls()
@@ -921,12 +911,12 @@ User clicks Refresh from info-view:
 | Endpoint | Method | Used By | Timeout | Purpose |
 | ---------- | -------- | --------- | --------- | --------- |
 | `/api/columns` | GET | init(), renderColumnsView() | 10s | Column metadata (name + label); sourced from `column_metadata` database table via backend |
-| `/api/dates` | GET | renderRefreshView(), init() | 10s | Min/max available data dates |
+| `/api/dates` | GET | runBackgroundRefresh(), init() | 10s | Min/max available data dates |
 | `/api/data` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (single day) |
 | `/api/data-range` | GET | renderRawDataChartView(), renderRawDataGridView() | 30s | Raw data rows (range) |
 | `/api/histogram` | GET | fetchHistogramData() (histogram renderers) | 30s | Time-binned average + per-bin min/max data |
 | `/api/stats` | GET | renderStatsView() | 30s | Per-column statistics (mean, max/min + first occurrence, high/low avg daily durations) |
-| `/api/refresh` | POST | renderRefreshView() | 120s | Trigger inverter data sync |
+| `/api/refresh` | POST | runBackgroundRefresh() | 120s | Trigger inverter data sync (background, #89) |
 | `/api/version` | GET | init() | 5s | Backend version string |
 
 ---
@@ -1459,6 +1449,7 @@ This section tracks changes to the design document itself. Every modification to
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
+| 8.0 | 2026-09-12 | §2.2, §3.3, §4, §6, §7.1.1, §8.1, §9.3, §10.3, §10.6, §11 | Background database refresh (#89): `↻ Refresh` no longer routes through `setView` — `runBackgroundRefresh()` runs `POST /api/refresh` + `GET /api/dates` while the current view stays visible and interactive (only `#refresh-btn` is disabled); a **"refreshing ..."** indicator (`#refresh-status`) is shown in the status bar while the update runs; on completion the current view is re-rendered; the `SetViewOptions.refresh` flag and `renderRefreshView()` are removed; refresh failure pushes a single error entry (Close → back → re-render); the waiting view (spinner) is kept for all data-loading `setView()` paths; `FRONTEND_VERSION` → 8.0.0 |
 | 7.4 | 2026-08-30 | §15.8 | Series chart renders **raw data** (#88): every row is plotted as a point at its actual timestamp on a linear full-range time axis (fixed 5/30/60-min ticks govern tick placement only — the v7.2 bucket flooring that dropped most points is removed; binning remains histogram-only); line segments are straight (`tension: 0`, no curve smoothing) so peaks are visible; tooltip titles use the hovered row's own timestamp; `FRONTEND_VERSION` → 7.4.0 |
 | 7.3 | 2026-08-30 | §2.1, §8.4, §16.1, §16.2, §16.3 | High/low thresholds for ordinary units are now based on the **observed range** (backend v4.2, #87): cutoff dropdowns re-described (high: `max − (100−x)%` of the max–min range, low: `min + x%`); tooltip `{method}` text `mean + z·σ` → `based on the observed max/min range` and `{threshold-desc}` `at the {cutoff}th percentile` → `top {100−cutoff}% of the observed range` (high rows) / `bottom {cutoff}% of the observed range` (low rows); percentage-unit columns (SOC) unchanged; `FRONTEND_VERSION` → 7.3.0 |
 | 7.0 | 2026-08-29 | §1.1, §2.1, §3, §5, §6, §8, §9, §10, §14, §15, §17 | Histogram: the combined view (all columns in one chart) and the Split/Combine sub-mode are **removed** — the histogram view renders one bar chart per selected column; `#split-btn`, the `?split` URL parameter and the `isSplit` history payload are gone (#82); the average bar is drawn centred on top of a full-width shaded range band at ~60% of its width (§10.2.1) (#83); the three major-view buttons move to the top right of the new title row (`.header-top`), same line as the logo, wrapping below the title on narrow viewports — all other controls stay in the controls row (#84); `FRONTEND_VERSION` → 7.0.0 |

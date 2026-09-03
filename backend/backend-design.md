@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v4.2
+> **Status:** v4.3
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -470,6 +470,8 @@ If no data exists or no selected numeric column has samples, returns:
 
 Triggers the Python data ingestion script (`deye-cloud/deye-logger.py`) to fetch the latest telemetry data from the Deye Cloud API and import it into the SQLite database. After success, the server re-opens the database to pick up new data.
 
+**Script path override (v4.3 — #89):** The script path defaults to `deye-cloud/deye-logger.py` (relative to the backend directory) and can be overridden with the `DEYE_LOGGER_SCRIPT` environment variable. This allows pointing the endpoint at a mock script (same interface: no arguments, exit code 0 = success, stdout/stderr captured) for testing in environments without a Deye Cloud `.env` file.
+
 **Request:**
 
 ```
@@ -713,3 +715,4 @@ This section tracks changes to the design document itself. Every modification to
 | 4.0 | 2026-08-28 | §2.6, §5.3 | `/api/histogram` datasets now include per-bin `min` and `max` arrays alongside the average `data` arrays — the bin loop tracks per-column min/max in addition to sum/count, letting the frontend render the per-bin value range (shaded range / tooltip) (#81) |
 | 4.1 | 2026-08-29 | §2.6, §5.3 | `/api/histogram` always returns the full 00:00–24:00 bin grid (1440/binMinutes bins; multi-day rows binned together by time-of-day); bins with no data carry `null` in `data`/`min`/`max` so the frontend x-axis always spans the whole day (#85) |
 | 4.2 | 2026-08-30 | §2.7, §5.4 | High/low thresholds for ordinary-unit columns are computed from the **observed range** instead of `mean ± z·σ` (which is meaningless for non-normally distributed, non-negative data): high = `max − (1 − highCutoff/100) × range`, low = `min + (lowCutoff/100) × range`, `range = max − min`; the percentile → z mapping is removed; `method` value `"mean-sigma"` → `"range"`. Percentage-unit columns (e.g. SOC) are unchanged — the 0–100% range is absolute, so the selected cutoff applies directly (`"cutoff"`) (#87) |
+| 4.3 | 2026-09-12 | §2.8 | `POST /api/refresh` script path overridable via `DEYE_LOGGER_SCRIPT` env var — allows a mock ingestion script for testing without a Deye Cloud `.env` (frontend v8.0 background refresh, #89); backend version 4.3.0 |
