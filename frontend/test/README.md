@@ -89,6 +89,22 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 | 1 | Every point plotted | Per column, dataset point count / min / max equal the raw `/api/data` values (no binning, peaks preserved), points in ascending timestamp order within the day; x-axis still spans the full day |
 | 2 | No smoothing | Every dataset has `tension === 0` and `showLine === true` (straight segments) |
 
+### `test_background_refresh.py` — Background database refresh (design §10.3, #89)
+
+Requires the Deye Cloud sync to be **mocked** (no `.env` in the dev environment) — start the server with the mock ingestion script:
+
+```bash
+DEYE_LOGGER_SCRIPT="$(pwd)/frontend/test/mock_deye_logger.py" bash backend/start.sh
+```
+
+The mock (`mock_deye_logger.py`) mimics `deye-logger.py`'s interface (exit 0, ~3 s simulated sync via `MOCK_REFRESH_SLEEP`) without touching the database.
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | Backend version sanity | Version badge shows `BE 4.3.0` (the `DEYE_LOGGER_SCRIPT`-capable backend) |
+| 2 | Background refresh (chart view) | View stays visible, `"refreshing ..."` in the status bar, waiting view NOT shown, only Refresh disabled, other controls enabled; on completion the indicator clears, Refresh re-enables and the view re-renders |
+| 3 | Background refresh (histogram view) | Same as above in the histogram view |
+
 ### `test_button_states.py` — Button states per view
 
 Verifies button **visibility** (display), **enabled/disabled** (greyed-out), and **text labels** across the six major views per [frontend-design.md §9.3](../frontend-design.md#93-button-specification-table).
