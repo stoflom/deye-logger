@@ -149,6 +149,7 @@ export const appState = {
   rawDataGridApi: null as GridApi | null,
   rawDataChartInstance: null as Chart | null,
   activeView: "chart" as ViewMode,
+  refreshing: false, // v8.0 (#89) — background database refresh in flight
 };
 
 // ------------------------------------------------------------------
@@ -191,6 +192,7 @@ export const {
   dayFilterGroup,
   statsCutoffs,
   rangeDaysEl,
+  refreshStatusEl,
   rawDataGridContainer,
   histogramGridContainer,
   rawDataChartCanvas,

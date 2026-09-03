@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "7.4.0";
+export const FRONTEND_VERSION = "8.0.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -38,9 +38,11 @@ import {
   versionBadgeEl,
   viewLabelEl,
   rowCountEl,
+  refreshStatusEl,
   waitingView,
   errorView,
   errorViewCloseBtn,
+  errorViewPanel,
   infoView,
   columnsViewPanel,
   showPanel,
@@ -75,9 +77,10 @@ import { wireDateNavigation } from "./navigation";
 // ------------------------------------------------------------------
 interface SetViewOptions {
   replace?: boolean;   // use replaceState instead of pushState (default: false)
-  refresh?: boolean;   // transient — trigger backend refresh before rendering
   columns?: boolean;   // show columns selection panel (pushes history entry with columns marker)
 }
+// NOTE (v8.0 — #89): the `refresh` option is removed — refresh is a background
+// operation (runBackgroundRefresh(), design §10.3) that no longer routes through setView.
 
 // ------------------------------------------------------------------
 // Pure data fetcher — no rendering, no control management.
@@ -178,31 +181,6 @@ async function renderColumnsView(updateWaiting: (text: string) => void): Promise
   return { ok: true };
 }
 
-async function renderRefreshView(updateWaiting: (text: string) => void): Promise<RenderOk> {
-  updateWaiting("Querying Deye Cloud…");
-  const res = await fetchWithTimeout("/api/refresh", 120_000, { method: "POST" });
-  const result: { success: boolean; code: number; output: string; error: string } = await res.json();
-
-  if (!result.success) {
-    throw new Error(`Refresh failed (exit ${result.code}): ${result.error || result.output}`);
-  }
-
-  updateWaiting("Fetching latest dates…");
-  const datesRes = await fetchWithTimeout("/api/dates", 10_000);
-  const dates: { min: string; max: string } = await datesRes.json();
-  if (dates.min) {
-    dateFromInput.min = dates.min;
-    dateToInput.min = dates.min;
-    appState.minAvailableDate = dates.min;
-  }
-  if (dates.max) {
-    dateFromInput.max = dates.max;
-    dateToInput.max = dates.max;
-    appState.maxAvailableDate = dates.max;
-  }
-  return { ok: true };
-}
-
 // ------------------------------------------------------------------
 // Button label updater — called by setView at step 5
 // ------------------------------------------------------------------
@@ -282,7 +260,7 @@ async function setView(
   view: ViewMode,
   opts: SetViewOptions = {},
 ): Promise<void> {
-  const { replace = false, refresh: doRefresh = false, columns: showColumns = false } = opts;
+  const { replace = false, columns: showColumns = false } = opts;
 
   // STEP 1: Disable all buttons (debounce protection)
   disableAllControls();
@@ -330,29 +308,6 @@ async function setView(
     columnsToggleBtn.textContent = "\u2630 Select";
     columnsToggleBtn.title = "Select columns to display";
     columnsToggleBtn.classList.remove("active");
-
-    if (doRefresh) {
-      // --- Refresh view ---
-      // Push current view state to history BEFORE refresh so that
-      // history.back() from the error view restores the pre-refresh state.
-      const isHistogramModeRefresh = view === "histogram" || view === "histogram-grid";
-      const isStatsRefresh = view === "stats" || view === "stats-grid";
-      const refreshUrl = buildUrlString(
-        view,
-        appState.dateRangeFrom,
-        appState.dateRangeTo,
-        {
-          binSize: isHistogramModeRefresh ? binSizeSelect.value : undefined,
-          dayFilter: isHistogramModeRefresh || isStatsRefresh ? dayFilterSelect.value : undefined,
-          highCutoff: isStatsRefresh ? highCutoffSelect.value : undefined,
-          lowCutoff: isStatsRefresh ? lowCutoffSelect.value : undefined,
-        },
-      );
-      history.pushState({ view }, "", refreshUrl);
-
-      await renderRefreshView((text) => waitingView.setText(text));
-      // Fall through to normal render — no recursive call needed
-    }
 
     // --- Normal data render ---
     const isHistogramMode = view === "histogram" || view === "histogram-grid";
@@ -407,6 +362,7 @@ async function setView(
       infoView.show(message);
       showPanel("info");
       enableAllControls();
+      syncRefreshButton(); // v8.0 (#89) — keep refresh disabled while a background refresh is in flight
       updateNavButtonStates();
       return;
     }
@@ -461,6 +417,7 @@ async function setView(
 
     // Re-enable all controls
     enableAllControls();
+    syncRefreshButton(); // v8.0 (#89) — keep refresh disabled while a background refresh is in flight
     updateNavButtonStates();
 
     // STEP 5: Update button labels and visibility — after enableAllControls()
@@ -491,6 +448,74 @@ async function setView(
     errorView.show(message);
     enableOnlyControls([]);
     errorViewCloseBtn.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------------
+// Background refresh (design §10.3, v8.0 — #89)
+// The database update runs in the background: the current view stays visible
+// and interactive, "↻ refreshing ..." is shown in the status bar while the
+// update runs, and the current view is re-rendered when it completes.
+// ------------------------------------------------------------------
+function syncRefreshButton(): void {
+  refreshBtn.disabled = appState.refreshing;
+}
+
+async function runBackgroundRefresh(): Promise<void> {
+  if (appState.refreshing) return; // ignore double triggers
+
+  appState.refreshing = true;
+  syncRefreshButton();
+  refreshStatusEl.textContent = "\u21bb refreshing ...";
+  refreshStatusEl.classList.add("visible");
+
+  try {
+    const res = await fetchWithTimeout("/api/refresh", 120_000, { method: "POST" });
+    const result: { success: boolean; code: number; output: string; error: string } = await res.json();
+    if (!result.success) {
+      throw new Error(`Refresh failed (exit ${result.code}): ${result.error || result.output}`);
+    }
+
+    // Refresh the available-date bounds so the new data is selectable
+    const datesRes = await fetchWithTimeout("/api/dates", 10_000);
+    const dates: { min: string; max: string } = await datesRes.json();
+    if (dates.min) {
+      dateFromInput.min = dates.min;
+      dateToInput.min = dates.min;
+      appState.minAvailableDate = dates.min;
+    }
+    if (dates.max) {
+      dateFromInput.max = dates.max;
+      dateToInput.max = dates.max;
+      appState.maxAvailableDate = dates.max;
+    }
+    updateNavButtonStates();
+
+    // Re-render the current view so the new data is shown
+    await setView(appState.activeView);
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    if (/timed out/i.test(message) || /abort/i.test(message)) {
+      message +=
+        "\n\nThis is likely a network timeout. Try clicking the browser's refresh button to retry.";
+    }
+    // Single error entry — Close → history.back() → popstate re-renders the view (design §7.1.1)
+    history.pushState(
+      { error: true, errorMessage: message, view: appState.activeView },
+      "",
+      window.location.pathname,
+    );
+    errorView.show(message);
+    enableOnlyControls([]);
+    errorViewCloseBtn.disabled = false;
+  } finally {
+    appState.refreshing = false;
+    refreshStatusEl.classList.remove("visible");
+    // Re-enable the refresh button unless the error overlay took over
+    // (popstate's re-render re-enables controls after Close → back())
+    if (!errorViewPanel.classList.contains("visible")) {
+      refreshBtn.disabled = false;
+    }
   }
 }
 
@@ -569,9 +594,9 @@ exportCsvBtn.addEventListener("click", () => {
   }
 });
 
-// Refresh button — routes through setView with refresh flag
+// Refresh button — background database refresh (design §10.3, v8.0 — #89)
 refreshBtn.addEventListener("click", () => {
-  setView(appState.activeView, { refresh: true });
+  void runBackgroundRefresh();
 });
 
 // Columns toggle — open (transient) or close (triggers data re-render)

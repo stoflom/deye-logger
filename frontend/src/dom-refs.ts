@@ -71,6 +71,7 @@ export const histogramGridContainer = getRequiredEl<HTMLElement>("histogram-grid
 export const rawDataChartCanvas = getRequiredEl<HTMLCanvasElement>("chart-canvas", "#chart-canvas");
 
 // --- Status bar ---
+export const refreshStatusEl = getRequiredEl<HTMLElement>("refresh-status", "#refresh-status");
 export const rowCountEl = getRequiredEl<HTMLElement>("row-count", "#row-count");
 export const versionBadgeEl = getRequiredEl<HTMLElement>("version-badge", "#version-badge");
 export const viewLabelEl = getRequiredEl<HTMLElement>("view-label", "#view-label");

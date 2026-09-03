@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "4.2.0";
+const BACKEND_VERSION = "4.3.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -552,7 +552,9 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
 // Refresh database (run deye-logger.py)
 // Lock management is delegated to the Python script — it owns deye_refresh.lock
 app.post("/api/refresh", async (_req: express.Request, res: express.Response) => {
-  const scriptPath = join(__dirname, "..", "deye-cloud", "deye-logger.py");
+  // v4.3 (#89): script path overridable via env var — allows a mock ingestion
+  // script for testing in environments without a Deye Cloud .env file (design §2.8)
+  const scriptPath = Deno.env.get("DEYE_LOGGER_SCRIPT") ?? join(__dirname, "..", "deye-cloud", "deye-logger.py");
   const cmd = new Deno.Command("python3", {
     args: [scriptPath],
     stdin: "null",

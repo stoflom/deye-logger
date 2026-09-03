@@ -321,6 +321,22 @@ body {
   user-select: none;
 }
 
+/* Refresh indicator — hidden unless a background refresh is running (v8.0, #89) */
+.refresh-status {
+  display: none;
+  color: #805ad5;
+  font-style: italic;
+}
+.refresh-status::before {
+  content: "|";
+  margin: 0 10px;
+  color: #a0aec0;
+  user-select: none;
+}
+.refresh-status.visible {
+  display: inline;
+}
+
 /* ============================================================
    CONTENT AREA — single scrollable container
    Wraps summary cards (top) + one visible content panel
