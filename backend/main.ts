@@ -366,7 +366,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
         data.push(avg);
         minData.push(hasVal ? bin.min[col] : null);
         maxData.push(hasVal ? bin.max[col] : null);
-        if (hasVal && avg > peak) {
+        if (avg !== null && avg > peak) {
           peak = avg;
           peakIdx = j;
         }
