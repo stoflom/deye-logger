@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v4.3
+> **Status:** v4.4
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -289,6 +289,8 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
 Computes time-binned averages of telemetry data across a date range. Designed for the histogram chart view. The results are pre-aggregated: each bin contains the average, minimum and maximum of each numeric column, so the client can display the value range (spread) per bin alongside the mean.
 
 The response **always contains the full 00:00–24:00 bin grid** (1440/binMinutes bins) — rows from multiple days are binned together by time-of-day — so the chart x-axis always spans the whole day. Bins with no data for a column carry `null` in `data`/`min`/`max` (v4.1, #85).
+
+**Numeric column criterion (v4.4, #90):** a requested column is included when it has at least one numeric (non-null) sample in the range. A column whose samples are **all 0** is included — 0 is a valid value; the client must be able to show and plot it. Only columns with *no* numeric samples are dropped.
 
 **Request:**
 

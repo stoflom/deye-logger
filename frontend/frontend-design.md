@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v8.0
+> **Status:** v8.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -1180,6 +1180,8 @@ Summary cards are rendered inside the `#summary-cards` container. They display a
 
 Row/bin counts are shown in the status bar (`#row-count`), not in the summary cards. All numeric columns get a card (no cap).
 
+**All-zero columns (v8.1 — #90):** a selected column counts as numeric when it has at least one numeric sample in the range — the value 0 is a *valid sample*, not a marker for "no data". A column whose samples are all 0 must still get a summary card **and** a plotted series (the line simply sits at y=0); the user may want to explicitly verify that the column reads 0.
+
 Cards are arranged **horizontally** (side by side) when sufficient horizontal space is available. When the viewport narrows, cards **switch to a vertical arrangement** (stacked, full-width).
 
 Each card displays:
@@ -1328,7 +1330,7 @@ Charts must not scale their axes to the available data only (v7.2 — #85):
 
 ## 16. Stats View
 
-The Stats view (`setView("stats")`) replaces the chart/grid area with a grid of **stat cards** — one per selected numeric column. The `stats-grid` variant (`setView("stats-grid")`, §16.6) shows the same data as a table. All computation is done by the backend (`GET /api/stats`); the frontend only formats and renders the response. The summary-cards bar (`#summary-cards`) is **hidden** in these views — the stat cards/table *are* the view content.
+The Stats view (`setView("stats")`) replaces the chart/grid area with a grid of **stat cards** — one per selected numeric column (columns whose samples are all 0 are included — v8.1, #90). The `stats-grid` variant (`setView("stats-grid")`, §16.6) shows the same data as a table. All computation is done by the backend (`GET /api/stats`); the frontend only formats and renders the response. The summary-cards bar (`#summary-cards`) is **hidden** in these views — the stat cards/table *are* the view content.
 
 ```
 ┌──────────────────────────────────────────┐

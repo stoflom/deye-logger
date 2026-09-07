@@ -456,7 +456,10 @@ export function getNumericColumnNames(
       const meta = metadata.find((c) => c.name === col);
       return binnedMaxValues.has(meta?.label ?? col);
     }
-    return dataRows.some((row) => typeof row[col] === "number" && row[col] !== 0);
+    // A column is numeric when it has at least one numeric sample — 0 is a
+    // valid value, not a "no data" marker (design v8.1, #90): all-zero
+    // columns must still be carded and plotted.
+    return dataRows.some((row) => typeof row[col] === "number");
   });
 }
 

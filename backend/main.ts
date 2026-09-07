@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "4.3.0";
+const BACKEND_VERSION = "4.4.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -273,7 +273,8 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     // Identify numeric columns (skip non-numeric metadata)
     const numericCols = requestedCols.filter((col) => {
       if (col === "device_timestamp" || col === "inverter_sn" || col === "fetch_timestamp") return false;
-      return rows.some((row) => typeof row[col] === "number" && row[col] !== 0);
+      // At least one numeric sample — 0 is a valid value (backend-design v4.4, #90)
+      return rows.some((row) => typeof row[col] === "number");
     });
 
     if (numericCols.length === 0) {
@@ -365,13 +366,14 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
         data.push(avg);
         minData.push(hasVal ? bin.min[col] : null);
         maxData.push(hasVal ? bin.max[col] : null);
-        if (hasVal && avg > peak) {
+        if (avg !== null && avg > peak) {
           peak = avg;
           peakIdx = j;
         }
       }
 
-      if (peak !== -Infinity && peakIdx >= 0 && peak > 0) {
+      // A peak of 0 is a valid max average (backend-design v4.4, #90)
+      if (peak !== -Infinity && peakIdx >= 0) {
         maxPeaks.push({ label, value: peak, timestamp: labels[peakIdx] });
       }
 

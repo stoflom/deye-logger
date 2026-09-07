@@ -99,7 +99,7 @@ def check(name, condition, detail=""):
 
 def test_backend_mock(tester, failures):
     """Sanity: the server serves the new backend version (mock-capable)."""
-    print("\n── Test 1: Backend serves v4.3.0 (DEYE_LOGGER_SCRIPT-capable)")
+    print("\n── Test 1: Backend serves v4.4.0 (DEYE_LOGGER_SCRIPT-capable)")
     badge = tester.find_element(By.ID, "version-badge")
     # The badge is filled by an async /api/version fetch — wait it out
     text = ""
@@ -109,9 +109,9 @@ def test_backend_mock(tester, failures):
             break
         time.sleep(0.1)
     ok = check(
-        "Version badge shows BE 4.3.0",
-        "BE 4.3.0" in text,
-        f"badge text: '{text}' — was the server started with the v4.3 backend?",
+        "Version badge shows BE 4.4.0",
+        "BE 4.4.0" in text,
+        f"badge text: '{text}' — was the server started with the v4.4 backend?",
     )
     if not ok:
         failures.append("test_backend_mock")
