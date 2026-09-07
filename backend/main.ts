@@ -372,7 +372,8 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
         }
       }
 
-      if (peak !== -Infinity && peakIdx >= 0 && peak > 0) {
+      // A peak of 0 is a valid max average (backend-design v4.4, #90)
+      if (peak !== -Infinity && peakIdx >= 0) {
         maxPeaks.push({ label, value: peak, timestamp: labels[peakIdx] });
       }
 
