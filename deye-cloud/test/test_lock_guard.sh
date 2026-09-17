@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lock file lives at deye-cloud/deye_refresh.lock
-# SCRIPT_DIR defaults to ".." (deye-cloud/), can be overridden
-SCRIPT_DIR="${SCRIPT_DIR:-..}"
+# Test scripts directory (this directory, e.g. deye-cloud/test/)
+TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Lock file lives at deye-cloud/deye_refresh.lock. Resolve the deye-cloud script
+# dir relative to this test script (the parent of TEST_DIR) so the suite works
+# no matter which cwd it is invoked from. An explicit SCRIPT_DIR env var still
+# takes precedence.
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$TEST_DIR/.." && pwd)}"
 SCRIPT_DIR="$(cd "$SCRIPT_DIR" && pwd)"
 LOCK_FILE="$SCRIPT_DIR/deye_refresh.lock"
 DB_FILE="$SCRIPT_DIR/deye_solar_data.db"
-
-# Test scripts directory (this directory, e.g. deye-cloud/test/)
-TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -18,14 +20,15 @@ TESTS_FAILED=0
 pass() { echo "✅ PASS: $1"; TESTS_PASSED=$((TESTS_PASSED + 1)); }
 fail() { echo "❌ FAIL: $1"; TESTS_FAILED=$((TESTS_FAILED + 1)); }
 
-# Create a minimal .env for testing
-cat > "$SCRIPT_DIR/.env" << 'ENVEOF'
-DEYE_APP_ID=test_app_id
-DEYE_APP_SECRET=test_app_secret
-DEYE_EMAIL=test@example.com
-DEYE_PASSWORD=abc123
-DEYE_INVERTER_SN=TEST123
-ENVEOF
+# Provide dummy credentials via the environment so the module-level credential
+# check passes. load_dotenv() does NOT override existing env vars, so these win
+# over any real .env — and we never create or delete a real .env file (the lock
+# tests do not hit the API, so real credentials are never needed).
+export DEYE_APP_ID="test_app_id"
+export DEYE_APP_SECRET="test_app_secret"
+export DEYE_EMAIL="test@example.com"
+export DEYE_PASSWORD="abc123"
+export DEYE_INVERTER_SN="TEST123"
 
 echo "=============================================="
 echo "Lock File Guard — Test Suite"
@@ -279,7 +282,7 @@ echo "Test Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
 echo "=============================================="
 
 # Cleanup
-rm -f "$LOCK_FILE" "$SCRIPT_DIR/.env" "$TEST_DIR/test_lock_*.py"
+rm -f "$LOCK_FILE" "$TEST_DIR/test_lock_*.py"
 
 if [ $TESTS_FAILED -gt 0 ]; then
     exit 1
