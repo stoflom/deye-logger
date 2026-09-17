@@ -15,8 +15,8 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # ==================== CONFIGURATION ====================
-SCRIPT_VERSION = "1.2.1"
-# Major.minor must agree qith deye-cloud-design.md
+SCRIPT_VERSION = "2.0.0"
+# Major.minor must agree with deye-cloud-design.md (design v2.0)
 # Fallback default: database in the same directory as the script
 # SCRIPT_DIR can be overridden via DEYE_SCRIPT_DIR env var (useful for testing)
 SCRIPT_DIR = os.environ.get("DEYE_SCRIPT_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -427,23 +427,27 @@ def fetch_measure_points(token: str) -> list:
         return []
 
 
-def populate_column_metadata(token: str) -> bool:
+def populate_column_metadata(token: str, measure_points: list = None) -> bool:
     """Fetches column metadata from DeyeCloud API and stores in column_metadata table.
 
-    On each run, known columns are upserted (INSERT OR REPLACE) so that
-    previously-known columns are preserved even if the API returns fewer fields.
-    The API returns a flat list of field name strings; labels and units are
-    derived from the field codes using _field_code_to_label() and _derive_unit().
+    Known columns are upserted (INSERT OR REPLACE) so that previously-known
+    columns are preserved even if the API returns fewer fields. The API returns
+    a flat list of field name strings; labels and units are derived from the
+    field codes using _field_code_to_label() and _derive_unit().
 
-    Returns True if metadata was updated, False if API failed (existing data preserved).
+    `measure_points` may be supplied by the caller to avoid a duplicate API call
+    (used by the -u/--update maintenance pass). Returns True if metadata was
+    updated, False if the API failed (existing data preserved).
     """
     print("  Fetching column metadata from DeyeCloud API...")
 
     # Build map: API field code -> DB column name
     api_to_db = {k: v for k, v in HISTORY_FIELD_MAP.items()}
 
-    # Fetch measure points from API (flat list of field name strings)
-    measure_points = fetch_measure_points(token)
+    # Fetch measure points from API (flat list of field name strings),
+    # reusing a caller-supplied list to avoid a duplicate API call.
+    if measure_points is None:
+        measure_points = fetch_measure_points(token)
     if not measure_points:
         print("  \u26a0\ufe0f Could not fetch measure points from API. Keeping existing column metadata.")
         return False
@@ -596,6 +600,16 @@ def init_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_complete ON inverter_telemetry(complete)')
     except sqlite3.OperationalError:
         pass  # column may be added by migration below
+    # Lossless mirror of every API field (design §6.4)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS telemetry_raw (
+            device_timestamp TEXT,
+            api_key TEXT,
+            value TEXT,
+            is_numeric INTEGER,
+            PRIMARY KEY (device_timestamp, api_key)
+        )
+    ''')
     # Migration tracking table
     cursor.execute('CREATE TABLE IF NOT EXISTS _schema_migrations (key TEXT PRIMARY KEY, done INTEGER DEFAULT 1)')
     cursor.execute('''
@@ -751,23 +765,62 @@ def get_access_token():
         if data.get("code") == "1000000":
             return data.get("accessToken") or data.get("data", {}).get("accessToken")
     except Exception as e:
-        print(f"Auth error: {e}")
+        print(f"ERROR [get_access_token /v1.0/account/token appId={APP_ID}]: {type(e).__name__}: {e}")
         return None
+
+def _to_number(value):
+    """Best-effort numeric conversion for a Deye Cloud field value.
+
+    Returns a float when `value` is (or parses to) a number; returns None for
+    empty/None or non-numeric values (e.g. firmware strings like '9028-1727').
+    Never raises — the API returns an untrusted superset of fields that are not
+    all numeric (see design §5.7 / §6.4).
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_numeric(value) -> bool:
+    """True if `value` parses to a number (see _to_number)."""
+    return _to_number(value) is not None
+
 
 def parse_device_data(device):
     """Converts DeyeAPI key-value dataList into a flat dict for saving.
 
     Missing fields are marked as None (not 0.0) so that incomplete/spurious
     API responses can be detected and rejected by save_records().
+
+    Every returned field is captured verbatim in record["raw"] (api_key -> raw
+    string) so save_records() can mirror the full response into telemetry_raw.
+    Numeric conversion of the known telemetry columns is best-effort and never
+    raises, even when the API returns non-numeric fields (e.g. MAIN/HMI).
     """
     raw_data = device.get("dataList", [])
+
+    # Capture every field verbatim (lossless) plus a numeric view for mapping.
+    raw = {}
     kv = {}
     for item in raw_data:
-        kv[item["key"]] = float(item["value"]) if item["value"] else 0.0
+        key = item.get("key")
+        if key is None:
+            continue
+        val = item.get("value")
+        raw[key] = "" if val is None else str(val)
+        kv[key] = _to_number(val)
 
     record = {
         "device_timestamp": datetime.fromtimestamp(device.get("collectionTime", 0)).strftime('%Y-%m-%d %H:%M:%S'),
         "inverter_sn": device.get("deviceSn", INVERTER_SN),
+        "raw": raw,
     }
 
     for col, keys in FIELD_MAP.items():
@@ -797,7 +850,7 @@ def fetch_latest_data(token):
                     return parse_device_data(d)
         return None
     except Exception as e:
-        print(f"Latest data fetch error: {e}")
+        print(f"ERROR [fetch_latest_data /v1.0/device/latest device={INVERTER_SN}]: {type(e).__name__}: {e}")
         return None
 
 def fetch_historical_range(token, start_date, end_date):
@@ -841,7 +894,7 @@ def fetch_historical_range(token, start_date, end_date):
                             if item["key"] not in existing:
                                 all_entries[ts]["itemList"].append(item)
             except Exception as e:
-                print(f"  Failed pulling historical window for {current}: {e}")
+                print(f"  ERROR [fetch_historical_range /v1.0/device/history day={current} batch='{batch[0]}...']: {type(e).__name__}: {e}")
         current = day_end
 
     # Return sorted by timestamp
@@ -853,6 +906,10 @@ def save_records(records):
     Only columns supplied by the API are inserted; missing fields are NULL.
     Sets complete='Y' when all expected fields are present, 'N' otherwise.
     Uses INSERT OR REPLACE so gap backfill can fill in previously NULL columns.
+
+    Each record's raw field capture (record["raw"]) is mirrored verbatim into
+    telemetry_raw (one row per api_key) so every API field — including
+    non-numeric and unknown fields — is persisted (design §6.4).
     """
     if not records:
         return 0
@@ -867,26 +924,37 @@ def save_records(records):
         if not device_time:
             continue
 
+        # 1) Known numeric columns -> inverter_telemetry
         try:
             data_cols = [c for c in EXPECTED_FIELDS if item.get(c) is not None]
-            if not data_cols:
-                continue
+            if data_cols:
+                complete = 'Y' if len(data_cols) == len(EXPECTED_FIELDS) else 'N'
 
-            complete = 'Y' if len(data_cols) == len(EXPECTED_FIELDS) else 'N'
+                placeholders = ", ".join(["?"] * (4 + len(data_cols)))
+                cols_str = "device_timestamp, fetch_timestamp, inverter_sn, complete, " + ", ".join(data_cols)
+                values = (device_time, fetch_time, item.get("inverter_sn", INVERTER_SN), complete) + \
+                         tuple(item.get(c) for c in data_cols)
+                cursor.execute(f'''
+                    INSERT OR REPLACE INTO inverter_telemetry
+                    ({cols_str})
+                    VALUES ({placeholders})
+                ''', values)
+                if cursor.rowcount > 0:
+                    inserted_count += 1
+        except sqlite3.Error as e:
+            print(f"  ERROR [save_records -> inverter_telemetry] ts={device_time}: {type(e).__name__}: {e}")
 
-            placeholders = ", ".join(["?"] * (4 + len(data_cols)))
-            cols_str = "device_timestamp, fetch_timestamp, inverter_sn, complete, " + ", ".join(data_cols)
-            values = (device_time, fetch_time, item.get("inverter_sn", INVERTER_SN), complete) + \
-                     tuple(item.get(c) for c in data_cols)
-            cursor.execute(f'''
-                INSERT OR REPLACE INTO inverter_telemetry
-                ({cols_str})
-                VALUES ({placeholders})
-            ''', values)
-            if cursor.rowcount > 0:
-                inserted_count += 1
-        except sqlite3.Error:
-            continue
+        # 2) Every raw field -> telemetry_raw (lossless mirror)
+        raw = item.get("raw") or {}
+        if raw:
+            try:
+                for api_key, val in raw.items():
+                    cursor.execute(
+                        'INSERT OR REPLACE INTO telemetry_raw '
+                        '(device_timestamp, api_key, value, is_numeric) VALUES (?, ?, ?, ?)',
+                        (device_time, api_key, val, 1 if _is_numeric(val) else 0))
+            except sqlite3.Error as e:
+                print(f"  ERROR [save_records -> telemetry_raw] ts={device_time}: {type(e).__name__}: {e}")
 
     conn.commit()
     conn.close()
@@ -916,11 +984,17 @@ def parse_history_response(history_data):
             "inverter_sn": INVERTER_SN,
         }
 
+        raw = {}
         for item in entry.get("itemList", []):
             key = item.get("key")
+            if key is None:
+                continue
             value = item.get("value")
+            raw[key] = "" if value is None else str(value)
             if key in HISTORY_FIELD_MAP:
-                record[HISTORY_FIELD_MAP[key]] = float(value) if value else 0.0
+                record[HISTORY_FIELD_MAP[key]] = _to_number(value)
+
+        record["raw"] = raw
 
         # Mark all expected fields as None (will be overwritten if API returned them)
         for col in EXPECTED_FIELDS:
@@ -1207,6 +1281,52 @@ def delete_spurious_records():
     return deleted
 
 
+def detect_new_columns(measure_points):
+    """Returns API field codes present in the API but absent from the known map.
+
+    These are 'new' fields the script does not yet map to a DB column. They are
+    not lost — every field is captured losslessly in telemetry_raw on each
+    refresh (design §6.4) — the update pass merely surfaces them for review.
+    """
+    known = set(HISTORY_FIELD_MAP.keys())
+    return sorted(set(measure_points) - known)
+
+
+def report_versions(raw):
+    """Reports the API/protocol/firmware version identifiers from a raw capture."""
+    version_keys = ["ProtocolVersion", "MAIN", "HMI"]
+    found = [(k, raw[k]) for k in version_keys if k in raw]
+    if found:
+        for k, v in found:
+            print(f"    {k}: {v}")
+    else:
+        print("    (no version fields present in latest data)")
+
+
+def run_update_pass(token, latest):
+    """Runs the update maintenance pass (design §7.2).
+
+    After the data refresh, this refreshes column metadata, detects new/unknown
+    API columns, and reports API/firmware version identifiers.
+    """
+    print("  [update] Refreshing column metadata...")
+    measure_points = fetch_measure_points(token)
+    if measure_points:
+        populate_column_metadata(token, measure_points)
+        new_cols = detect_new_columns(measure_points)
+        if new_cols:
+            print(f"  [update] {len(new_cols)} new/unknown API field(s) (captured in telemetry_raw):")
+            for c in new_cols:
+                print(f"    - {c}")
+        else:
+            print("  [update] No new/unknown API columns detected.")
+    else:
+        print("  [update] \u26a0\ufe0f Could not fetch measure points — column metadata not updated.")
+
+    print("  [update] Version check:")
+    report_versions((latest or {}).get("raw") or {})
+
+
 def main():
     print("-----------------------------------------------------------")
     print(f"Deye Cloud Telemetry Loader {SCRIPT_VERSION}")
@@ -1223,7 +1343,9 @@ def main():
     parser.add_argument("-ds", "--delete-spurious", action="store_true",
                         help="Delete spurious records previously identified by --find-spurious.")
     parser.add_argument("-m", "--meta", action="store_true",
-                        help="Update column metadata from the DeyeCloud API.")
+                        help="Update column metadata only (metadata step of the -u/--update pass).")
+    parser.add_argument("-u", "--update", action="store_true",
+                        help="Maintenance pass: refresh data AND update column metadata, detect new columns, and report API/firmware version.")
     parser.add_argument("--force", action="store_true",
                         help="Override lock file — clear stale or active lock and proceed.")
     parser.add_argument("-db", type=str, default=None,
@@ -1269,10 +1391,6 @@ def main():
             print("Failed to acquire access token.")
             return
 
-        # Populate column metadata from DeyeCloud API (opt-in via --meta)
-        if args.meta:
-            populate_column_metadata(token)
-
         if args.fetch_since:
             try:
                 since_dt = parse_date(args.fetch_since)
@@ -1304,6 +1422,13 @@ def main():
             print("  ❌ No data returned from API.")
 
         total_new += scan_and_fix_time_gaps(token, args.gap)
+
+        # Maintenance pass — full update (-u) or metadata-only (-m). Never runs
+        # on the default refresh, keeping it fast (design §7.1/§7.2).
+        if args.update:
+            run_update_pass(token, latest)
+        elif args.meta:
+            populate_column_metadata(token)
 
         if total_new == 0:
             print("No new data found.")
