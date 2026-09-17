@@ -47,9 +47,9 @@ The script authenticates with each run using email + SHA-256 hashed password. Th
 │ get_access_token()
 └──────┬───────┘
        │
-  ┌────┴─────┐
-  │  Normal  │  ──→  --fetch-since  ──→  --find-spurious
-  │  mode    │
+  ┌──────────┐
+  │ Refresh  │  ──→  -u/--update  ──→  --fetch-since  ──→  --find-spurious
+  │ (default)│
   └────┬─────┘
        │
   ┌────┴────────────────────┐
@@ -332,7 +332,13 @@ to fail.
 
 ## 7. Operational Modes
 
-### 7.1 Normal Operation
+### 7.1 Refresh Cycle (default)
+
+The default run (no flags) is a **fast data-only refresh**. This is the path the
+backend invokes on every frontend refresh click (`POST /api/refresh` runs
+`python3 deye-logger.py` with no arguments), so it must stay fast. It brings
+only the **time-series data** up to date and does **not** touch column metadata
+or perform any "check for changes" work.
 
 ```bash
 python deye-logger.py [-g MINUTES] [-db PATH] [--force]
@@ -348,7 +354,39 @@ python deye-logger.py [-g MINUTES] [-db PATH] [--force]
 5. For each gap, query history API (grouped by day) and backfill.
 6. Mark each gap as attempted (even if no data returned).
 
-### 7.2 Historical Bulk Import
+**The refresh cycle does not** call `/v1.0/device/measurePoints`, refresh
+`column_metadata`, or detect new columns / version changes — that work is
+deferred to the update pass (§7.2) to keep refresh fast.
+
+### 7.2 Update Maintenance Pass (`-u` / `--update`)
+
+A heavier, less-frequent maintenance pass that does everything the refresh
+cycle does **plus** synchronization with the DeyeCloud API's current schema and
+version. Run manually or on a schedule (e.g. weekly), or when the API is known
+to have changed.
+
+```bash
+python deye-logger.py -u        # or --update
+```
+
+The update pass performs, in order:
+
+1. **Data refresh** — the normal latest + gap-backfill refresh (§7.1).
+2. **Column metadata refresh** — fetch `/v1.0/device/measurePoints` and
+   upsert the `column_metadata` table (see §9).
+3. **New-column detection** — compare the returned field codes against the known
+   field map (`HISTORY_FIELD_MAP`). Any field code not mapped to a known DB
+   column is logged as a new/unknown field. No data is lost: every such field is
+   already captured losslessly in `telemetry_raw` on each refresh (§6.4); the
+   update pass merely surfaces them so they can be promoted to a known column if
+   desired.
+4. **Version check** — report the observed API/protocol/firmware identifiers
+   (e.g. `ProtocolVersion`, `MAIN`, `HMI`) so changes over time are visible.
+
+`-m` / `--meta` remains as a metadata-only shortcut (step 2 above) for
+backward compatibility; `-u` / `--update` is the comprehensive maintenance pass.
+
+### 7.3 Historical Bulk Import
 
 ```bash
 python deye-logger.py --fetch-since "1 July 2026"
@@ -356,7 +394,7 @@ python deye-logger.py --fetch-since "1 July 2026"
 
 Splits the range into 7-day chunks (API rate limit). Each chunk queries day-by-day, batch-by-batch. Duplicate detection is handled by `INSERT OR IGNORE` via the `device_timestamp` primary key.
 
-### 7.3 Lock File Guard
+### 7.4 Lock File Guard
 
 A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concurrent executions of the script, whether invoked directly (cron, manual) or via the backend API (`POST /api/refresh`). Lock management is **exclusively** handled by the Python script — the backend does not participate in lock file operations.
 
@@ -380,7 +418,7 @@ A lock file (`deye_refresh.lock`) in the `deye-cloud/` directory prevents concur
 
 **Cleanup:** The lock file is deleted on normal exit, error exit, and signal handlers (SIGTERM, SIGINT).
 
-### 7.4 Spurious Data Detection
+### 7.5 Spurious Data Detection
 
 ```bash
 python deye-logger.py --find-spurious
@@ -403,16 +441,17 @@ Deletes all entries from `inverter_telemetry` where `device_timestamp` exists in
 
 ```
 usage: deye-logger.py [-h] [--fetch-since FETCH_SINCE] [-g GAP]
-                      [-fs] [-ds] [-m] [--force] [-db DB]
+                      [-u] [-fs] [-ds] [-m] [--force] [-db DB]
 ```
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--fetch-since` | str | — | Bulk import from date (7-day chunking) |
 | `-g, --gap` | int | `3` | Min gap minutes to trigger backfill |
+| `-u, --update` | flag | — | Maintenance pass: refresh data **and** update column metadata, detect new columns, and report API/firmware version (§7.2) |
 | `-fs, --find-spurious` | flag | — | Detect spurious records |
 | `-ds, --delete-spurious` | flag | — | Delete spurious records |
-| `-m, --meta` | flag | — | Update column metadata from the DeyeCloud API |
+| `-m, --meta` | flag | — | Update column metadata only (subset of `-u`; the metadata step of §7.2) |
 | `--force` | flag | — | Override lock file (clear stale/active lock) |
 | `-db` | str | script dir | Path to SQLite database |
 
@@ -445,13 +484,18 @@ If the `column_metadata` table does not exist, the script creates it automatical
 
 ### 9.3 Metadata Update
 
-Column metadata is **not updated on every run**. It is only refreshed when the user explicitly passes the `-m` / `--meta` flag:
+Column metadata is **not updated on every refresh**. It is refreshed only during
+the **update** maintenance pass (§7.2):
 
 ```bash
-python deye-logger.py --meta
+python deye-logger.py --update     # full maintenance pass (data + metadata + new-column + version)
+python deye-logger.py --meta       # metadata only (backward-compatible shortcut)
 ```
 
-When `--meta` is used, the table is **replaced** (truncated and re-inserted) from the latest API data to stay in sync with any DeyeCloud API changes. Without the flag, existing metadata is left untouched, avoiding an unnecessary API call on every telemetry fetch.
+The `refresh` cycle (§7.1) never touches `column_metadata`, keeping it fast. On
+an update, known columns are upserted (INSERT OR REPLACE) so previously-known
+columns are preserved even if the API returns fewer fields, and new/unknown API
+field codes are surfaced for review (see §7.2 step 3).
 
 ### 9.4 Field Mapping
 
@@ -539,4 +583,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.3.0 | 2026-07-30 | §7, §8 | Lock-file guard — `deye_refresh.lock` prevents concurrent executions; `--force` flag overrides stale/active locks; cleanup on exit and signals |
 | 1.4 | 2026-07-30 | §3.1, §7.1, §7.2–§7.4, §12 | Design doc corrections: version format (major.minor only), §7.1 step numbering, §7.2–§7.4 section numbering, §3.1 add DEYE_SCRIPT_DIR env var, §12 test count to 7 scenarios |
 | 1.5 | 2026-08-15 | §7.3, §12 | Remove backend lock file guard — lock management delegated entirely to Python script; removed Test 7 (Backend lock file format) from test table; clarified that backend does not participate in lock operations |
-| 2.0 | 2026-09-17 | §2, §5.7, §6.1, §6.3, §6.4, §7.1 | New feature: full raw data capture — new `telemetry_raw` table mirrors every API field (including non-numeric `MAIN`/`HMI` firmware strings and unknown fields); best-effort numeric conversion via `_to_number()`; ingestion no longer assumes all values are numeric; document the API's non-fixed superset of fields (§5.7); clearer error logging names the failing stage/endpoint |
+| 2.0 | 2026-09-17 | §2, §5.7, §6.1, §6.3, §6.4, §7.1, §7.2, §8, §9 | New features: (1) full raw data capture — new `telemetry_raw` table mirrors every API field (incl. non-numeric `MAIN`/`HMI` firmware strings and unknown fields); best-effort numeric conversion via `_to_number()`; ingestion no longer assumes all values are numeric; document the API's non-fixed superset of fields (§5.7); clearer error logging names the failing stage/endpoint (#91). (2) refresh/update split — the default run is a fast data-only **refresh** (no metadata); new `-u/--update` maintenance pass refreshes column metadata, detects new columns, and reports API/firmware version (§7.2) (#92) |
