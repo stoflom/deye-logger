@@ -31,17 +31,19 @@ Browser-based UI tests for the Deye Logger Viewer frontend using **Selenium + Fi
 
 ### 1. Start the application server
 
-From the project root, start the backend (this also builds the frontend):
+All frontend tests run against the **test database `test_solar_data.db`** (in the
+project root) — *not* the live `deye_solar_data.db`. Start the backend pointed at
+it from the project root (this also builds the frontend):
 
 ```bash
 cd /home/stoflom/Workspace/deye-logger
-bash backend/start.sh
+bash backend/start.sh -d test_solar_data.db
 ```
 
 The server defaults to `http://localhost:8090`. Pass `-H` / `-p` to override:
 
 ```bash
-bash backend/start.sh -p 8090 -d /path/to/deye_solar_data.db
+bash backend/start.sh -p 8090 -d test_solar_data.db
 ```
 
 Leave the server running — the tests need a live instance.
@@ -94,14 +96,14 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 Requires the Deye Cloud sync to be **mocked** (no `.env` in the dev environment) — start the server with the mock ingestion script:
 
 ```bash
-DEYE_LOGGER_SCRIPT="$(pwd)/frontend/test/mock_deye_logger.py" bash backend/start.sh
+DEYE_LOGGER_SCRIPT="$(pwd)/frontend/test/mock_deye_logger.py" bash backend/start.sh -d test_solar_data.db
 ```
 
 The mock (`mock_deye_logger.py`) mimics `deye-logger.py`'s interface (exit 0, ~3 s simulated sync via `MOCK_REFRESH_SLEEP`) without touching the database.
 
 | # | Test | Description |
 |---|------|-------------|
-| 1 | Backend version sanity | Version badge shows `BE 4.3.0` (the `DEYE_LOGGER_SCRIPT`-capable backend) |
+| 1 | Backend version sanity | Version badge shows `BE 4.4.0` (the `DEYE_LOGGER_SCRIPT`-capable backend) |
 | 2 | Background refresh (chart view) | View stays visible, `"refreshing ..."` in the status bar, waiting view NOT shown, only Refresh disabled, other controls enabled; on completion the indicator clears, Refresh re-enables and the view re-renders |
 | 3 | Background refresh (histogram view) | Same as above in the histogram view |
 

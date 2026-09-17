@@ -1,2 +1,6 @@
 # Generated test scripts (created at runtime, cleaned up on exit)
 test_lock_*.py
+
+# Live-API diagnostic helper + its captured output (needs real credentials)
+investigate_api.py
+latest_raw.json
