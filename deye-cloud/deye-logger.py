@@ -600,14 +600,13 @@ def init_database():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_complete ON inverter_telemetry(complete)')
     except sqlite3.OperationalError:
         pass  # column may be added by migration below
-    # Lossless mirror of every API field (design §6.4)
+    # Non-numeric API values only, one row per api_key, updated on value
+    # change (design §6.4)
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS telemetry_raw (
-            device_timestamp TEXT,
-            api_key TEXT,
+        CREATE TABLE IF NOT EXISTS telemetry_text (
+            api_key TEXT PRIMARY KEY,
             value TEXT,
-            is_numeric INTEGER,
-            PRIMARY KEY (device_timestamp, api_key)
+            updated_at TEXT
         )
     ''')
     # Migration tracking table
@@ -727,6 +726,17 @@ def init_database():
             print(f"  🧹 Cleared {spur_count} stale spurious record entries.")
         cursor.execute("INSERT OR IGNORE INTO _schema_migrations (key) VALUES ('spurious_records_cleared')")
 
+    # Replace telemetry_raw with telemetry_text (one-time migration, #93)
+    cursor.execute("SELECT 1 FROM _schema_migrations WHERE key = 'telemetry_text'")
+    if cursor.fetchone() is None:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='telemetry_raw'")
+        if cursor.fetchone() is not None:
+            cursor.execute("SELECT COUNT(*) FROM telemetry_raw")
+            raw_count = cursor.fetchone()[0]
+            cursor.execute("DROP TABLE telemetry_raw")
+            print(f"  🗑  Dropped legacy telemetry_raw table ({raw_count} rows; duplicated inverter_telemetry data).")
+        cursor.execute("INSERT OR IGNORE INTO _schema_migrations (key) VALUES ('telemetry_text')")
+
     conn.commit()
     conn.close()
 
@@ -800,7 +810,8 @@ def parse_device_data(device):
     API responses can be detected and rejected by save_records().
 
     Every returned field is captured verbatim in record["raw"] (api_key -> raw
-    string) so save_records() can mirror the full response into telemetry_raw.
+    string) so save_records() can persist the non-numeric fields into
+    telemetry_text.
     Numeric conversion of the known telemetry columns is best-effort and never
     raises, even when the API returns non-numeric fields (e.g. MAIN/HMI).
     """
@@ -907,9 +918,11 @@ def save_records(records):
     Sets complete='Y' when all expected fields are present, 'N' otherwise.
     Uses INSERT OR REPLACE so gap backfill can fill in previously NULL columns.
 
-    Each record's raw field capture (record["raw"]) is mirrored verbatim into
-    telemetry_raw (one row per api_key) so every API field — including
-    non-numeric and unknown fields — is persisted (design §6.4).
+    Each record's raw field capture (record["raw"]) is scanned and only
+    non-numeric values are stored in telemetry_text (one row per api_key,
+    updated only when the value changes) so text fields — e.g. firmware
+    strings and any future unknown fields — are persisted without duplicating
+    the numeric data already in inverter_telemetry (design §6.4).
     """
     if not records:
         return 0
@@ -944,17 +957,24 @@ def save_records(records):
         except sqlite3.Error as e:
             print(f"  ERROR [save_records -> inverter_telemetry] ts={device_time}: {type(e).__name__}: {e}")
 
-        # 2) Every raw field -> telemetry_raw (lossless mirror)
+        # 2) Non-numeric raw fields -> telemetry_text (only on value change)
         raw = item.get("raw") or {}
         if raw:
             try:
                 for api_key, val in raw.items():
+                    if _is_numeric(val):
+                        continue  # already stored in inverter_telemetry
                     cursor.execute(
-                        'INSERT OR REPLACE INTO telemetry_raw '
-                        '(device_timestamp, api_key, value, is_numeric) VALUES (?, ?, ?, ?)',
-                        (device_time, api_key, val, 1 if _is_numeric(val) else 0))
+                        'SELECT value FROM telemetry_text WHERE api_key = ?',
+                        (api_key,))
+                    row = cursor.fetchone()
+                    if row is None or row[0] != val:
+                        cursor.execute(
+                            'INSERT OR REPLACE INTO telemetry_text '
+                            '(api_key, value, updated_at) VALUES (?, ?, ?)',
+                            (api_key, val, fetch_time))
             except sqlite3.Error as e:
-                print(f"  ERROR [save_records -> telemetry_raw] ts={device_time}: {type(e).__name__}: {e}")
+                print(f"  ERROR [save_records -> telemetry_text] ts={device_time}: {type(e).__name__}: {e}")
 
     conn.commit()
     conn.close()
@@ -1284,9 +1304,10 @@ def delete_spurious_records():
 def detect_new_columns(measure_points):
     """Returns API field codes present in the API but absent from the known map.
 
-    These are 'new' fields the script does not yet map to a DB column. They are
-    not lost — every field is captured losslessly in telemetry_raw on each
-    refresh (design §6.4) — the update pass merely surfaces them for review.
+    These are 'new' fields the script does not yet map to a DB column. Text
+    (non-numeric) values are not lost — they are captured in telemetry_text on
+    each refresh when they change (design §6.4) — the update pass merely
+    surfaces them for review.
     """
     known = set(HISTORY_FIELD_MAP.keys())
     return sorted(set(measure_points) - known)
@@ -1315,7 +1336,7 @@ def run_update_pass(token, latest):
         populate_column_metadata(token, measure_points)
         new_cols = detect_new_columns(measure_points)
         if new_cols:
-            print(f"  [update] {len(new_cols)} new/unknown API field(s) (captured in telemetry_raw):")
+            print(f"  [update] {len(new_cols)} new/unknown API field(s) (non-numeric values captured in telemetry_text):")
             for c in new_cols:
                 print(f"    - {c}")
         else:
