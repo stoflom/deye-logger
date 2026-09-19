@@ -1,6 +1,6 @@
 # Deye Cloud — Design Document
 
-**Version:** 2.0
+**Version:** 2.1
 
 ---
 
@@ -11,6 +11,19 @@ The Deye Cloud logger is a Python script (`deye-logger.py`) that fetches telemet
 1. **Normal operation** — fetch latest telemetry and auto-backfill time gaps.
 2. **Historical bulk import** — `--fetch-since` for initial data loads.
 3. **Spurious data management** — `--find-spurious` / `--delete-spurious` to detect and remove corrupted records.
+
+Command-line arguments:
+
+- `--fetch-since <date>` — bulk import from date
+- `-g, --gap <minutes>` — min gap to trigger backfill (default `3`)
+- `-u, --update` — maintenance pass: refresh data **and** update column metadata, detect new columns, report versions
+- `-fs, --find-spurious` — detect spurious records
+- `-ds, --delete-spurious` — delete spurious records
+- `-m, --meta` — update column metadata only
+- `--force` — override lock file
+- `-db <path>` — path to SQLite database
+
+Full reference: §8.
 
 ## 2. Architecture
 
@@ -584,3 +597,4 @@ This section tracks changes to the design document itself. Every modification to
 | 1.4 | 2026-07-30 | §3.1, §7.1, §7.2–§7.4, §12 | Design doc corrections: version format (major.minor only), §7.1 step numbering, §7.2–§7.4 section numbering, §3.1 add DEYE_SCRIPT_DIR env var, §12 test count to 7 scenarios |
 | 1.5 | 2026-08-15 | §7.3, §12 | Remove backend lock file guard — lock management delegated entirely to Python script; removed Test 7 (Backend lock file format) from test table; clarified that backend does not participate in lock operations |
 | 2.0 | 2026-09-17 | §2, §5.7, §6.1, §6.3, §6.4, §7.1, §7.2, §8, §9 | New features: (1) full raw data capture — new `telemetry_raw` table mirrors every API field (incl. non-numeric `MAIN`/`HMI` firmware strings and unknown fields); best-effort numeric conversion via `_to_number()`; ingestion no longer assumes all values are numeric; document the API's non-fixed superset of fields (§5.7); clearer error logging names the failing stage/endpoint (#91). (2) refresh/update split — the default run is a fast data-only **refresh** (no metadata); new `-u/--update` maintenance pass refreshes column metadata, detects new columns, and reports API/firmware version (§7.2) (#92) |
+| 2.1 | 2026-09-17 | §1 | Overview now lists all command-line arguments accepted by `deye-logger.py` (full reference remains §8) |
