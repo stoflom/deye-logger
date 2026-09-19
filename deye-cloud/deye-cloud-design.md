@@ -1,6 +1,6 @@
 # Deye Cloud — Design Document
 
-**Version:** 2.1
+**Version:** 2.2
 
 ---
 
@@ -70,7 +70,7 @@ The script authenticates with each run using email + SHA-256 hashed password. Th
   │ parse_device_data()      │
   │ save_records()           │
   │   → inverter_telemetry   │
-  │   + telemetry_raw        │
+  │   + telemetry_text       │
   └────────────┬─────────────┘
                │
   ┌────────────┴────────────────────┐
@@ -192,10 +192,10 @@ The history endpoint returns these metadata fields even when they are not
 requested via `measurePoints`.
 
 Because the field set and value types are not guaranteed, the ingestion script
-must treat each response as an **untrusted superset**: every field is captured
-verbatim, numeric conversion is best-effort (see §6.4), and the script must
-never assume that all values are numeric or that the field list matches a known
-map.
+must treat each response as an **untrusted superset**: numeric conversion is
+best-effort (see §6.4), non-numeric fields are persisted in `telemetry_text`
+(§6.4), and the script must never assume that all values are numeric or that
+the field list matches a known map.
 
 ## 6. Data Model
 
@@ -271,18 +271,19 @@ Fields checked to determine if a response is likely spurious:
 
 Index: `idx_timestamp` on `device_timestamp`, `idx_complete` on `complete`.
 
-#### `telemetry_raw`
+#### `telemetry_text`
 
-Lossless mirror of **every** field returned by the Deye Cloud API — one row per
-`(device_timestamp, api_key)`. Captures non-numeric fields (e.g. `MAIN`, `HMI`
-firmware strings) and any future fields the script does not yet know about.
+Captures **only non-numeric** values returned by the Deye Cloud API (e.g.
+`MAIN`, `HMI` firmware strings) and any future text fields the script does not
+yet know about. Numeric values are never stored here — they already live in
+`inverter_telemetry`. One row per `api_key`, updated only when the value
+changes.
 
 | Column | Type | Description |
 | --- | --- | --- |
-| `device_timestamp` | TEXT (PK, part 1) | Measurement timestamp |
-| `api_key` | TEXT (PK, part 2) | Raw DeyeCloud field code (e.g. `MAIN`, `SOC`) |
-| `value` | TEXT | Value exactly as returned (numbers and strings) |
-| `is_numeric` | INTEGER | `1` if `value` parses as a float, else `0` |
+| `api_key` | TEXT (PK) | Raw DeyeCloud field code (e.g. `MAIN`, `HMI`) |
+| `value` | TEXT | Latest non-numeric value, exactly as returned |
+| `updated_at` | TEXT | Timestamp when the value last changed |
 
 #### `gap_attempts`
 
@@ -320,28 +321,26 @@ Stores column metadata (names, labels, units, descriptions, API field codes) fet
 | `description` | TEXT | Optional human-readable description of the column |
 | `sort_order` | INTEGER | Display order in UI (0 = first) |
 
-Known migrations: `telemetry_sorted`, `gap_attempts_cleared`, `spurious_records_cleared`, `column_metadata`.
+Known migrations: `telemetry_sorted`, `gap_attempts_cleared`, `spurious_records_cleared`, `column_metadata`, `telemetry_text`.
 
-### 6.4 Full Raw Data Capture (`telemetry_raw`)
+### 6.4 Text Field Capture (`telemetry_text`)
 
-To guarantee that **all** data returned by the Deye Cloud API is persisted
-locally — including non-numeric fields and any future fields the script does
-not yet know about — every field in each API response is mirrored verbatim into
-the `telemetry_raw` table (§6.3).
+Non-numeric fields returned by the Deye Cloud API — e.g. firmware strings
+(`MAIN`, `HMI`) and any future text fields the script does not yet know about
+— are persisted in the `telemetry_text` table (§6.3).
 
-- **One row per `(device_timestamp, api_key)`**, holding the value exactly as
-  returned (`TEXT`) plus a numeric flag.
-- Known numeric columns are **still** written to `inverter_telemetry` (used for
-  gap detection, spurious detection, and the backend data queries).
-  `telemetry_raw` is the lossless mirror; it is additive and never replaces
-  `inverter_telemetry`.
-- The backend/frontend display only **numeric** series (driven by
-  `column_metadata`). `telemetry_raw` is the source of truth for “what did the
-  cloud send” and does not need to be numeric to be stored.
+- **Non-numeric only**: values that parse as a float belong in
+  `inverter_telemetry` and are **not** duplicated into `telemetry_text`.
+- **One row per `api_key`** — the latest value and the time it last changed.
+- **Change-driven**: a row is inserted (or replaced) only when the value for a
+  key **differs** from the previously stored value; unchanged values are
+  skipped.
+- Numeric time-series display and queries are unaffected — they remain driven
+  by `inverter_telemetry` / `column_metadata`.
 
-This makes the script robust to API changes: a new or non-numeric field is
-captured in a new `telemetry_raw` row rather than dropped or causing the fetch
-to fail.
+This keeps the script robust to API changes: a new or non-numeric field is
+captured in `telemetry_text` rather than dropped or causing the fetch to fail,
+without duplicating the numeric data already in `inverter_telemetry`.
 
 ## 7. Operational Modes
 
@@ -362,7 +361,7 @@ python deye-logger.py [-g MINUTES] [-db PATH] [--force]
    - If present and PID dead → log warning, remove stale lock, continue.
    - If absent → create lock file with PID and start timestamp.
 2. Fetch latest telemetry via `/v1.0/device/latest`.
-3. Save to database (`INSERT OR REPLACE`) — known numeric columns to `inverter_telemetry`, and **all** returned fields to `telemetry_raw` (lossless mirror, §6.4).
+3. Save to database — known numeric columns to `inverter_telemetry` (`INSERT OR REPLACE`), and **non-numeric** fields to `telemetry_text`, only when the value for a key changed (§6.4).
 4. Scan for time gaps > threshold.
 5. For each gap, query history API (grouped by day) and backfill.
 6. Mark each gap as attempted (even if no data returned).
@@ -390,9 +389,9 @@ The update pass performs, in order:
 3. **New-column detection** — compare the returned field codes against the known
    field map (`HISTORY_FIELD_MAP`). Any field code not mapped to a known DB
    column is logged as a new/unknown field. No data is lost: every such field is
-   already captured losslessly in `telemetry_raw` on each refresh (§6.4); the
-   update pass merely surfaces them so they can be promoted to a known column if
-   desired.
+   already captured in `telemetry_text` on each refresh when its value is
+   non-numeric and changed (§6.4); the update pass merely surfaces them so they
+   can be promoted to a known column if desired.
 4. **Version check** — report the observed API/protocol/firmware identifiers
    (e.g. `ProtocolVersion`, `MAIN`, `HMI`) so changes over time are visible.
 
@@ -525,6 +524,7 @@ The script handles migration automatically in `init_database()`:
 - **Column type conversion**: `complete` column migration from REAL to TEXT (CREATE NEW → INSERT → DROP → RENAME).
 - **Table reordering**: `telemetry_sorted` migration for timestamp-ordered data.
 - **Stale data cleanup**: `gap_attempts_cleared` and `spurious_records_cleared` one-time migrations.
+- **Table replacement**: `telemetry_text` one-time migration — drops the old `telemetry_raw` table (its data duplicated `inverter_telemetry` and was disposable) and creates `telemetry_text` (#93).
 
 ## 11. Dependencies
 
@@ -579,7 +579,7 @@ the pipeline) and verifies, against a temporary in-memory database, that:
 | 1 | `_to_number()` conversion | numeric strings/ints → float; non-numeric (`9028-1727`), empty and `None` → `None`; never raises |
 | 2 | `parse_device_data()` with non-numeric fields | a realtime `dataList` containing `MAIN`/`HMI` parses without error; known numeric columns are correct; non-numeric values are preserved in the record's raw capture |
 | 3 | `parse_history_response()` with non-numeric fields | a history response containing `MAIN`/`HMI` parses without error and drops unmapped fields |
-| 4 | `save_records()` raw capture | saving a record writes the known columns to `inverter_telemetry` **and** mirrors **every** field (including `MAIN`/`HMI` with `is_numeric=0`) into `telemetry_raw` |
+| 4 | `save_records()` text capture | saving a record writes the known columns to `inverter_telemetry` and stores **only non-numeric** fields (e.g. `MAIN`/`HMI`) into `telemetry_text`; re-saving an unchanged value updates nothing, a changed value replaces the row |
 
 These tests are self-contained (dummy credentials, temp database) and do not
 read or write the real `.env` or production database.
@@ -597,4 +597,5 @@ This section tracks changes to the design document itself. Every modification to
 | 1.4 | 2026-07-30 | §3.1, §7.1, §7.2–§7.4, §12 | Design doc corrections: version format (major.minor only), §7.1 step numbering, §7.2–§7.4 section numbering, §3.1 add DEYE_SCRIPT_DIR env var, §12 test count to 7 scenarios |
 | 1.5 | 2026-08-15 | §7.3, §12 | Remove backend lock file guard — lock management delegated entirely to Python script; removed Test 7 (Backend lock file format) from test table; clarified that backend does not participate in lock operations |
 | 2.0 | 2026-09-17 | §2, §5.7, §6.1, §6.3, §6.4, §7.1, §7.2, §8, §9 | New features: (1) full raw data capture — new `telemetry_raw` table mirrors every API field (incl. non-numeric `MAIN`/`HMI` firmware strings and unknown fields); best-effort numeric conversion via `_to_number()`; ingestion no longer assumes all values are numeric; document the API's non-fixed superset of fields (§5.7); clearer error logging names the failing stage/endpoint (#91). (2) refresh/update split — the default run is a fast data-only **refresh** (no metadata); new `-u/--update` maintenance pass refreshes column metadata, detects new columns, and reports API/firmware version (§7.2) (#92) |
+| 2.2 | 2026-09-17 | §2, §5.7, §6.3, §6.4, §7.1, §7.2, §10, §12 | `telemetry_raw` → `telemetry_text` (#93): only **non-numeric** values are stored (numeric data is no longer duplicated from `inverter_telemetry`); one row per `api_key`, updated only when the value changes; one-time `telemetry_text` migration drops the old `telemetry_raw` data |
 | 2.1 | 2026-09-17 | §1 | Overview now lists all command-line arguments accepted by `deye-logger.py` (full reference remains §8) |
