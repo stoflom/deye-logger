@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v8.1
+> **Status:** v8.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -116,7 +116,7 @@ The title bar consists of **two rows**, each of which **wraps into additional li
 | Row count | `#row-count` | Shows "N rows", "N metrics", or "N bins" |
 | View label | `#view-label` | Shows the current view name: Series / Data Grid / Histogram / Histogram Grid / Stats / Stats Grid |
 | Refresh indicator | `#refresh-status` | Hidden by default. Shows **"↻ refreshing ..."** while a background database refresh is running; cleared when the refresh completes or fails (v8.0 — #89) |
-| Range days | `#range-days` | Always visible. Shows the number of days in the selected date range as "N days" (or "1 day"). Count = number of calendar days from `from` to `to` inclusive; any fractional day (e.g. a partial first/last day of the range relative to available data) is **counted as a whole day** (`Math.ceil`). Updated whenever the date range changes, independent of the active view |
+| Range interval | `#range-days` | Always visible. Shows the **span of available data** within the selected range (first → last `device_timestamp` of the loaded rows; rows are returned ordered by `device_timestamp`) (v8.2 — #94): < 24 h → hours with one decimal, e.g. `6.5 hours` (exactly 1 h → `1 hour`); ≥ 24 h with a fractional remainder → days + hours, e.g. `3 days 4.5 hours`; exact whole days (after 0.1 h rounding) → `1 day` / `N days` (remainder rounding to 24.0 h carries into the days: `2 days 24.0 hours` → `3 days`). When the range has **no data rows** (or timestamps are unparseable), falls back to the inclusive calendar-day count from `from` to `to` ("N days" / "1 day"). Updated on every successful render, independent of the active view. Chart tick-step selection (§15.8) still uses the calendar-day count |
 | Version badge | `#version-badge` | Shows "FE x.x.x / BE y.y.y" |
 
 ### 2.3 Button Active State Styling
@@ -623,7 +623,7 @@ other modules → shared.ts + dom-refs.ts
 | `statsBtn` | `#stats-btn` | Stats view toggle button |
 | `rowCountEl` | `#row-count` | Row/metric count display |
 | `viewLabelEl` | `#view-label` | Current view name display |
-| `rangeDaysEl` | `#range-days` | Selected date range day count display (always visible) |
+| `rangeDaysEl` | `#range-days` | Selected range data-span interval display (always visible; v8.2 — #94) |
 | `versionBadgeEl` | `#version-badge` | Version string display |
 
 ---
@@ -1451,6 +1451,7 @@ This section tracks changes to the design document itself. Every modification to
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
+| 8.2 | 2026-09-14 | §2.2 | Status bar range interval shows the span of available data instead of a whole-day count (#94): `#range-days` displays `< 24 h` as hours with one decimal (`6.5 hours`), ≥ 24 h with fractional remainder as `3 days 4.5 hours`, and exact whole days (after 0.1 h rounding) as `1 day` / `N days`; no-data ranges fall back to the inclusive calendar-day count; `FRONTEND_VERSION` → 8.2.0 |
 | 8.0 | 2026-09-12 | §2.2, §3.3, §4, §6, §7.1.1, §8.1, §9.3, §10.3, §10.6, §11 | Background database refresh (#89): `↻ Refresh` no longer routes through `setView` — `runBackgroundRefresh()` runs `POST /api/refresh` + `GET /api/dates` while the current view stays visible and interactive (only `#refresh-btn` is disabled); a **"refreshing ..."** indicator (`#refresh-status`) is shown in the status bar while the update runs; on completion the current view is re-rendered; the `SetViewOptions.refresh` flag and `renderRefreshView()` are removed; refresh failure pushes a single error entry (Close → back → re-render); the waiting view (spinner) is kept for all data-loading `setView()` paths; `FRONTEND_VERSION` → 8.0.0 |
 | 7.4 | 2026-08-30 | §15.8 | Series chart renders **raw data** (#88): every row is plotted as a point at its actual timestamp on a linear full-range time axis (fixed 5/30/60-min ticks govern tick placement only — the v7.2 bucket flooring that dropped most points is removed; binning remains histogram-only); line segments are straight (`tension: 0`, no curve smoothing) so peaks are visible; tooltip titles use the hovered row's own timestamp; `FRONTEND_VERSION` → 7.4.0 |
 | 7.3 | 2026-08-30 | §2.1, §8.4, §16.1, §16.2, §16.3 | High/low thresholds for ordinary units are now based on the **observed range** (backend v4.2, #87): cutoff dropdowns re-described (high: `max − (100−x)%` of the max–min range, low: `min + x%`); tooltip `{method}` text `mean + z·σ` → `based on the observed max/min range` and `{threshold-desc}` `at the {cutoff}th percentile` → `top {100−cutoff}% of the observed range` (high rows) / `bottom {cutoff}% of the observed range` (low rows); percentage-unit columns (SOC) unchanged; `FRONTEND_VERSION` → 7.3.0 |
