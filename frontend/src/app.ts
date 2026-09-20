@@ -361,6 +361,7 @@ async function setView(
       waitingView.hide();
       infoView.show(message);
       showPanel("info");
+      updateRangeDays(); // no rows → calendar-day fallback (v8.2 — #94)
       enableAllControls();
       syncRefreshButton(); // v8.0 (#89) — keep refresh disabled while a background refresh is in flight
       updateNavButtonStates();
