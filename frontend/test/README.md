@@ -91,6 +91,17 @@ Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 | 1 | Every point plotted | Per column, dataset point count / min / max equal the raw `/api/data` values (no binning, peaks preserved), points in ascending timestamp order within the day; x-axis still spans the full day |
 | 2 | No smoothing | Every dataset has `tension === 0` and `showLine === true` (straight segments) |
 
+### `test_range_interval.py` — Status bar range interval (design §2.2, v8.2, #94)
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | Full day of data | `#range-days` shows `1 day` (23.98 h span rounds to 24.0 → whole day) |
+| 2 | Multi-day with remainder | `2026-08-01 → 2026-08-14` shows `13 days 12.9 hours` (also cross-checked against the API first/last `device_timestamp` span) |
+| 3 | Partial day | Hours-only format `<N> hours` (one decimal), matches API-derived span |
+| 4 | Remainder carry | `2026-07-21 → 2026-07-23` (23.97 h remainder) rounds to `3 days` |
+| 5 | Empty range | No data rows → calendar-day fallback (`5 days`) and info view shown |
+| 6 | Single sample | Zero span → `0 hours` |
+
 ### `test_background_refresh.py` — Background database refresh (design §10.3, #89)
 
 Requires the Deye Cloud sync to be **mocked** (no `.env` in the dev environment) — start the server with the mock ingestion script:
