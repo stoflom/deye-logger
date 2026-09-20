@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INVOCATION_DIR="$(pwd)"
 cd "$SCRIPT_DIR"
 
 # ── Defaults ──────────────────────────────────────────────────────
@@ -56,6 +57,13 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# ── Resolve relative -d path against the invocation directory ─────
+# (this script cd's into backend/, so "-d ../deye_solar_data.db" or
+# "-d test_solar_data.db" from the project root must be absolutised first)
+if [[ -n "$DB_PATH" && "$DB_PATH" != /* ]]; then
+  DB_PATH="$INVOCATION_DIR/$DB_PATH"
+fi
 
 # ── Build deno command ────────────────────────────────────────────
 CMD=("deno" "run" "-A" "main.ts")
