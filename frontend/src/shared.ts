@@ -412,11 +412,44 @@ export function isDateRange(): boolean {
 }
 
 /**
- * Update the status-bar day count for the selected date range.
- * Inclusive calendar-day count; fractional days count as whole days.
+ * Format a duration in ms as a days/hours interval for the status bar (v8.2, #94).
+ * < 24 h → "6.5 hours" (exactly 1 h → "1 hour").
+ * >= 24 h → "3 days 4.5 hours"; a fractional remainder rounding to 0 (or 24.0 h)
+ * collapses to / carries into whole days: "3 days".
+ */
+export function formatIntervalMs(ms: number): string {
+  const totalTenths = Math.round(ms / 360_000); // hours, 0.1 h resolution
+  const days = Math.floor(totalTenths / 240);
+  const remTenths = totalTenths - days * 240;
+  const remHours = remTenths / 10;
+  if (days === 0) {
+    return remTenths === 10 ? "1 hour" : `${remHours} hours`;
+  }
+  const dayStr = days === 1 ? "1 day" : `${days} days`;
+  return remTenths === 0 ? dayStr : `${dayStr} ${remHours} hours`;
+}
+
+/**
+ * Update the status-bar interval for the selected date range (v8.2, #94).
+ * Shows the span of available data (first → last device_timestamp of the loaded
+ * rows, which are returned in ascending timestamp order) as e.g. "6.5 hours"
+ * or "3 days 4.5 hours"; falls back to the inclusive calendar-day count when
+ * the range has no data rows.
  * Called on every successful render (setView STEP 5).
  */
 export function updateRangeDays(): void {
+  const rows = appState.rawDataRows;
+  if (rows.length > 0) {
+    // Same parsing convention as rowTimestampMs() in chart.ts
+    const parseTs = (ts: unknown): number =>
+      typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : Date.parse(String(ts));
+    const first = parseTs(rows[0].device_timestamp);
+    const last = parseTs(rows[rows.length - 1].device_timestamp);
+    if (!Number.isNaN(first) && !Number.isNaN(last) && last >= first) {
+      rangeDaysEl.textContent = formatIntervalMs(last - first);
+      return;
+    }
+  }
   const from = new Date(`${appState.dateRangeFrom}T00:00:00`);
   const to = new Date(`${appState.dateRangeTo}T00:00:00`);
   const days = Math.ceil((to.getTime() - from.getTime()) / 86_400_000) + 1;

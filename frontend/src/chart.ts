@@ -131,7 +131,7 @@ function buildFullRangeExtent(): {
 } {
   const start = new Date(`${appState.dateRangeFrom}T00:00:00`);
   // Inclusive calendar-day count (single day: from === to → 1 full day),
-  // same convention as updateRangeDays()
+  // same convention as the updateRangeDays() fallback (v8.2 — #94)
   const days = Math.ceil((new Date(`${appState.dateRangeTo}T00:00:00`).getTime() - start.getTime()) / 86_400_000) + 1;
 
   const stepMinutes = days <= 1 ? 5 : days <= 7 ? 30 : 60;

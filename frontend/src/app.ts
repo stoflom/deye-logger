@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "8.1.0";
+export const FRONTEND_VERSION = "8.2.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -397,7 +397,7 @@ async function setView(
     };
     viewLabelEl.textContent = viewLabels[view] ?? view;
 
-    // Status-bar day count for the selected range
+    // Status-bar interval for the selected range (data span, v8.2)
     updateRangeDays();
 
     // Push URL history
