@@ -40,20 +40,7 @@ TEST_DATE = "2026-07-27"  # Date with actual data
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-class TestResult:
-    def __init__(self):
-        self.passed = 0
-        self.failed = 0
-        self.failures = []
-
-    def check(self, condition: bool, desc: str):
-        if condition:
-            self.passed += 1
-            print(f"  ✓ {desc}")
-        else:
-            self.failed += 1
-            self.failures.append(desc)
-            print(f"  ✗ {desc}")
+from test_helpers import TestResult
 
 
 def take_screenshot(tester, filename, description=""):
@@ -266,14 +253,7 @@ def main():
             test_series_soc_axis(tester, t)
             test_histogram_axes(tester, t)
         finally:
-            print("\n" + "=" * 70)
-            print(f"Results: {t.passed}/{t.passed + t.failed} passed, {t.failed} failed")
-            if t.failed > 0:
-                print("\nFailed tests:")
-                for f in t.failures:
-                    print(f"  - {f}")
-            print("=" * 70)
-            sys.exit(1 if t.failed > 0 else 0)
+            sys.exit(t.summary())
 
 
 if __name__ == "__main__":

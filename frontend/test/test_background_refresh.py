@@ -38,6 +38,10 @@ if skill_path not in sys.path:
 from firefox_tester import FirefoxTester
 from selenium.webdriver.common.by import By
 
+from test_helpers import TestResult
+
+T = TestResult()
+
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
 TEST_DATE = "2026-07-27"  # Date with actual data
@@ -90,11 +94,7 @@ def wait_for(tester, predicate, timeout=REFRESH_TIMEOUT, interval=0.2):
 
 
 def check(name, condition, detail=""):
-    if condition:
-        print(f"  ✅ {name}")
-        return True
-    print(f"  ❌ {name}" + (f" — {detail}" if detail else ""))
-    return False
+    return T.check(name, condition, detail)
 
 
 def test_backend_mock(tester, failures):
@@ -199,11 +199,7 @@ def main():
         test_background_refresh("chart", "raw-data-chart-view", tester, failures)
         test_background_refresh("histogram", "histogram-view", tester, failures)
 
-    print("\n" + "═" * 50)
-    if failures:
-        print(f"❌ FAILED: {len(failures)} failure(s): {failures}")
-        sys.exit(1)
-    print("✅ ALL TESTS PASSED")
+    sys.exit(T.summary())
 
 
 if __name__ == "__main__":

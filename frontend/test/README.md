@@ -58,6 +58,34 @@ python3 test_button_states.py
 
 Screenshots are saved to `frontend/test/screenshots/` (ignored by git).
 
+### Verdict and exit codes (#96)
+
+Every script shares `test_helpers.TestResult` and ends with one
+unambiguous verdict line (and a matching exit code — `0` pass, `1` fail):
+
+```
+======================================================================
+✅ TESTS PASSED — 36/36 checks passed
+======================================================================
+```
+
+or, on failure (with the failed checks listed):
+
+```
+======================================================================
+❌ TESTS FAILED — 34/36 checks passed, 2 failed
+Failed checks:
+  - <check description>
+  - ...
+======================================================================
+```
+
+Run the whole suite in one go:
+
+```bash
+cd frontend/test && for f in test_*.py; do [ "${f%.py}" = "test_helpers" ] || python3 "$f"; done
+```
+
 ## What Is Tested
 
 ### `test_responsive_display.py` — Layout and rendering

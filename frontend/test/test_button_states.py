@@ -43,6 +43,8 @@ from firefox_tester import FirefoxTester
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 
+from test_helpers import TestResult
+
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
 TEST_DATE = "2026-07-27"  # Date with actual data
@@ -752,6 +754,8 @@ def main():
     # Start Firefox tester (headless)
     print("\n[Setup] Starting Firefox (headless mode)...")
 
+    t = TestResult()
+
     with FirefoxTester(headless=True) as tester:
         # Verify server is running
         print("[Setup] Checking if server is running...")
@@ -763,16 +767,23 @@ def main():
         # Run tests
         try:
             test_chart_view_button_states(tester)
+            t.check(True, "chart view button states")
             test_grid_view_button_states(tester)
+            t.check(True, "grid view button states")
             test_histogram_view_button_states(tester)
+            t.check(True, "histogram view button states")
             test_histogram_grid_view_button_states(tester)
+            t.check(True, "histogram-grid view button states")
             test_stats_view_button_states(tester)
+            t.check(True, "stats view button states")
             test_columns_select_button_states(tester)
+            t.check(True, "columns select button states")
 
             # Close columns panel before continuing
             navigate_to_view(tester, "chart")
 
             test_error_view_button_states(tester)
+            t.check(True, "error view button states")
 
             # After error, navigate to chart to continue
             # The error test restores fetch but the page is in error state
@@ -780,24 +791,26 @@ def main():
             navigate_to_view(tester, "chart")
 
             test_button_transition_chart_to_grid(tester)
+            t.check(True, "chart→grid transition button states")
             test_button_transition_normal_to_histogram(tester)
+            t.check(True, "chart→histogram transition button states")
             test_view_label_in_status_bar(tester)
+            t.check(True, "status bar view label")
 
         except AssertionError as e:
             print(f"\n✗ Test failed: {e}")
             tester.screenshot(os.path.join(SCREENSHOT_DIR, "error-state.png"))
             print(f"  Error screenshot saved to {SCREENSHOT_DIR}/error-state.png")
-            sys.exit(1)
+            t.check(False, f"assertion failure: {e}")
+            sys.exit(t.summary())
         except Exception as e:
             print(f"\n✗ Unexpected error: {e}")
             tester.screenshot(os.path.join(SCREENSHOT_DIR, "error-state.png"))
             print(f"  Error screenshot saved to {SCREENSHOT_DIR}/error-state.png")
-            raise
+            t.check(False, f"unexpected error: {e}")
+            sys.exit(t.summary())
 
-    print("\n" + "=" * 70)
-    print("All button state tests passed!")
     print(f"Screenshots saved to: {SCREENSHOT_DIR}")
-    print("=" * 70)
 
     # List generated screenshots
     screenshots = sorted(f for f in os.listdir(SCREENSHOT_DIR) if f.startswith("buttons-"))
@@ -807,6 +820,8 @@ def main():
             filepath = os.path.join(SCREENSHOT_DIR, s)
             size = os.path.getsize(filepath)
             print(f"  - {s} ({size:,} bytes)")
+
+    sys.exit(t.summary())
 
 
 if __name__ == "__main__":

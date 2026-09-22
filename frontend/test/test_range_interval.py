@@ -55,20 +55,7 @@ EMPTY_RANGE = ("2026-08-05", "2026-08-09")        # no data → "5 days"
 SINGLE_SAMPLE_DAY = "2026-08-14"  # one sample → "0 hours"
 
 
-class TestResult:
-    def __init__(self):
-        self.passed = 0
-        self.failed = 0
-        self.failures = []
-
-    def check(self, condition: bool, desc: str):
-        if condition:
-            self.passed += 1
-            print(f"  ✓ {desc}")
-        else:
-            self.failed += 1
-            self.failures.append(desc)
-            print(f"  ✗ {desc}")
+from test_helpers import TestResult
 
 
 def take_screenshot(tester, filename, description=""):
@@ -221,14 +208,7 @@ def main():
             test_empty_range_fallback(tester, t)
             test_single_sample(tester, t)
         finally:
-            print("\n" + "=" * 70)
-            print(f"Results: {t.passed}/{t.passed + t.failed} passed, {t.failed} failed")
-            if t.failed > 0:
-                print("\nFailed tests:")
-                for f in t.failures:
-                    print(f"  - {f}")
-            print("=" * 70)
-            sys.exit(1 if t.failed > 0 else 0)
+            sys.exit(t.summary())
 
 
 if __name__ == "__main__":

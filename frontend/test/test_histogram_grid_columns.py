@@ -42,20 +42,7 @@ CROSS_CHECK_LABELS = {"Inverter Output Power L1L2", "SOC"}  # display labels in 
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-class TestResult:
-    def __init__(self):
-        self.passed = 0
-        self.failed = 0
-        self.failures = []
-
-    def check(self, condition: bool, desc: str):
-        if condition:
-            self.passed += 1
-            print(f"  ✓ {desc}")
-        else:
-            self.failed += 1
-            self.failures.append(desc)
-            print(f"  ✗ {desc}")
+from test_helpers import TestResult
 
 
 def api_histogram(columns: str) -> dict:
@@ -211,14 +198,7 @@ def main():
 
 
 def summary(t: TestResult) -> int:
-    print("\n" + "=" * 70)
-    print(f"Results: {t.passed}/{t.passed + t.failed} passed, {t.failed} failed")
-    if t.failures:
-        print("\nFailed tests:")
-        for f in t.failures:
-            print("  - " + f)
-    print("=" * 70)
-    return 1 if t.failed else 0
+    return t.summary()
 
 
 if __name__ == "__main__":

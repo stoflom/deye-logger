@@ -50,20 +50,7 @@ NORMAL_LABEL = "Inverter Output Power L1L2"
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-class TestResult:
-    def __init__(self):
-        self.passed = 0
-        self.failed = 0
-        self.failures = []
-
-    def check(self, condition: bool, desc: str):
-        if condition:
-            self.passed += 1
-            print(f"  ✓ {desc}")
-        else:
-            self.failed += 1
-            self.failures.append(desc)
-            print(f"  ✗ {desc}")
+from test_helpers import TestResult
 
 
 # ── API ground truth ────────────────────────────────────────────────
@@ -342,6 +329,7 @@ def main():
     rows, stats = check_fixture(t)
     if t.failed > 0:
         print("\nFixture invalid — aborting (no server data on this date?).")
+        t.summary()
         sys.exit(1)
 
     print("\n[Setup] Starting Firefox (headless mode)...")
@@ -354,17 +342,11 @@ def main():
         except Exception as exc:  # re-raised after summary so errors are visible
             uncaught = exc
         finally:
-            print("\n" + "=" * 70)
-            print(f"Results: {t.passed}/{t.passed + t.failed} passed, {t.failed} failed")
-            if t.failed > 0:
-                print("\nFailed tests:")
-                for f in t.failures:
-                    print(f"  - {f}")
-            print("=" * 70)
+            t.summary()
 
     if uncaught is not None:
         raise uncaught
-    sys.exit(1 if t.failed > 0 else 0)
+    sys.exit(0 if t.failed == 0 else 1)
 
 
 if __name__ == "__main__":
