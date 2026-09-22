@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v8.2
+> **Status:** v8.3
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -784,6 +784,16 @@ Each histogram dataset carries per-bin `min[]` and `max[]` arrays (parallel to t
 - **Tooltip:** the `label` callback appends the range, e.g. `Daily Energy (kWh): 10.5 (range 9.8–10.7)`; omitted when `min === max`. Range datasets are filtered out of the tooltip and the legend (the legend stays on the averages).
 - Missing/absent `min`/`max` arrays are treated as not available (no range rendered) — the renderer degrades gracefully to averages only.
 
+#### 10.2.2 Histogram Grid Columns (avg / min / max)
+
+The histogram grid view (`setView("histogram-grid")`) shows **three columns per measurement** (v8.3 — #95), fed from the same `/api/histogram` response arrays already used by the charts:
+
+- **`… Avg`** — the bin average from the dataset's `data[]` (field `label`).
+- **`… Min`** — the per-bin minimum from `min[]` (field `label::min`); column omitted when `min` is absent.
+- **`… Max`** — the per-bin maximum from `max[]` (field `label::max`); column omitted when `max` is absent.
+
+Header names are `"{Label} ({Unit}) Avg"` / `"… Min"` / `"… Max"` (unit suffix dropped when the dataset has no unit); the leading `Time` column (bin start labels) is unchanged. `histogramResultToRows()` fills the matching `label`, `label::min` and `label::max` fields per bin row (`null` → em-dash, as elsewhere in the grid).
+
 ### 10.3 Refresh Flow (background — v8.0, #89)
 
 Refresh no longer routes through `setView`. Clicking `↻ Refresh` starts
@@ -1451,6 +1461,7 @@ This section tracks changes to the design document itself. Every modification to
 | 6.0 | 2026-08-28 | §10.2, §11 | Histogram per-bin value range: datasets carry per-bin `min[]`/`max[]` from `/api/histogram`; combined and split renderers draw a low-opacity floating-bar shaded range (`[min,max]`) behind each average bar and append the range to the tooltip (§10.2.1); `FRONTEND_VERSION` → 6.0.0 (#81) |
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
+| 8.3 | 2026-09-22 | §10.2.2, new | Histogram grid shows three columns per measurement — `Avg` (bin average, `data[]`), `Min` (`min[]`) and `Max` (`max[]`) — from the existing `/api/histogram` response; grid rows gain `label::min` / `label::max` fields (#95); `FRONTEND_VERSION` → 8.3.0 |
 | 8.2 | 2026-09-14 | §2.2 | Status bar range interval shows the span of available data instead of a whole-day count (#94): `#range-days` displays `< 24 h` as hours with one decimal (`6.5 hours`), ≥ 24 h with fractional remainder as `3 days 4.5 hours`, and exact whole days (after 0.1 h rounding) as `1 day` / `N days`; no-data ranges fall back to the inclusive calendar-day count; `FRONTEND_VERSION` → 8.2.0 |
 | 8.0 | 2026-09-12 | §2.2, §3.3, §4, §6, §7.1.1, §8.1, §9.3, §10.3, §10.6, §11 | Background database refresh (#89): `↻ Refresh` no longer routes through `setView` — `runBackgroundRefresh()` runs `POST /api/refresh` + `GET /api/dates` while the current view stays visible and interactive (only `#refresh-btn` is disabled); a **"refreshing ..."** indicator (`#refresh-status`) is shown in the status bar while the update runs; on completion the current view is re-rendered; the `SetViewOptions.refresh` flag and `renderRefreshView()` are removed; refresh failure pushes a single error entry (Close → back → re-render); the waiting view (spinner) is kept for all data-loading `setView()` paths; `FRONTEND_VERSION` → 8.0.0 |
 | 7.4 | 2026-08-30 | §15.8 | Series chart renders **raw data** (#88): every row is plotted as a point at its actual timestamp on a linear full-range time axis (fixed 5/30/60-min ticks govern tick placement only — the v7.2 bucket flooring that dropped most points is removed; binning remains histogram-only); line segments are straight (`tension: 0`, no curve smoothing) so peaks are visible; tooltip titles use the hovered row's own timestamp; `FRONTEND_VERSION` → 7.4.0 |

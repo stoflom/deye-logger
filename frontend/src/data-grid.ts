@@ -84,8 +84,24 @@ function resizeRawDataGrid(): void {
 
 // ------------------------------------------------------------------
 // Column definitions — histogram grid
+// Three columns per measurement — Avg / Min / Max (design §10.2.2,
+// v8.3, #95) — fed from the /api/histogram data/min/max arrays.
 // ------------------------------------------------------------------
-export function buildHistogramGridCols(datasets: { label: string }[]): ColDef[] {
+interface HistogramGridDataset {
+  label: string;
+  min?: number[];
+  max?: number[];
+}
+
+export function buildHistogramGridCols(datasets: HistogramGridDataset[]): ColDef[] {
+  const valueFormatter = (params: { value: unknown }) => {
+    if (params.value === null || params.value === undefined) return "\u2014";
+    if (typeof params.value === "number") {
+      return params.value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    }
+    return String(params.value);
+  };
+
   const cols: ColDef[] = [
     {
       field: "device_timestamp",
@@ -100,23 +116,11 @@ export function buildHistogramGridCols(datasets: { label: string }[]): ColDef[] 
   for (const ds of datasets) {
     const meta = appState.columnMetadata.find((c: ColumnMeta) => c.label === ds.label);
     const unit = extractUnit(meta, ds.label);
-    const headerName = unit ? `${ds.label} (${unit})` : ds.label;
-    cols.push({
-      field: ds.label,
-      headerName,
-      sortable: true,
-      filter: true,
-      resizable: true,
-      flex: 1,
-      minWidth: 100,
-      valueFormatter: (params: { value: unknown }) => {
-        if (params.value === null || params.value === undefined) return "\u2014";
-        if (typeof params.value === "number") {
-          return params.value.toLocaleString(undefined, { maximumFractionDigits: 1 });
-        }
-        return String(params.value);
-      },
-    });
+    const base = unit ? `${ds.label} (${unit})` : ds.label;
+    const common = { sortable: true, filter: true, resizable: true, flex: 1, minWidth: 100 };
+    cols.push({ field: ds.label, headerName: `${base} Avg`, ...common, valueFormatter });
+    if (ds.min) cols.push({ field: `${ds.label}::min`, headerName: `${base} Min`, ...common, valueFormatter });
+    if (ds.max) cols.push({ field: `${ds.label}::max`, headerName: `${base} Max`, ...common, valueFormatter });
   }
   return cols;
 }
