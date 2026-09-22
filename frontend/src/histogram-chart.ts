@@ -245,6 +245,9 @@ export async function fetchHistogramData(): Promise<HistogramResponse> {
 
 // ------------------------------------------------------------------
 // Transform histogram API response into grid-compatible rows.
+// Each measurement contributes three fields: the bin average (label),
+// the per-bin minimum (label::min) and maximum (label::max) — design
+// §10.2.2 (v8.3, #95).
 // ------------------------------------------------------------------
 export function histogramResultToRows(result: HistogramResponse): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
@@ -252,6 +255,8 @@ export function histogramResultToRows(result: HistogramResponse): Record<string,
     const row: Record<string, unknown> = { device_timestamp: result.labels[i] };
     for (const ds of result.datasets) {
       row[ds.label] = ds.data[i] ?? null;
+      row[`${ds.label}::min`] = ds.min ? ds.min[i] ?? null : null;
+      row[`${ds.label}::max`] = ds.max ? ds.max[i] ?? null : null;
     }
     rows.push(row);
   }
