@@ -28,6 +28,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 
+from test_helpers import TestResult, guard
+
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
 TEST_DATE = "2026-07-27"  # Date with actual data
@@ -475,6 +477,8 @@ def main():
     # Start Firefox tester (headless)
     print("\n[Setup] Starting Firefox (headless mode)...")
 
+    t = TestResult()
+
     with FirefoxTester(headless=True) as tester:
         # Verify server is running
         print("[Setup] Checking if server is running...")
@@ -487,30 +491,39 @@ def main():
         # Run tests
         try:
             test_histogram_controls_in_title_bar(tester)
+            t.check(True, "histogram controls in title bar")
             test_title_bar_wrapping(tester)
+            t.check(True, "title bar wrapping")
             test_view_modes_render(tester)
+            t.check(True, "all view modes render")
             test_summary_cards_scaling(tester)
+            t.check(True, "summary cards scaling")
             test_cards_stacking_at_mobile(tester)
+            t.check(True, "card stacking at mobile")
             test_display_panel_scroll(tester)
+            t.check(True, "display panel scroll")
             test_histogram_control_visibility(tester)
+            t.check(True, "histogram control visibility")
             test_day_filter_selector(tester)
+            t.check(True, "day filter selector")
             test_all_view_modes_with_histogram_controls(tester)
+            t.check(True, "all view modes with histogram controls")
             test_single_scroll_pane_structure(tester)
+            t.check(True, "single scroll pane structure")
         except AssertionError as e:
             print(f"\n✗ Test failed: {e}")
             tester.screenshot(os.path.join(SCREENSHOT_DIR, "error-state.png"))
             print(f"  ✓ Error screenshot saved to {SCREENSHOT_DIR}/error-state.png")
-            sys.exit(1)
+            t.check(False, f"assertion failure: {e}")
+            sys.exit(t.summary())
         except Exception as e:
             print(f"\n✗ Unexpected error: {e}")
             tester.screenshot(os.path.join(SCREENSHOT_DIR, "error-state.png"))
             print(f"  ✓ Error screenshot saved to {SCREENSHOT_DIR}/error-state.png")
-            raise
+            t.check(False, f"unexpected error: {e}")
+            sys.exit(t.summary())
 
-    print("\n" + "=" * 70)
-    print("All tests completed!")
     print(f"Screenshots saved to: {SCREENSHOT_DIR}")
-    print("=" * 70)
 
     # List generated screenshots
     screenshots = os.listdir(SCREENSHOT_DIR)
@@ -521,7 +534,9 @@ def main():
             size = os.path.getsize(filepath)
             print(f"  - {s} ({size:,} bytes)")
 
+    sys.exit(t.summary())
+
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)
