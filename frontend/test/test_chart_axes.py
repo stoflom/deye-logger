@@ -40,7 +40,7 @@ TEST_DATE = "2026-07-27"  # Date with actual data
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 
 def take_screenshot(tester, filename, description=""):
@@ -257,4 +257,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)

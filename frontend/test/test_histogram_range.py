@@ -44,7 +44,7 @@ SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 CROSS_CHECK_COLUMNS = "current_power,battery_soc"
 
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 
 def api_histogram(columns: str) -> dict:
@@ -236,4 +236,4 @@ def summary(t: TestResult) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    guard(main)

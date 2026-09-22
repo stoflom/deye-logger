@@ -43,7 +43,7 @@ NUMERIC_COLUMNS = ["current_power", "total_dc_power", "battery_power", "grid_pow
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 
 def fetch_raw_rows():
@@ -201,15 +201,13 @@ def main():
             tester.wait_for_element(By.ID, "summary-cards")
             wait_for_series_chart(tester)
             test_series_no_smoothing(tester, t)
-        except Exception as exc:  # re-raised after summary so errors are visible
+        except Exception as exc:  # recorded and reported in the single verdict below
             uncaught = exc
-        finally:
-            t.summary()
 
     if uncaught is not None:
-        raise uncaught
-    sys.exit(0 if t.failed == 0 else 1)
+        t.check(False, f"unexpected error: {uncaught!r}")
+    sys.exit(t.summary())
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)

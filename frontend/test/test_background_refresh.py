@@ -38,7 +38,7 @@ if skill_path not in sys.path:
 from firefox_tester import FirefoxTester
 from selenium.webdriver.common.by import By
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 T = TestResult()
 
@@ -203,4 +203,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)

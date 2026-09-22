@@ -50,7 +50,7 @@ NORMAL_LABEL = "Inverter Output Power L1L2"
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 
 # ── API ground truth ────────────────────────────────────────────────
@@ -339,15 +339,13 @@ def main():
             test_chart_view(tester, t, rows, stats)
             test_histogram_view(tester, t)
             test_stats_view(tester, t)
-        except Exception as exc:  # re-raised after summary so errors are visible
+        except Exception as exc:  # recorded and reported in the single verdict below
             uncaught = exc
-        finally:
-            t.summary()
 
     if uncaught is not None:
-        raise uncaught
-    sys.exit(0 if t.failed == 0 else 1)
+        t.check(False, f"unexpected error: {uncaught!r}")
+    sys.exit(t.summary())
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)

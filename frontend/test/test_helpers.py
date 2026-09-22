@@ -55,3 +55,24 @@ class TestResult:
 def finish(t: "TestResult") -> None:
     """Print the final verdict and exit with the matching code."""
     sys.exit(t.summary())
+
+
+def guard(main):
+    """Run a test script's main() with a guaranteed verdict.
+
+    main() usually ends with sys.exit(t.summary()); this wrapper catches
+    anything that escapes (setup/infra errors such as a failed navigate)
+    and still prints the ❌ verdict with exit code 1, so every run ends
+    with one unambiguous message.
+    """
+    try:
+        code = main()
+    except SystemExit:
+        raise
+    except Exception as e:  # noqa: BLE001 — deliberate: any escape is a failure
+        t = TestResult()
+        t.check(False, f"unexpected error: {e!r}")
+        t.summary()
+        sys.exit(1)
+    if code is not None:
+        sys.exit(code)

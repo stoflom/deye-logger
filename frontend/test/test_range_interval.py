@@ -55,7 +55,7 @@ EMPTY_RANGE = ("2026-08-05", "2026-08-09")        # no data → "5 days"
 SINGLE_SAMPLE_DAY = "2026-08-14"  # one sample → "0 hours"
 
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 
 def take_screenshot(tester, filename, description=""):
@@ -212,4 +212,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)

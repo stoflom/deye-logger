@@ -42,7 +42,7 @@ CROSS_CHECK_LABELS = {"Inverter Output Power L1L2", "SOC"}  # display labels in 
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 
 def api_histogram(columns: str) -> dict:
@@ -202,4 +202,4 @@ def summary(t: TestResult) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    guard(main)

@@ -28,7 +28,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 
-from test_helpers import TestResult
+from test_helpers import TestResult, guard
 
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
@@ -539,4 +539,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    guard(main)
