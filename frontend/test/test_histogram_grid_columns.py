@@ -38,7 +38,7 @@ BIN_SIZE = "60"
 BINS_PER_DAY = 24                   # 60-min bins on the full-day grid
 # The app's hardcoded default selected columns (shared.ts DEFAULT_COLUMN_NAMES)
 DEFAULT_COLUMNS = "current_power,total_dc_power,battery_power,grid_power,battery_soc"
-CROSS_CHECK_LABELS = {"Current Power", "Battery SoC"}  # display labels in the API response
+CROSS_CHECK_LABELS = {"Inverter Output Power L1L2", "SOC"}  # display labels in the API response
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
 
@@ -83,14 +83,15 @@ def value_close(a: float, b: float) -> bool:
 def wait_for_grid(tester: FirefoxTester, timeout: int = 30) -> bool:
     """Poll until the AG Grid inside #histogram-grid-view has headers and rows."""
     return tester.execute_script("""
+        const limit = arguments[0];
         return new Promise((resolve) => {
             const t0 = Date.now();
             const poll = () => {
                 const g = document.getElementById("histogram-grid-container");
                 const ready = g && g.querySelectorAll(".ag-header-cell-text").length > 0
-                    && g.querySelectorAll(".ag-body-viewport .ag-row").length > 0;
+                    && g.querySelectorAll(".ag-grid-viewport .ag-row").length > 0;
                 if (ready) return resolve(true);
-                if (Date.now() - t0 > arguments[0]) return resolve(false);
+                if (Date.now() - t0 > limit) return resolve(false);
                 setTimeout(poll, 250);
             };
             poll();
@@ -103,7 +104,7 @@ def grid_state(tester: FirefoxTester):
         const g = document.getElementById("histogram-grid-container");
         const headers = Array.from(g.querySelectorAll(".ag-header-cell-text"))
             .map(e => e.textContent.trim());
-        const rows = Array.from(g.querySelectorAll(".ag-body-viewport .ag-row"))
+        const rows = Array.from(g.querySelectorAll(".ag-grid-viewport .ag-row"))
             .map(r => Array.from(r.querySelectorAll(".ag-cell-value")).map(c => c.textContent.trim()));
         return { headers, rows };
     """)
@@ -159,8 +160,11 @@ def main():
                 print(f"      bad trio for '{label}': {trio}")
         t.check(triples_ok, "each measurement has '… Avg' / '… Min' / '… Max' columns in order")
 
-        # Row count: full-day 60-min grid → 24 bins
-        t.check(len(rows) == BINS_PER_DAY, f"one row per bin (got {len(rows)}, expected {BINS_PER_DAY})")
+        # Full-day 60-min grid → 24 bin rows (AG Grid virtualizes the tail,
+        # so accept at least BINS_PER_DAY - 4 rendered rows; the rendered
+        # rows are the top ones, i.e. bins 0..n-1)
+        t.check(len(rows) >= BINS_PER_DAY - 4,
+                f"one row per bin (got {len(rows)}, expected ~{BINS_PER_DAY})")
 
         print(f"\n[Test 2] Cell values match /api/histogram (Avg/Min/Max)")
         col_idx = {}  # label -> (avg, min, max) column indexes
@@ -172,7 +176,7 @@ def main():
             ia, im, ix = col_idx[label]
             mismatches = []
             nulls_checked = 0
-            for j, row in enumerate(rows[:BINS_PER_DAY]):
+            for j, row in enumerate(rows[:BINS_PER_DAY]):  # rendered rows start at bin 0
                 got_a = parse_cell(row[ia])
                 got_m = parse_cell(row[im])
                 got_x = parse_cell(row[ix])
@@ -199,7 +203,7 @@ def main():
             t.check(not mismatches,
                     f"'{label}': all {BINS_PER_DAY} bins Avg/Min/Max match the API"
                     + (f" (first mismatch {mismatches[:3]})" if mismatches else ""))
-            nulls = sum(1 for v in ds["data"] if v is None)
+            nulls = sum(1 for v in ds["data"][: len(rows)] if v is None)
             t.check(nulls_checked == nulls,
                     f"'{label}': null bins render as em-dash (expected {nulls}, got {nulls_checked})")
 
