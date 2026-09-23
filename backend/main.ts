@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-const BACKEND_VERSION = "4.4.0";
+const BACKEND_VERSION = "4.5.0";
 
 import express from "npm:express";
 import { DatabaseSync } from "node:sqlite";
@@ -130,6 +130,26 @@ function queryTelemetryBetween(db: DatabaseSync, columns: string[], fromTs: stri
   return stmt.all(fromTs, toTs);
 }
 
+// Data span (design v4.5 §2.0, #97): MIN/MAX device_timestamp over the same
+// WHERE clause as the data query (including dayFilter when provided).
+// first/last are null when no rows match.
+function querySpan(
+  db: DatabaseSync,
+  fromTs: string,
+  toTs: string,
+  dayWhereClause = "",
+  queryArgs: (string | number)[] = [fromTs, toTs],
+): { first: string | null; last: string | null } {
+  const row = db
+    .prepare(
+      `SELECT MIN(device_timestamp) AS first, MAX(device_timestamp) AS last
+       FROM inverter_telemetry
+       WHERE device_timestamp >= ? AND device_timestamp <= ?${dayWhereClause}`,
+    )
+    .get(...queryArgs) as { first?: string | null; last?: string | null } | undefined;
+  return { first: row?.first ?? null, last: row?.last ?? null };
+}
+
 // ── Express app ──────────────────────────────────────────────
 const app = express();
 
@@ -185,7 +205,7 @@ app.get("/api/data", async (req: express.Request, res: express.Response) => {
     }
     const rows = queryTelemetryBetween(db, parsedCols, from, to);
 
-    res.json({ rows });
+    res.json({ rows, span: querySpan(db, from, to) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -214,7 +234,7 @@ app.get("/api/data-range", async (req: express.Request, res: express.Response) =
     }
     const rows = queryTelemetryBetween(db, parsedCols, fromTs, toTs);
 
-    res.json({ rows });
+    res.json({ rows, span: querySpan(db, fromTs, toTs) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -264,7 +284,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     const rows = stmt.all(...queryArgs) as Record<string, unknown>[];
 
     if (rows.length === 0) {
-      res.json({ labels: [], datasets: [], maxValues: {} });
+      res.json({ labels: [], datasets: [], maxValues: {}, span: { first: null, last: null } });
       return;
     }
 
@@ -278,7 +298,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     });
 
     if (numericCols.length === 0) {
-      res.json({ labels: [], datasets: [], maxValues: {} });
+      res.json({ labels: [], datasets: [], maxValues: {}, span: { first: null, last: null } });
       return;
     }
 
@@ -324,7 +344,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
     // 24:00 (multi-day rows are binned together by time-of-day) so the
     // x-axis spans the whole day; empty bins carry nulls (#85, design §2.6).
     if (binMap.size === 0) {
-      res.json({ labels: [], datasets: [], maxValues: {} });
+      res.json({ labels: [], datasets: [], maxValues: {}, span: { first: null, last: null } });
       return;
     }
     const sortedKeys: number[] = [];
@@ -386,7 +406,7 @@ app.get("/api/histogram", async (req: express.Request, res: express.Response) =>
       maxValues[p.label] = { value: p.value, timestamp: p.timestamp };
     }
 
-    res.json({ labels, datasets, maxValues });
+    res.json({ labels, datasets, maxValues, span: querySpan(db, fromTs, toTs, dayWhereClause, queryArgs) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -483,7 +503,7 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
     const rows = stmt.all(...queryArgs) as Record<string, unknown>[];
 
     if (rows.length === 0) {
-      res.json({ stats: [] });
+      res.json({ stats: [], span: { first: null, last: null } });
       return;
     }
 
@@ -545,7 +565,10 @@ app.get("/api/stats", async (req: express.Request, res: express.Response) => {
       });
     }
 
-    res.json({ stats });
+    const span = stats.length > 0
+      ? querySpan(db, fromTs, toTs, dayWhereClause, queryArgs)
+      : { first: null, last: null };
+    res.json({ stats, span });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

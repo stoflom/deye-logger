@@ -6,7 +6,7 @@
 /// <reference lib="dom" />
 
 // major.minor must agree with the design doc version (frontend-design.md **Status**)
-export const FRONTEND_VERSION = "8.3.0";
+export const FRONTEND_VERSION = "8.4.0";
 
 import { ModuleRegistry } from "ag-grid-community";
 import { CsvExportModule, ColumnAutoSizeModule, TextFilterModule, NumberFilterModule, DateFilterModule } from "ag-grid-community";
@@ -17,6 +17,7 @@ Chart.register(...registerables);
 
 import {
   appState,
+  type DataSpan,
   dateFromInput,
   dateToInput,
   refreshBtn,
@@ -86,7 +87,9 @@ interface SetViewOptions {
 // Pure data fetcher — no rendering, no control management.
 // Returns raw data rows; caller is responsible for lifecycle.
 // ------------------------------------------------------------------
-async function fetchRawDataRows(updateWaiting: (text: string) => void): Promise<Record<string, unknown>[]> {
+async function fetchRawDataRows(
+  updateWaiting: (text: string) => void,
+): Promise<{ rows: Record<string, unknown>[]; span: DataSpan | null }> {
   updateWaiting("Fetching raw data…");
 
   const cols = [...appState.selectedColumnNames];
@@ -113,7 +116,8 @@ async function fetchRawDataRows(updateWaiting: (text: string) => void): Promise<
   }
 
   const res = await fetchWithTimeout(url, 30_000);
-  return (await res.json() as { rows: Record<string, unknown>[] }).rows;
+  const parsed = (await res.json()) as { rows: Record<string, unknown>[]; span?: DataSpan };
+  return { rows: parsed.rows, span: parsed.span ?? null }; // span — v8.4 (#97)
 }
 
 // ------------------------------------------------------------------
@@ -121,8 +125,9 @@ async function fetchRawDataRows(updateWaiting: (text: string) => void): Promise<
 // Each renderer calls updateWaiting() before async operations.
 // ------------------------------------------------------------------
 async function renderRawDataChartView(updateWaiting: (text: string) => void): Promise<RenderOk> {
-  const rows = await fetchRawDataRows(updateWaiting);
+  const { rows, span } = await fetchRawDataRows(updateWaiting);
   appState.rawDataRows = rows;
+  appState.rangeSpan = span; // v8.4 (#97) — status-bar interval (§10.0)
   rowCountEl.textContent = `${rows.length.toLocaleString()} rows`;
 
   updateSummaryCards(null);
@@ -132,8 +137,9 @@ async function renderRawDataChartView(updateWaiting: (text: string) => void): Pr
 }
 
 async function renderRawDataGridView(updateWaiting: (text: string) => void): Promise<RenderOk> {
-  const rows = await fetchRawDataRows(updateWaiting);
+  const { rows, span } = await fetchRawDataRows(updateWaiting);
   appState.rawDataRows = rows;
+  appState.rangeSpan = span; // v8.4 (#97) — status-bar interval (§10.0)
   rowCountEl.textContent = `${rows.length.toLocaleString()} rows`;
 
   updateSummaryCards(null);

@@ -47,8 +47,16 @@ export interface StatsEntry {
   low: StatsThreshold;
 }
 
+// Data span (backend v4.5 §2.0, #97): first/last device_timestamp over the
+// rows matching the query (including dayFilter); both null when no data.
+export interface DataSpan {
+  first: string | null;
+  last: string | null;
+}
+
 export interface StatsResponse {
   stats: StatsEntry[];
+  span?: DataSpan;
 }
 
 // ------------------------------------------------------------------
@@ -146,6 +154,7 @@ export const appState = {
   rawDataRows: [] as Array<Record<string, unknown>>,
   binnedDataRows: [] as Array<Record<string, unknown>>,
   statsResult: null as StatsResponse | null,
+  rangeSpan: null as DataSpan | null, // v8.4 (#97) — span field of the last data-endpoint response
   rawDataGridApi: null as GridApi | null,
   rawDataChartInstance: null as Chart | null,
   activeView: "chart" as ViewMode,
@@ -430,21 +439,20 @@ export function formatIntervalMs(ms: number): string {
 }
 
 /**
- * Update the status-bar interval for the selected date range (v8.2, #94).
- * Shows the span of available data (first → last device_timestamp of the loaded
- * rows, which are returned in ascending timestamp order) as e.g. "6.5 hours"
- * or "3 days 4.5 hours"; falls back to the inclusive calendar-day count when
- * the range has no data rows.
+ * Update the status-bar interval for the selected date range (v8.2, #94;
+ * backend-provided span v8.4, #97).
+ * Shows the span of available data — the `span` field (first → last
+ * device_timestamp over the rows feeding the current view, including the
+ * day filter) stored in appState.rangeSpan by every renderer — as e.g.
+ * "6.5 hours" or "3 days 4.5 hours"; falls back to the inclusive
+ * calendar-day count when no data matches the query.
  * Called on every successful render (setView STEP 5).
  */
 export function updateRangeDays(): void {
-  const rows = appState.rawDataRows;
-  if (rows.length > 0) {
-    // Same parsing convention as rowTimestampMs() in chart.ts
-    const parseTs = (ts: unknown): number =>
-      typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : Date.parse(String(ts));
-    const first = parseTs(rows[0].device_timestamp);
-    const last = parseTs(rows[rows.length - 1].device_timestamp);
+  const span = appState.rangeSpan;
+  if (span?.first && span?.last) {
+    const first = Date.parse(span.first);
+    const last = Date.parse(span.last);
     if (!Number.isNaN(first) && !Number.isNaN(last) && last >= first) {
       rangeDaysEl.textContent = formatIntervalMs(last - first);
       return;

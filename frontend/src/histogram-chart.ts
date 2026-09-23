@@ -17,6 +17,7 @@ import {
   histogramScroll,
   fetchWithTimeout,
   RenderOk,
+  type DataSpan,
 } from "./shared";
 
 // ------------------------------------------------------------------
@@ -45,6 +46,7 @@ export interface HistogramResponse {
   labels: string[];
   datasets: HistogramDataset[];
   maxValues: Record<string, { value: number; timestamp: string }>;
+  span?: DataSpan; // v8.4 (#97) — data span for the status-bar interval
 }
 
 // ------------------------------------------------------------------
@@ -230,6 +232,9 @@ export async function fetchHistogramData(): Promise<HistogramResponse> {
 
   const res = await fetchWithTimeout(`/api/histogram?${params}`, 30_000);
   const result: HistogramResponse = await res.json();
+
+  // Data span for the status-bar interval (v8.4, #97 — §10.0)
+  appState.rangeSpan = result.span ?? null;
 
   // Cache for reuse
   histogramLastApiResult = result;

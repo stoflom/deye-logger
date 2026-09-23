@@ -276,6 +276,7 @@ export async function renderStatsView(
   const res = await fetchWithTimeout(url, 30_000);
   const result = (await res.json()) as StatsResponse;
   appState.statsResult = result;
+  appState.rangeSpan = result.span ?? null; // v8.4 (#97) — status-bar interval (§10.0)
 
   updateWaiting(asGrid ? "Building stats grid…" : "Building stat cards…");
   statsViewPanel.classList.toggle("stats-grid-mode", asGrid);
