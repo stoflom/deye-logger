@@ -1,6 +1,6 @@
 # Backend Design Document — Deye Logger Viewer
 
-> **Status:** v4.4
+> **Status:** v4.5
 > **Scope:** Deno + Express server, SQLite (read-only), REST API for inverter telemetry data
 > **Language:** TypeScript (via Deno with npm: packages)
 > **Runtime:** Deno with `node:sqlite`, Express.js
@@ -94,6 +94,20 @@ The backend only reads the `inverter_telemetry` table (primary key on `device_ti
 ---
 
 ## 2. API Endpoints
+
+### 2.0 Data Span (`span` field — v4.5, #97)
+
+The responses of `/api/data`, `/api/data-range`, `/api/histogram`, and `/api/stats` include a `span` object:
+
+```json
+{ "first": "2025-07-20 00:00:00", "last": "2025-07-27 22:10:00" }
+```
+
+- `first` / `last` are the **MIN / MAX `device_timestamp`** over the rows matching the query — the *same* WHERE clause as the data itself, **including `dayFilter`** when present. Timestamps are returned exactly as stored in the database.
+- Both are `null` when no rows match the query (or no numeric columns are found, for histogram/stats).
+- **Semantics:** the span of the data that actually feeds the view/aggregation — *not* the calendar width of the selected range. With `dayFilter=mon`, if the range contains three full Mondays and a fourth Monday with data only up to 12:00, `span` covers first-Monday → fourth-Monday 12:00 (≈ "3 days 12 hours" of data included in the aggregation), not the full calendar range.
+- Computed with a single lightweight aggregate query (`SELECT MIN(device_timestamp), MAX(device_timestamp)`) using the identical WHERE clause and arguments as the data query.
+- Purpose: the frontend status-bar interval display (`#range-days`, frontend design §2.2 / §10.0) shows this span in **every** view. It is required for histogram (whose `labels` are time-of-day strings with dates collapsed) and stats (which only expose per-column min/max timestamps), and makes chart/grid consistent instead of parsing row timestamps client-side.
 
 All API endpoints respond with **JSON** and are prefixed with `/api/`.
 
@@ -226,6 +240,7 @@ GET /api/data?date=2025-07-27&columns=daily_energy,battery_soc,current_power,bat
 | Field | Type | Description |
 |-------|------|-------------|
 | `rows` | array | Array of row objects, each containing only the requested columns plus `device_timestamp`. Ordered by `device_timestamp` ascending. |
+| `span` | object | Data span (`{ first, last }`) per §2.0 (v4.5, #97) |
 
 **Error Response:**
 
@@ -266,7 +281,8 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
     { "device_timestamp": "2025-07-20 00:00:00", "daily_energy": 10.2, "battery_soc": 50.0 },
     { "device_timestamp": "2025-07-20 00:05:00", "daily_energy": 10.3, "battery_soc": 51.0 },
     ...
-  ]
+  ],
+  "span": { "first": "2025-07-20 00:00:00", "last": "2025-07-27 22:10:00" }
 }
 ```
 
@@ -275,6 +291,7 @@ GET /api/data-range?from=2025-07-20&to=2025-07-27&columns=daily_energy,battery_s
 | Field | Type | Description |
 |-------|------|-------------|
 | `rows` | array | Array of row objects, each containing only the requested columns plus `device_timestamp`. Ordered by `device_timestamp` ascending. |
+| `span` | object | Data span (`{ first, last }`) per §2.0 (v4.5, #97) |
 
 **Error Response:**
 
@@ -338,7 +355,8 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
   "maxValues": {
     "Daily Energy (kWh)": { "value": 15.2, "timestamp": "14:30" },
     "Battery SOC (%)": { "value": 85.0, "timestamp": "18:45" }
-  }
+  },
+  "span": { "first": "2025-07-20 00:00:00", "last": "2025-07-27 22:10:00" }
 }
 ```
 
@@ -354,12 +372,13 @@ GET /api/histogram?from=2025-07-27&to=2025-07-27&columns=daily_energy,battery_so
 | `datasets[].max` | (number \| null)[] | Maximum value for each bin (parallel to `data`); `null` for empty bins. Shows the high end of the bin's value range. |
 | `datasets[].unit` | string | Unit extracted from the column metadata (`column_metadata.unit`). Returns `""` if no unit. |
 | `maxValues` | object | Map of column label → `{ value: number, timestamp: string }` for peak display in summary cards. Only includes columns that had numeric data. |
+| `span` | object | Data span (`{ first, last }`) per §2.0 (v4.5, #97) — computed over the rows included in the aggregation, i.e. with the `dayFilter` applied |
 
 **Empty Response:**
 If no rows match the query (or no numeric columns are found), returns:
 
 ```json
-{ "labels": [], "datasets": [], "maxValues": {} }
+{ "labels": [], "datasets": [], "maxValues": {}, "span": { "first": null, "last": null } }
 ```
 
 ---
@@ -429,7 +448,8 @@ Example (cutoffs `95`/`5`, max `100`, min `20`, range `80`): high threshold `100
       "high": { "cutoff": 95, "threshold": 95, "avgDailyMinutes": 30.0, "method": "cutoff" },
       "low":  { "cutoff": 5,  "threshold": 5,  "avgDailyMinutes": 15.0, "method": "cutoff" }
     }
-  ]
+  ],
+  "span": { "first": "2025-07-20 01:05:00", "last": "2025-07-23 22:00:00" }
 }
 ```
 
@@ -450,12 +470,13 @@ The first entry shows the range-based thresholds for an ordinary unit (max `5120
 | `stats[].min` | object | `{ value, timestamp }` — minimum value and the **first occurrence** (earliest timestamp) at which it is observed |
 | `stats[].high` | object | `{ cutoff, threshold, avgDailyMinutes, method }` — the cutoff used, the computed high threshold, the average per-day duration (minutes) the value spent **strictly above** the threshold (see §5.4), and the method: `"range"` (ordinary units — `max − (1 − highCutoff/100) × range`) or `"cutoff"` (the selected cutoff value used directly as the threshold, in percent, for percentage-unit columns) |
 | `stats[].low` | object | Same as `high` but **strictly below** the low threshold |
+| `span` | object | Data span (`{ first, last }`) per §2.0 (v4.5, #97) — computed over the rows matching the query (with `dayFilter` applied), independent of which columns end up in `stats` |
 
 **Empty Response:**
 If no data exists or no selected numeric column has samples, returns:
 
 ```json
-{ "stats": [] }
+{ "stats": [], "span": { "first": null, "last": null } }
 ```
 
 **Edge cases:**
@@ -718,3 +739,4 @@ This section tracks changes to the design document itself. Every modification to
 | 4.1 | 2026-08-29 | §2.6, §5.3 | `/api/histogram` always returns the full 00:00–24:00 bin grid (1440/binMinutes bins; multi-day rows binned together by time-of-day); bins with no data carry `null` in `data`/`min`/`max` so the frontend x-axis always spans the whole day (#85) |
 | 4.2 | 2026-08-30 | §2.7, §5.4 | High/low thresholds for ordinary-unit columns are computed from the **observed range** instead of `mean ± z·σ` (which is meaningless for non-normally distributed, non-negative data): high = `max − (1 − highCutoff/100) × range`, low = `min + (lowCutoff/100) × range`, `range = max − min`; the percentile → z mapping is removed; `method` value `"mean-sigma"` → `"range"`. Percentage-unit columns (e.g. SOC) are unchanged — the 0–100% range is absolute, so the selected cutoff applies directly (`"cutoff"`) (#87) |
 | 4.3 | 2026-09-12 | §2.8 | `POST /api/refresh` script path overridable via `DEYE_LOGGER_SCRIPT` env var — allows a mock ingestion script for testing without a Deye Cloud `.env` (frontend v8.0 background refresh, #89); backend version 4.3.0 |
+| 4.5 | 2026-09-23 | §2.0 (new), §2.4–§2.7 | All four data endpoints (`/api/data`, `/api/data-range`, `/api/histogram`, `/api/stats`) return a `span` object (`{ first, last }` = MIN/MAX `device_timestamp` over the rows matching the query, including `dayFilter`) so the frontend status-bar interval (`#range-days`) shows the span of the data actually loaded/aggregated in **every** view — previously histogram (time-of-day labels, dates collapsed) and stats (per-column timestamps only) could not provide it (frontend v8.4, #97); backend version 4.5.0 |
