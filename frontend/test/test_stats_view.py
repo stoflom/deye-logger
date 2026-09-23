@@ -6,7 +6,7 @@ Covers:
   - Stats view render: stat cards, rows, tooltips (design §16.1/§16.2)
   - Title-bar control visibility in stats view (view/histogram toggles
     hidden; day filter + cutoffs visible)
-  - Status bar: view label "Stats" and #range-days day count (§10.0)
+  - Status bar: view label "Stats" and #range-days data span (§10.0, v8.4 — #97)
   - URL state: view=stats, highCutoff/lowCutoff/dayFilter persistence
   - Back-to-Chart toggle returns to chart view
   - Empty data → info view message
@@ -17,8 +17,12 @@ Usage:
 Screenshots are saved to frontend/test/screenshots/
 """
 
+import json
 import os
 import sys
+import urllib.request
+from datetime import datetime
+from urllib.parse import urlencode
 
 # Add the skill directory to sys.path to allow importing
 skill_path = "/home/stoflom/.pi/agent/skills/firefox-testing"
@@ -30,9 +34,34 @@ from selenium.webdriver.common.by import By
 
 # ── Configuration ───────────────────────────────────────────────────
 BASE_URL = "http://localhost:8090"
-# 2026-07-27 (Mon) .. 2026-08-02 (Sun): 7 days with real data
+# 2026-07-27 (Mon) .. 2026-08-02 (Sun): 7 calendar days with real data.
+# Data span (first → last sample): 2026-07-27 00:00:49 → 2026-08-02 14:07:52
+# → "6 days 14.1 hours" (v8.4 — #97: status bar shows the backend data span).
 RANGE_FROM = "2026-07-27"
 RANGE_TO = "2026-08-02"
+
+
+def api_span(date_from: str, date_to: str) -> tuple[str, str]:
+    """Fetch the `span` field from /api/stats (backend v4.5, #97)."""
+    url = f"{BASE_URL}/api/stats?{urlencode({'from': date_from, 'to': date_to, 'columns': 'current_power'})}"
+    with urllib.request.urlopen(url, timeout=30) as res:
+        span = json.load(res)["span"]
+    return span["first"], span["last"]
+
+
+def expected_interval(first_ts: str, last_ts: str) -> str:
+    """Mirror of formatIntervalMs() in src/shared.ts (0.1 h resolution)."""
+    first = datetime.strptime(first_ts, "%Y-%m-%d %H:%M:%S")
+    last = datetime.strptime(last_ts, "%Y-%m-%d %H:%M:%S")
+    total_tenths = round((last - first).total_seconds() / 360)
+    days, rem = divmod(total_tenths, 240)
+    if days == 0:
+        v = rem / 10
+        return "1 hour" if rem == 10 else (f"{int(v)} hours" if v == int(v) else f"{v} hours")
+    v = rem / 10
+    rem_str = "" if rem == 0 else (f" {int(v)} hours" if v == int(v) else f" {v} hours")
+    day_str = "1 day" if days == 1 else f"{days} days"
+    return day_str + rem_str
 EMPTY_DATE = "2026-08-08"  # no data on this date
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 
@@ -70,7 +99,13 @@ def main():
         view_label = tester.find_element(By.ID, "view-label").text
         t.check(view_label.strip() == "Stats", f"view label is 'Stats' (got '{view_label.strip()}')")
         range_days = tester.find_element(By.ID, "range-days").text
-        t.check(range_days.strip() == "7 days", f"range-days shows '7 days' (got '{range_days.strip()}')")
+        # v8.4 (#97): stats view shows the backend data span, not the
+        # calendar-day count (last day is partial: data ends 14:07:52)
+        t.check(range_days.strip() == "6 days 14.1 hours",
+                f"range-days shows data span '6 days 14.1 hours' (got '{range_days.strip()}')")
+        first_ts, last_ts = api_span(RANGE_FROM, RANGE_TO)
+        t.check(range_days.strip() == expected_interval(first_ts, last_ts),
+                f"range-days matches /api/stats span {first_ts} → {last_ts}")
 
         # Summary-cards bar hidden in stats view
         t.check(not visible(tester, "#summary-cards"), "summary-cards bar hidden")
