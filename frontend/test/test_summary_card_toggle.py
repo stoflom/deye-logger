@@ -10,7 +10,7 @@ Covers:
   - Shift+click switches ALL cards to the same mode
   - Previous days: toggle disabled, cards show "Max"
   - Histogram view: no toggle rendered
-  - Version badge shows FE 9.1.0
+  - Version badge shows FE 9.2.0
 
 Fixture: three rows for TODAY are inserted into test_solar_data.db
 (identified by fetch_timestamp='test-toggle-fixture' and removed in a
@@ -239,9 +239,9 @@ def main():
                     t.check(first["value"] == "42 W", f"grid inverter Latest '42 W' (got '{first['value']}')")
 
             # ── Test 7: version badge ─────────────────────────────────
-            print("\n[Test 7] Version badge shows FE 9.1.0")
+            print("\n[Test 7] Version badge shows FE 9.2.0")
             badge = tester.find_element(By.ID, "version-badge").text
-            t.check("FE 9.1.0" in badge, f"version badge shows 'FE 9.1.0' (got '{badge}')")
+            t.check("FE 9.2.0" in badge, f"version badge shows 'FE 9.2.0' (got '{badge}')")
 
     finally:
         remove_fixture_rows()
