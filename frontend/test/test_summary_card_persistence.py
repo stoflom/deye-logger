@@ -7,11 +7,12 @@ Covers:
   - Toggle selection survives a page reload (core acceptance criterion)
   - Toggle selection survives repeated reloads (browser-restart equivalent —
     same profile, localStorage kept)
-  - Date-change reset is persisted: after leaving and returning to today,
-    cards show Max — also after a reload
+  - Modes are a standing setting (v9.3, #102): ‹/› and date-picker
+    navigation keep them — leaving today and coming back restores the
+    Latest cards, on every path and after a reload
   - No stored value → default behaviour unchanged (all Max)
   - Corrupt / invalid stored values → default behaviour unchanged (all Max)
-  - Version badge shows FE 9.2.0
+  - Version badge shows FE 9.3.0
 
 Fixture: three rows for TODAY are inserted into test_solar_data.db
 (identified by fetch_timestamp='test-card-persist-fixture' and removed in a
@@ -164,8 +165,8 @@ def main():
             inv = card_mode(state, "Inverter Output")
             t.check(inv == "latest", f"inverter card still Latest after 2nd reload (got {inv})")
 
-            # ── Test 4: Shift+click all → Latest, then date-change reset ─
-            print("\n[Test 4] All cards Latest; date change resets (and persists the reset)")
+            # ── Test 4: ‹/› navigation keeps the modes (v9.3, #102) ─────
+            print("\n[Test 4] All cards Latest; ‹ then › back to today keeps them")
             # Shift+click any card currently in Max mode → all cards Latest
             el = tester.find_element(By.CSS_SELECTOR, "#summary-cards .summary-card:nth-child(2) .card-toggle")
             actions = ActionChains(tester.driver)
@@ -175,8 +176,22 @@ def main():
             t.check(all(c["mode"] == "latest" for c in state),
                     f"all cards Latest after Shift+click (got {[c['mode'] for c in state]})")
 
-            # In-session date change (SPA setView, no page load) — this is
-            # what triggers the §17.3 reset
+            # ‹ (previous day — 2026-10-04 has no data, cards hidden)
+            tester.find_element(By.ID, "prev-day").click()
+            tester.wait(2)
+            stored = tester.execute_script(f"return localStorage.getItem('{STORAGE_KEY}');") or ""
+            t.check("latest" in stored, f"stored modes untouched by ‹ (got '{stored}')")
+
+            # › (next day — back to today): the Latest cards must reappear
+            tester.find_element(By.ID, "next-day").click()
+            tester.wait(2)
+            state = card_state(tester)
+            t.check(all(c["mode"] == "latest" for c in state),
+                    f"back to today via ›: cards still Latest (got {[c['mode'] for c in state]})")
+            tester.screenshot(os.path.join(SCREENSHOT_DIR, "cards-persist-prevnext.png"))
+
+            # ── Test 5: date-picker navigation keeps the modes ──────────
+            print("\n[Test 5] Date picker to a past day, Today button back — modes kept")
             tester.execute_script(
                 "const el = document.getElementById('date-from'); el.value = arguments[0];"
                 " el.dispatchEvent(new Event('change', {bubbles: true}));",
@@ -190,46 +205,43 @@ def main():
             tester.wait(2)
             state = card_state(tester)
             t.check(all(c["disabled"] is True for c in state), "toggles disabled on past day")
-            t.check(all(c["mode"] == "max" for c in state), "cards Max on past day")
+            t.check(all(c["label"].startswith("Max") for c in state), "cards display Max on past day")
 
-            # Back to today — in-session (Today button)
             tester.find_element(By.ID, "today-btn").click()
             tester.wait(2)
             state = card_state(tester)
-            t.check(all(c["mode"] == "max" for c in state),
-                    f"back to today: date-change reset → all Max (got {[c['mode'] for c in state]})")
+            t.check(all(c["mode"] == "latest" for c in state),
+                    f"back to today via Today button: cards still Latest (got {[c['mode'] for c in state]})")
 
-            state = load_today(tester)  # reload: the reset must be persisted
-            t.check(all(c["mode"] == "max" for c in state),
-                    f"reload after reset: still all Max — reset persisted (got {[c['mode'] for c in state]})")
-            stored = tester.execute_script(f"return localStorage.getItem('{STORAGE_KEY}');")
-            t.check(stored is None, f"stored value removed by the reset (got '{stored}')")
-            tester.screenshot(os.path.join(SCREENSHOT_DIR, "cards-persist-reset.png"))
+            state = load_today(tester)  # reload after all the navigation
+            t.check(all(c["mode"] == "latest" for c in state),
+                    f"reload after navigation: still all Latest (got {[c['mode'] for c in state]})")
+            tester.screenshot(os.path.join(SCREENSHOT_DIR, "cards-persist-datepicker.png"))
 
-            # ── Test 5: corrupt stored value → default, app unaffected ──
-            print("\n[Test 5] Corrupt stored value → default behaviour")
+            # ── Test 6: corrupt stored value → default, app unaffected ──
+            print("\n[Test 6] Corrupt stored value → default behaviour")
             set_storage(tester, "this-is-not-json")
             state = load_today(tester)
             t.check(len(state) >= 2, f"cards still render with corrupt storage (got {len(state)})")
             t.check(all(c["mode"] == "max" for c in state), "corrupt value → all cards Max")
 
-            # ── Test 6: invalid mode values → ignored ──────────────────
-            print("\n[Test 6] Invalid mode values in stored object → ignored")
+            # ── Test 7: invalid mode values → ignored ──────────────────
+            print("\n[Test 7] Invalid mode values in stored object → ignored")
             set_storage(tester, '{"current_power": "bogus", "battery_soc": "latest"}')
             state = load_today(tester)
             t.check(card_mode(state, "Inverter Output") == "max", "invalid 'bogus' value → Max")
             t.check(card_mode(state, "SOC") == "latest", "valid 'latest' value for SOC honoured")
 
-            # ── Test 7: explicit remove → default (acceptance criterion) ─
-            print("\n[Test 7] No stored value (removed) → default behaviour unchanged")
+            # ── Test 8: explicit remove → default (acceptance criterion) ─
+            print("\n[Test 8] No stored value (removed) → default behaviour unchanged")
             set_storage(tester, None)
             state = load_today(tester)
             t.check(all(c["mode"] == "max" for c in state), "no stored value → all cards Max")
 
-            # ── Test 8: version badge ──────────────────────────────────
-            print("\n[Test 8] Version badge shows FE 9.2.0")
+            # ── Test 9: version badge ──────────────────────────────────
+            print("\n[Test 9] Version badge shows FE 9.3.0")
             badge = tester.find_element(By.ID, "version-badge").text
-            t.check("FE 9.2.0" in badge, f"version badge shows 'FE 9.2.0' (got '{badge}')")
+            t.check("FE 9.3.0" in badge, f"version badge shows 'FE 9.3.0' (got '{badge}')")
 
     finally:
         remove_fixture_rows()

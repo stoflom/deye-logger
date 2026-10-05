@@ -10,7 +10,7 @@ Covers:
   - Shift+click switches ALL cards to the same mode
   - Previous days: toggle disabled, cards show "Max"
   - Histogram view: no toggle rendered
-  - Version badge shows FE 9.2.0
+  - Version badge shows FE 9.3.0
 
 Fixture: three rows for TODAY are inserted into test_solar_data.db
 (identified by fetch_timestamp='test-toggle-fixture' and removed in a
@@ -226,7 +226,7 @@ def main():
             except Exception:
                 pass
             state = card_state(tester)
-            t.check(all(c["mode"] == "max" for c in state), "grid cards start in Max mode (fresh date render)")
+            t.check(all(c["mode"] == "max" for c in state), "grid cards in Max mode (modes are a standing setting; all Max so far)")
             if state:
                 toggles = tester.find_elements(By.CSS_SELECTOR, "#summary-cards .card-toggle")
                 t.check(toggles[0].get_attribute("disabled") is None, "grid toggle enabled for today")
@@ -239,9 +239,9 @@ def main():
                     t.check(first["value"] == "42 W", f"grid inverter Latest '42 W' (got '{first['value']}')")
 
             # ── Test 7: version badge ─────────────────────────────────
-            print("\n[Test 7] Version badge shows FE 9.2.0")
+            print("\n[Test 7] Version badge shows FE 9.3.0")
             badge = tester.find_element(By.ID, "version-badge").text
-            t.check("FE 9.2.0" in badge, f"version badge shows 'FE 9.2.0' (got '{badge}')")
+            t.check("FE 9.3.0" in badge, f"version badge shows 'FE 9.3.0' (got '{badge}')")
 
     finally:
         remove_fixture_rows()
