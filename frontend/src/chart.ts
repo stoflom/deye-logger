@@ -20,7 +20,6 @@ import {
   todayStr,
   getSavedSummaryCardModes,
   saveSummaryCardModes,
-  resetSavedSummaryCardModes,
   ColumnMeta,
   SummaryCardMode,
 } from "./shared";
@@ -32,17 +31,15 @@ import {
 // (design §17) — click switches that card, Shift+click switches all.
 // Enabled only when the selected range is a single day equal to today.
 // v9.2 (#101): the per-column modes are persisted to localStorage and
-// restored at startup (design §17.3).
+// restored at startup; v9.3 (#102): they are a standing per-column setting
+// — no reset on date change (design §17.3).
 // ------------------------------------------------------------------
 
-/** Per-column card mode (design §17.3) — restored from localStorage and
- *  kept in sync with it on every change (v9.2, #101) */
+/** Per-column card mode (design §17.3) — standing setting, restored from
+ *  localStorage and kept in sync with it on every change (v9.2, #101; v9.3, #102) */
 const summaryCardModeByColumn = new Map<string, SummaryCardMode>(
   Object.entries(getSavedSummaryCardModes()),
 );
-// null until the first render — the first render initialises the date key
-// without clearing the restored modes (v9.2, #101)
-let summaryCardsDateKey: string | null = null;
 
 /** The toggle is active only for a single-day selection of today (§17.2) */
 function summaryCardsIsToday(): boolean {
@@ -61,17 +58,8 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
   const isHistogramView = binnedMaxValues !== undefined && binnedMaxValues !== null;
   const dataRows = appState.rawDataRows;
 
-  // Reset per-column modes whenever the rendered date range changes (§17.3).
-  // The first render after startup only initialises the key, so the modes
-  // restored from localStorage survive the page load; a later date change
-  // clears the modes AND the stored value so a reload cannot resurrect
-  // them (v9.2, #101).
-  const dateKey = `${appState.dateRangeFrom}|${appState.dateRangeTo}`;
-  if (summaryCardsDateKey !== null && dateKey !== summaryCardsDateKey) {
-    summaryCardModeByColumn.clear();
-    resetSavedSummaryCardModes();
-  }
-  summaryCardsDateKey = dateKey;
+  // No date-change reset (v9.3, #102): the modes are a standing per-column
+  // setting — date navigation keeps them, non-today dates just display Max.
   const toggleEnabled = !isHistogramView && summaryCardsIsToday();
 
   const numericCols = getNumericColumnNames(
