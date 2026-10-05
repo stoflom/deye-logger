@@ -18,7 +18,11 @@ import {
   fmtNum,
   getNumericColumnNames,
   todayStr,
+  getSavedSummaryCardModes,
+  saveSummaryCardModes,
+  resetSavedSummaryCardModes,
   ColumnMeta,
+  SummaryCardMode,
 } from "./shared";
 
 // ------------------------------------------------------------------
@@ -27,12 +31,18 @@ import {
 // v9.0 (#99, #100): raw-data cards carry a per-card Max/Latest toggle
 // (design §17) — click switches that card, Shift+click switches all.
 // Enabled only when the selected range is a single day equal to today.
+// v9.2 (#101): the per-column modes are persisted to localStorage and
+// restored at startup (design §17.3).
 // ------------------------------------------------------------------
-type SummaryCardMode = "max" | "latest";
 
-/** Per-column card mode (design §17.3) — cleared on every date change */
-const summaryCardModeByColumn = new Map<string, SummaryCardMode>();
-let summaryCardsDateKey = "";
+/** Per-column card mode (design §17.3) — restored from localStorage and
+ *  kept in sync with it on every change (v9.2, #101) */
+const summaryCardModeByColumn = new Map<string, SummaryCardMode>(
+  Object.entries(getSavedSummaryCardModes()),
+);
+// null until the first render — the first render initialises the date key
+// without clearing the restored modes (v9.2, #101)
+let summaryCardsDateKey: string | null = null;
 
 /** The toggle is active only for a single-day selection of today (§17.2) */
 function summaryCardsIsToday(): boolean {
@@ -51,12 +61,17 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
   const isHistogramView = binnedMaxValues !== undefined && binnedMaxValues !== null;
   const dataRows = appState.rawDataRows;
 
-  // Reset per-column modes whenever the rendered date range changes (§17.3)
+  // Reset per-column modes whenever the rendered date range changes (§17.3).
+  // The first render after startup only initialises the key, so the modes
+  // restored from localStorage survive the page load; a later date change
+  // clears the modes AND the stored value so a reload cannot resurrect
+  // them (v9.2, #101).
   const dateKey = `${appState.dateRangeFrom}|${appState.dateRangeTo}`;
-  if (dateKey !== summaryCardsDateKey) {
+  if (summaryCardsDateKey !== null && dateKey !== summaryCardsDateKey) {
     summaryCardModeByColumn.clear();
-    summaryCardsDateKey = dateKey;
+    resetSavedSummaryCardModes();
   }
+  summaryCardsDateKey = dateKey;
   const toggleEnabled = !isHistogramView && summaryCardsIsToday();
 
   const numericCols = getNumericColumnNames(
@@ -139,6 +154,7 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
           } else {
             summaryCardModeByColumn.set(col, next);
           }
+          saveSummaryCardModes(Object.fromEntries(summaryCardModeByColumn)); // v9.2 (#101)
           updateSummaryCards();
         });
       }
