@@ -24,11 +24,11 @@ import {
 // ------------------------------------------------------------------
 // Summary cards — supports raw data (default) or binned histogram data
 //
-// v9.0 (#99): raw-data cards carry a per-card Max/Current toggle
+// v9.0 (#99, #100): raw-data cards carry a per-card Max/Latest toggle
 // (design §17) — click switches that card, Shift+click switches all.
 // Enabled only when the selected range is a single day equal to today.
 // ------------------------------------------------------------------
-type SummaryCardMode = "max" | "current";
+type SummaryCardMode = "max" | "latest";
 
 /** Per-column card mode (design §17.3) — cleared on every date change */
 const summaryCardModeByColumn = new Map<string, SummaryCardMode>();
@@ -86,7 +86,7 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
       value = rec.value;
       ts = rec.timestamp;
     } else {
-      // Single pass: max (first occurrence) and current (latest sample,
+      // Single pass: max (first occurrence) and latest (last sample,
       // ties broken by the later row — design §17.2)
       let maxV = -Infinity;
       let maxTs = "";
@@ -108,32 +108,32 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
         }
       }
       const mode: SummaryCardMode = toggleEnabled ? (summaryCardModeByColumn.get(col) ?? "max") : "max";
-      value = mode === "current" ? curV! : maxV;
-      ts = mode === "current" ? curTs : maxTs;
+      value = mode === "latest" ? curV! : maxV;
+      ts = mode === "latest" ? curTs : maxTs;
     }
 
     const mode: SummaryCardMode = isHistogramView || !toggleEnabled ? "max" : summaryCardModeByColumn.get(col) ?? "max";
-    const prefix = isHistogramView ? "Max Average" : mode === "current" ? "Current" : "Max";
+    const prefix = isHistogramView ? "Max Average" : mode === "latest" ? "Latest" : "Max";
     const unit = extractUnit(meta, col);
     const valueStr = unit ? `${fmtNum(value)} ${unit}` : fmtNum(value);
     const card = document.createElement("div");
     card.className = "summary-card";
 
     if (!isHistogramView) {
-      // Per-card Max/Current toggle (design §17) — click switches this
+      // Per-card Max/Latest toggle (design §17) — click switches this
       // card, Shift+click switches every card to the same mode
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "card-toggle";
-      toggle.textContent = mode === "current" ? "Current" : "Max";
+      toggle.textContent = mode === "latest" ? "Latest" : "Max";
       toggle.dataset.mode = mode;
       toggle.title = toggleEnabled
         ? "Click to switch this card, Shift+click to switch all cards"
-        : "Switching to Current is available only when today is selected";
+        : "Switching to Latest is available only when today is selected";
       toggle.disabled = !toggleEnabled;
       if (toggleEnabled) {
         toggle.addEventListener("click", (ev) => {
-          const next: SummaryCardMode = mode === "max" ? "current" : "max";
+          const next: SummaryCardMode = mode === "max" ? "latest" : "max";
           if (ev.shiftKey) {
             for (const c of numericCols) summaryCardModeByColumn.set(c, next);
           } else {

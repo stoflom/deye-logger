@@ -614,7 +614,7 @@ body {
   min-width: 0;
 }
 
-/* Per-card Max/Current toggle (design §17, v9.0 — #99): compact pill at
+/* Per-card Max/Latest toggle (design §17, v9.0 — #99, #100): compact pill at
    the top of the card. Click switches that card, Shift+click switches all.
    Disabled (greyed) unless the selected range is today. */
 .summary-card .card-toggle {
@@ -636,7 +636,7 @@ body {
   background: #e2e8f0;
 }
 
-.summary-card .card-toggle[data-mode="current"]:not(:disabled) {
+.summary-card .card-toggle[data-mode="latest"]:not(:disabled) {
   color: #fff;
   background: #3182ce;
   border-color: #3182ce;
