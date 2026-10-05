@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v9.1
+> **Status:** v9.2
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -1458,7 +1458,7 @@ Cell tooltips: the High/Low cells carry the §16.2 high/low tooltips (method-awa
 
 ---
 
-## 17. Summary Cards — Max/Latest Toggle (#99, #100)
+## 17. Summary Cards — Max/Latest Toggle (#99, #100, #101)
 
 ### 17.1 Motivation
 
@@ -1493,9 +1493,20 @@ the user also wants the **latest** reading without waiting for a peak.
 
 - Mode per column is kept in a module-level `Map<string, "max" | "latest">`
   in `chart.ts` (`summaryCardModeByColumn`), **not** in the URL.
+- **Persistence (v9.2, #101):** the map is mirrored in `localStorage` under
+  the key `deye_summary_card_modes` (JSON object
+  `{ "<column>": "max" | "latest" }`). It is loaded once at startup and
+  written on every toggle click. A missing or corrupt value falls back to
+  the default (all cards `Max`) — behaviour unchanged from v9.1. All
+  `localStorage` JSON access goes through the shared `loadJson` / `saveJson`
+  helpers in `shared.ts` (same helpers the column-selection persistence
+  uses).
 - The map is cleared whenever the rendered date range key
   (`from|to`) differs from the previous render, so a date change resets all
-  cards to `Max`.
+  cards to `Max`. Since v9.2 the reset is persisted too (the stored value is
+  removed), so a later reload cannot resurrect the previous modes. The first
+  render after startup only initialises the date key and never clears the
+  restored modes.
 - Background refresh re-renders keep the map (same date → same modes).
 
 ### 17.4 DOM / CSS
@@ -1529,6 +1540,7 @@ This section tracks changes to the design document itself. Every modification to
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
 | 8.3 | 2026-09-22 | §10.2.2, new | Histogram grid shows three columns per measurement — `Avg` (bin average, `data[]`), `Min` (`min[]`) and `Max` (`max[]`) — from the existing `/api/histogram` response; grid rows gain `label::min` / `label::max` fields (#95); `FRONTEND_VERSION` → 8.3.0 |
+| 9.2 | 2026-10-05 | §17.3 | Summary card toggle persistence (#101): per-column Max/Latest modes stored in `localStorage` (`deye_summary_card_modes`), restored at startup and written on every toggle; the date-change reset is persisted as well; missing/corrupt value → default (all `Max`); localStorage JSON access generalised to shared `loadJson`/`saveJson` helpers; `FRONTEND_VERSION` → 9.2.0 |
 | 9.1 | 2026-10-05 | §17 | Summary card toggle wording: `Current` renamed to `Latest` (toggle pill, card label prefix, `data-mode` and mode-map key) — "latest available sample" is more truthful than "current"; no behavior change (#100); `FRONTEND_VERSION` → 9.1.0 |
 | 9.0 | 2026-10-05 | new §17, §18 | Summary cards Max/Current toggle (#99): per-card two-state `.card-toggle` on raw-data views (chart/grid) — click switches that card to the latest reading ("Current"), Shift+click switches all cards; enabled only for a single-day selection of today, disabled otherwise (Max as before); no toggle in histogram views; per-column mode kept in `chart.ts`, reset on date change; `FRONTEND_VERSION` → 9.0.0 |
 | 8.4 | 2026-09-23 | §2.2, §10.0, §10.1, §10.2, §10.5 | `#range-days` now shows the backend-provided `span` (first/last `device_timestamp` over the rows feeding the view, incl. day filter — backend v4.5 §2.0) in **every** view; `appState.rangeSpan` is set by all renderers after fetch, `updateRangeDays()` consumes it with the calendar-day fallback for empty data. Fixes the stale interval shown in histogram/stats after a date change (#97); `FRONTEND_VERSION` → 8.4.0 |

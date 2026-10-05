@@ -61,9 +61,35 @@ export interface StatsResponse {
 
 // ------------------------------------------------------------------
 // Persistence helpers — localStorage
+//
+// v9.2 (#101): all localStorage JSON access goes through the generic
+// loadJson/saveJson helpers so parse/corrupt-data and quota handling is
+// implemented once instead of per feature.
 // ------------------------------------------------------------------
 const SELECTED_COLUMNS_KEY = "deye_selected_columns";
 const CUSTOM_DEFAULT_KEY = "deye_custom_default_columns";
+const SUMMARY_CARD_MODES_KEY = "deye_summary_card_modes"; // v9.2 (#101)
+
+/** Read + JSON-parse a localStorage value, validated by `validate` (null → treat as absent). */
+export function loadJson<T>(key: string, validate: (parsed: unknown) => T | null): T | null {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return validate(JSON.parse(raw));
+  } catch {
+    // corrupt data — ignore
+  }
+  return null;
+}
+
+/** Write a value to localStorage as JSON (quota errors silently ignored). */
+export function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // quota exceeded — silently ignore
+  }
+}
 
 export const DEFAULT_COLUMN_NAMES: string[] = [
   "current_power",
@@ -73,17 +99,11 @@ export const DEFAULT_COLUMN_NAMES: string[] = [
   "battery_soc",
 ];
 
-function parseColumnSet(raw: string | null): Set<string> | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as string[];
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      const set = new Set(parsed);
-      set.add("device_timestamp");
-      return set;
-    }
-  } catch {
-    // corrupt data — ignore
+function parseColumnList(parsed: unknown): Set<string> | null {
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((c) => typeof c === "string")) {
+    const set = new Set(parsed);
+    set.add("device_timestamp");
+    return set;
   }
   return null;
 }
@@ -92,7 +112,7 @@ export function getDefaultColumnNames(): Set<string> {
   // Returns the effective default column set.
   // Priority: custom default → hardcoded default.
   // Used by the "Default" button and as fallback when no selection is saved.
-  const custom = parseColumnSet(localStorage.getItem(CUSTOM_DEFAULT_KEY));
+  const custom = loadJson<Set<string>>(CUSTOM_DEFAULT_KEY, parseColumnList);
   if (custom) return custom;
   const def = new Set(DEFAULT_COLUMN_NAMES);
   def.add("device_timestamp");
@@ -105,29 +125,51 @@ export function getDefaultColumnNames(): Set<string> {
  * Called once at startup to initialise appState.selectedColumnNames.
  */
 export function getInitialSelectedColumns(): Set<string> {
-  const saved = parseColumnSet(localStorage.getItem(SELECTED_COLUMNS_KEY));
+  const saved = loadJson<Set<string>>(SELECTED_COLUMNS_KEY, parseColumnList);
   if (saved) return saved;
   return getDefaultColumnNames();
 }
 
 export function saveSelectedColumnNames(columnNames: Set<string>): void {
-  try {
-    localStorage.setItem(SELECTED_COLUMNS_KEY, JSON.stringify([...columnNames]));
-  } catch {
-    // quota exceeded — silently ignore
-  }
+  saveJson(SELECTED_COLUMNS_KEY, [...columnNames]);
 }
 
 export function saveCustomDefaultColumns(columnNames: Set<string>): void {
-  try {
-    localStorage.setItem(CUSTOM_DEFAULT_KEY, JSON.stringify([...columnNames]));
-  } catch {
-    // quota exceeded — silently ignore
-  }
+  saveJson(CUSTOM_DEFAULT_KEY, [...columnNames]);
 }
 
 export function resetCustomDefaultColumns(): void {
   localStorage.removeItem(CUSTOM_DEFAULT_KEY);
+}
+
+// ------------------------------------------------------------------
+// Summary-card Max/Latest toggle modes — persistence (v9.2, #101, §17.3)
+// ------------------------------------------------------------------
+export type SummaryCardMode = "max" | "latest";
+/** Per-column card mode: column name → "max" | "latest" (design §17.3) */
+export type SummaryCardModes = Record<string, SummaryCardMode>;
+
+function parseSummaryCardModes(parsed: unknown): SummaryCardModes | null {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const out: SummaryCardModes = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (v === "max" || v === "latest") out[k] = v;
+  }
+  return out; // empty object = all defaults, still valid
+}
+
+/** Saved per-column card modes; `{}` when nothing valid is stored (all Max). */
+export function getSavedSummaryCardModes(): SummaryCardModes {
+  return loadJson<SummaryCardModes>(SUMMARY_CARD_MODES_KEY, parseSummaryCardModes) ?? {};
+}
+
+export function saveSummaryCardModes(modes: SummaryCardModes): void {
+  saveJson(SUMMARY_CARD_MODES_KEY, modes);
+}
+
+/** Persist the date-change reset — remove the stored modes (§17.3). */
+export function resetSavedSummaryCardModes(): void {
+  localStorage.removeItem(SUMMARY_CARD_MODES_KEY);
 }
 
 // ------------------------------------------------------------------
