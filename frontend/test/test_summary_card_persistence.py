@@ -175,16 +175,27 @@ def main():
             t.check(all(c["mode"] == "latest" for c in state),
                     f"all cards Latest after Shift+click (got {[c['mode'] for c in state]})")
 
-            tester.navigate(f"{BASE_URL}/?view=chart&date={PAST_DAY}")
-            try:
-                tester.wait_for_element(By.CSS_SELECTOR, "#summary-cards.visible .summary-card", timeout=20)
-            except Exception:
-                pass
+            # In-session date change (SPA setView, no page load) — this is
+            # what triggers the §17.3 reset
+            tester.execute_script(
+                "const el = document.getElementById('date-from'); el.value = arguments[0];"
+                " el.dispatchEvent(new Event('change', {bubbles: true}));",
+                PAST_DAY,
+            )
+            tester.execute_script(
+                "const el = document.getElementById('date-to'); el.value = arguments[0];"
+                " el.dispatchEvent(new Event('change', {bubbles: true}));",
+                PAST_DAY,
+            )
+            tester.wait(2)
             state = card_state(tester)
             t.check(all(c["disabled"] is True for c in state), "toggles disabled on past day")
             t.check(all(c["mode"] == "max" for c in state), "cards Max on past day")
 
-            state = load_today(tester)  # back to today (same session)
+            # Back to today — in-session (Today button)
+            tester.find_element(By.ID, "today-btn").click()
+            tester.wait(2)
+            state = card_state(tester)
             t.check(all(c["mode"] == "max" for c in state),
                     f"back to today: date-change reset → all Max (got {[c['mode'] for c in state]})")
 
