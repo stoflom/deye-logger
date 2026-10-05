@@ -167,11 +167,6 @@ export function saveSummaryCardModes(modes: SummaryCardModes): void {
   saveJson(SUMMARY_CARD_MODES_KEY, modes);
 }
 
-/** Persist the date-change reset — remove the stored modes (§17.3). */
-export function resetSavedSummaryCardModes(): void {
-  localStorage.removeItem(SUMMARY_CARD_MODES_KEY);
-}
-
 // ------------------------------------------------------------------
 // Global application state
 // ------------------------------------------------------------------
