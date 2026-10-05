@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v9.0
+> **Status:** v9.1
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -1458,28 +1458,27 @@ Cell tooltips: the High/Low cells carry the §16.2 high/low tooltips (method-awa
 
 ---
 
-## 17. Summary Cards — Max/Current Toggle (#99)
+## 17. Summary Cards — Max/Latest Toggle (#99, #100)
 
 ### 17.1 Motivation
 
 The summary cards bar (chart / grid views) shows the **Max** value per
 measurement for the selected date range. When the selected date is *today*,
-the user also wants the **latest** reading ("Current") without waiting for a
-peak.
+the user also wants the **latest** reading without waiting for a peak.
 
 ### 17.2 Behavior
 
 - Every summary card in the **raw-data views** (`chart`, `grid`) gains a
-  small **Max / Current toggle** button (`.card-toggle`) rendered at the top
+  small **Max / Latest toggle** button (`.card-toggle`) rendered at the top
   of the card, above the label.
 - The toggle is a single two-state control. Its text shows the mode that is
-  **active** (`Max` or `Current`); clicking it **switches only that card**
+  **active** (`Max` or `Latest`); clicking it **switches only that card**
   between the two modes.
 - A **Shift+click** on any card's toggle switches **all cards** together to
   that card's new mode (shift-click on a `Max` card → all `Max`; on a
-  `Current` card → all `Current`).
-- The card label prefix follows the mode: `Max {label}` / `Current {label}`.
-  In `Current` mode the card shows the value and timestamp of the **latest
+  `Latest` card → all `Latest`).
+- The card label prefix follows the mode: `Max {label}` / `Latest {label}`.
+  In `Latest` mode the card shows the value and timestamp of the **latest
   numeric sample** of that column in `appState.rawDataRows` (rows scanned by
   `device_timestamp`, ties broken by later row). In `Max` mode the card
   shows the existing maximum + the timestamp where it occurred.
@@ -1492,7 +1491,7 @@ peak.
 
 ### 17.3 State & Lifecycle
 
-- Mode per column is kept in a module-level `Map<string, "max" | "current">`
+- Mode per column is kept in a module-level `Map<string, "max" | "latest">`
   in `chart.ts` (`summaryCardModeByColumn`), **not** in the URL.
 - The map is cleared whenever the rendered date range key
   (`from|to`) differs from the previous render, so a date change resets all
@@ -1502,7 +1501,7 @@ peak.
 ### 17.4 DOM / CSS
 
 - Card structure: `.summary-card > button.card-toggle` + the existing
-  `.label` / `.value` / timestamp sub-line. `data-mode="max|current"`
+  `.label` / `.value` / timestamp sub-line. `data-mode="max|latest"`
   attribute mirrors the active mode (for tests).
 - `.card-toggle`: compact pill (10 px font), full card width, centered;
   `disabled` state greyed with reduced opacity. Styles live in
@@ -1530,6 +1529,7 @@ This section tracks changes to the design document itself. Every modification to
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
 | 8.3 | 2026-09-22 | §10.2.2, new | Histogram grid shows three columns per measurement — `Avg` (bin average, `data[]`), `Min` (`min[]`) and `Max` (`max[]`) — from the existing `/api/histogram` response; grid rows gain `label::min` / `label::max` fields (#95); `FRONTEND_VERSION` → 8.3.0 |
+| 9.1 | 2026-10-05 | §17 | Summary card toggle wording: `Current` renamed to `Latest` (toggle pill, card label prefix, `data-mode` and mode-map key) — "latest available sample" is more truthful than "current"; no behavior change (#100); `FRONTEND_VERSION` → 9.1.0 |
 | 9.0 | 2026-10-05 | new §17, §18 | Summary cards Max/Current toggle (#99): per-card two-state `.card-toggle` on raw-data views (chart/grid) — click switches that card to the latest reading ("Current"), Shift+click switches all cards; enabled only for a single-day selection of today, disabled otherwise (Max as before); no toggle in histogram views; per-column mode kept in `chart.ts`, reset on date change; `FRONTEND_VERSION` → 9.0.0 |
 | 8.4 | 2026-09-23 | §2.2, §10.0, §10.1, §10.2, §10.5 | `#range-days` now shows the backend-provided `span` (first/last `device_timestamp` over the rows feeding the view, incl. day filter — backend v4.5 §2.0) in **every** view; `appState.rangeSpan` is set by all renderers after fetch, `updateRangeDays()` consumes it with the calendar-day fallback for empty data. Fixes the stale interval shown in histogram/stats after a date change (#97); `FRONTEND_VERSION` → 8.4.0 |
 | 8.2 | 2026-09-14 | §2.2 | Status bar range interval shows the span of available data instead of a whole-day count (#94): `#range-days` displays `< 24 h` as hours with one decimal (`6.5 hours`), ≥ 24 h with fractional remainder as `3 days 4.5 hours`, and exact whole days (after 0.1 h rounding) as `1 day` / `N days`; no-data ranges fall back to the inclusive calendar-day count; `FRONTEND_VERSION` → 8.2.0 |
