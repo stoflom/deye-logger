@@ -149,6 +149,49 @@ Opens `http://localhost:8090` with today's data loaded. Development mode with au
 cd frontend && npm run dev
 ```
 
+### Running as a Service with pm2 (production)
+
+In production (e.g. fedora-nuc) deye-logger runs under [pm2](https://pm2.keymetrics.io/),
+supervising `backend/start.sh` — which bundles the frontend (esbuild) and then
+runs the Deno server. See `ecosystem.config.cjs` in the project root. The
+Python fetcher (`deye-cloud/deye-logger.py`) is a one-shot cron job and is
+**not** part of pm2 (see "Scheduled Runs" below).
+
+**First deployment (migrating away from a manually run `start.sh`):** stop any
+running `start.sh` first (Ctrl+C in its terminal — otherwise port 8090 stays
+taken), then:
+
+```bash
+cd ~/Workspace/deye-logger        # this repo, on the master branch
+pm2 delete deye-logger 2>/dev/null  # remove any old process of this name
+pm2 start ecosystem.config.cjs
+pm2 save                    # restore this process list on reboot
+pm2 startup                 # enable boot-on-reboot (run the command it prints)
+```
+
+Day-to-day management:
+
+```bash
+pm2 status                  # uptime, restarts, memory
+pm2 logs deye-logger        # tail stdout/stderr
+pm2 restart deye-logger     # after a deploy (git pull; also rebuilds frontend)
+pm2 stop deye-logger
+pm2 monit                   # live CPU/memory monitor
+```
+
+Day-to-day deploys (after merging to `master` and pulling on the server):
+
+```bash
+cd ~/Workspace/deye-logger && git pull
+pm2 restart deye-logger     # start.sh re-bundles the frontend on each start
+```
+
+> **Keep `watch: false` in `ecosystem.config.cjs`.** `start.sh` rebuilds
+> `frontend/public/app.js` on every start; with pm2 watch enabled, that file
+> change triggers a restart, which rebuilds again — an infinite restart loop
+> that takes the server down for a few seconds every minute. (This exact loop
+> bit the trees project.)
+
 ### Viewer Features
 
 The viewer supports four view modes, toggled via the **View Toggle** and **Histogram** buttons:
