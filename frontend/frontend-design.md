@@ -1,6 +1,6 @@
 # Frontend Design Document — Deye Logger Viewer
 
-> **Status:** v9.3
+> **Status:** v9.4
 > **Scope:** Single-page application, vanilla TS + Chart.js + AG Grid
 
 > **Software Versioning scheme:** Frontend version is `major.minor.sub-minor` in file src/app.ts .
@@ -1199,8 +1199,8 @@ Summary cards are rendered inside the `#summary-cards` container. They display a
 
 | View | Cards Shown |
 |------|-------------|
-| `chart` / `grid` | One card per numeric column: `Max {label}` + maximum value (with unit) + timestamp of the max reading |
-| `histogram` / `histogram-grid` | One card per metric: `Max Average {label}` + maximum average value (with unit) + timestamp |
+| `chart` / `grid` | One card per numeric column: `{label}` + value (with unit) + timestamp. The active mode (`Max` / `Latest`) is shown **only** by the card's toggle pill (§17); the label prefix is redundant with the pill and is not repeated in the heading (v9.4 — #103) |
+| `histogram` / `histogram-grid` | One card per metric: `{label}` + maximum average value (with unit) + timestamp. The heading carries **no** `Max Average` prefix; the card's `title` tooltip reads `Max average of {label}` (v9.4 — #103) |
 
 Row/bin counts are shown in the status bar (`#row-count`), not in the summary cards. All numeric columns get a card (no cap).
 
@@ -1477,17 +1477,22 @@ the user also wants the **latest** reading without waiting for a peak.
 - A **Shift+click** on any card's toggle switches **all cards** together to
   that card's new mode (shift-click on a `Max` card → all `Max`; on a
   `Latest` card → all `Latest`).
-- The card label prefix follows the mode: `Max {label}` / `Latest {label}`.
-  In `Latest` mode the card shows the value and timestamp of the **latest
-  numeric sample** of that column in `appState.rawDataRows` (rows scanned by
-  `device_timestamp`, ties broken by later row). In `Max` mode the card
-  shows the existing maximum + the timestamp where it occurred.
+- The card label is the bare `{label}` — the mode prefix is **not**
+  repeated in the heading (v9.4 — #103), because the toggle pill already
+  shows the active mode and the duplicated text made the heading overflow
+  the available card width. In `Latest` mode the card shows the value and
+  timestamp of the **latest numeric sample** of that column in
+  `appState.rawDataRows` (rows scanned by `device_timestamp`, ties broken by
+  later row). In `Max` mode the card shows the existing maximum + the
+  timestamp where it occurred.
 - The toggle is **enabled only when the selected range is a single day equal
   to today** (`dateRangeFrom === dateRangeTo === todayStr()`). For every
   other range — previous days, multi-day ranges — the toggle is **disabled**
   (greyed, not clickable) and all cards show `Max`, exactly as before.
 - Histogram views (`histogram`, `histogram-grid`) render **no** toggle —
-  their cards always show `Max Average`.
+  their cards always show the maximum average. The heading is the bare
+  `{label}`; the `title` attribute (native tooltip) reads
+  `Max average of {label}` (v9.4 — #103).
 
 ### 17.3 State & Lifecycle
 
@@ -1513,7 +1518,9 @@ the user also wants the **latest** reading without waiting for a peak.
 
 - Card structure: `.summary-card > button.card-toggle` + the existing
   `.label` / `.value` / timestamp sub-line. `data-mode="max|latest"`
-  attribute mirrors the active mode (for tests).
+  attribute mirrors the active mode (for tests). The `.label` contains the
+  bare column label only (no mode prefix, v9.4 — #103); histogram cards
+  additionally carry `title="Max average of {label}"`.
 - `.card-toggle`: compact pill (10 px font), full card width, centered;
   `disabled` state greyed with reduced opacity. Styles live in
   `public/style.css` next to the summary-card rules and honor `--card-scale`.
@@ -1540,6 +1547,7 @@ This section tracks changes to the design document itself. Every modification to
 | 7.1 | 2026-08-30 | §10.2.1 | Histogram range-band fix: both bar datasets use `grouped: false` so the average bar centres on top of the full-width range band instead of rendering side-by-side with it (#83) |
 | 7.2 | 2026-08-29 | §15.8, new | Full-day chart axes (#85): series x-axis always spans the whole selected range (single day 00:00–24:00) at a fixed grid step (5/30/60 min) with `null` gaps for empty buckets; percentage-unit (SOC) y-axes fixed to 0–100 in series and histogram charts; histogram x-axis always shows the full 00:00–24:00 bin grid (backend v4.1) with empty bins as gaps; raw-data chart exposes `__chartInstance` on its canvas for UI tests; `FRONTEND_VERSION` → 7.2.0 |
 | 8.3 | 2026-09-22 | §10.2.2, new | Histogram grid shows three columns per measurement — `Avg` (bin average, `data[]`), `Min` (`min[]`) and `Max` (`max[]`) — from the existing `/api/histogram` response; grid rows gain `label::min` / `label::max` fields (#95); `FRONTEND_VERSION` → 8.3.0 |
+| 9.4 | 2026-07-21 | §15.2, §17.2, §17.4 | Summary card headings fit the card (#103): the `Max`/`Latest` prefix is removed from raw-data card headings — the toggle pill alone shows the active mode — and the `Max Average` prefix is removed from histogram card headings in favour of a `title` tooltip (`Max average of {label}`); `FRONTEND_VERSION` → 9.4.0 |
 | 9.3 | 2026-10-05 | §17.3 | Summary card toggle is a standing per-column setting (#102): the date-change reset is removed — ‹/›, date pickers and URL navigation all keep the modes (and the `deye_summary_card_modes` value); non-today dates still show disabled toggles and `Max`, and the stored modes reapply when the user returns to today; `FRONTEND_VERSION` → 9.3.0 |
 | 9.2 | 2026-10-05 | §17.3 | Summary card toggle persistence (#101): per-column Max/Latest modes stored in `localStorage` (`deye_summary_card_modes`), restored at startup and written on every toggle; the date-change reset is persisted as well; missing/corrupt value → default (all `Max`); localStorage JSON access generalised to shared `loadJson`/`saveJson` helpers; `FRONTEND_VERSION` → 9.2.0 |
 | 9.1 | 2026-10-05 | §17 | Summary card toggle wording: `Current` renamed to `Latest` (toggle pill, card label prefix, `data-mode` and mode-map key) — "latest available sample" is more truthful than "current"; no behavior change (#100); `FRONTEND_VERSION` → 9.1.0 |

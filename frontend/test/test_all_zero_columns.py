@@ -4,12 +4,12 @@ Test script to verify all-zero columns are still carded and plotted
 (frontend-design.md v8.1 §15.2, backend-design.md v4.4, #90).
 
 A selected column whose samples are all 0 is a valid numeric column:
-  1. Chart view: it gets a summary card ("Max 0 …") AND a plotted series
+  1. Chart view: it gets a summary card (heading "0 …") AND a plotted series
      with one point per raw row, all at y=0 — on a y-axis that does not
      collapse (Chart.js must render a usable range for constant data).
   2. Histogram view: the backend includes it in /api/histogram (dataset
      values 0, maxValues entry 0) and the UI shows its bar chart and
-     "Max Average 0 …" summary card.
+     summary card (heading "0 …", title tooltip "Max average of …", v9.4 #103).
   3. Stats view: a stat card shows Average/Max/Min 0 and 0 mins/day
      (already worked — regression guard).
   4. Non-zero columns are unaffected in every view.
@@ -272,7 +272,7 @@ def test_histogram_view(tester, t: TestResult):
     cards = tester.execute_script(summary_cards())
     zero_card = next((c for c in cards if ZERO_LABEL in c["label"]), None)
     t.check(zero_card is not None and zero_card["value"].startswith("0"),
-            f"'Max Average {ZERO_LABEL}' card shows 0 (got "
+            f"'{ZERO_LABEL}' (max average) card shows 0 (got "
             f"{zero_card['value'] if zero_card else 'MISSING'})")
 
     tester.screenshot(os.path.join(SCREENSHOT_DIR, "zero-col-hist.png"))

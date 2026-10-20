@@ -12,7 +12,7 @@ Covers:
     Latest cards, on every path and after a reload
   - No stored value → default behaviour unchanged (all Max)
   - Corrupt / invalid stored values → default behaviour unchanged (all Max)
-  - Version badge shows FE 9.3.0
+  - Version badge shows FE 9.4.0
 
 Fixture: three rows for TODAY are inserted into test_solar_data.db
 (identified by fetch_timestamp='test-card-persist-fixture' and removed in a
@@ -205,7 +205,8 @@ def main():
             tester.wait(2)
             state = card_state(tester)
             t.check(all(c["disabled"] is True for c in state), "toggles disabled on past day")
-            t.check(all(c["label"].startswith("Max") for c in state), "cards display Max on past day")
+            t.check(all(not c["label"].startswith(("Max", "Latest")) for c in state),
+                    "labels are bare column names (no mode prefix) on past day")
 
             tester.find_element(By.ID, "today-btn").click()
             tester.wait(2)
@@ -239,9 +240,9 @@ def main():
             t.check(all(c["mode"] == "max" for c in state), "no stored value → all cards Max")
 
             # ── Test 9: version badge ──────────────────────────────────
-            print("\n[Test 9] Version badge shows FE 9.3.0")
+            print("\n[Test 9] Version badge shows FE 9.4.0")
             badge = tester.find_element(By.ID, "version-badge").text
-            t.check("FE 9.3.0" in badge, f"version badge shows 'FE 9.3.0' (got '{badge}')")
+            t.check("FE 9.4.0" in badge, f"version badge shows 'FE 9.4.0' (got '{badge}')")
 
     finally:
         remove_fixture_rows()

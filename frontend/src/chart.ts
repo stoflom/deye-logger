@@ -32,7 +32,9 @@ import {
 // Enabled only when the selected range is a single day equal to today.
 // v9.2 (#101): the per-column modes are persisted to localStorage and
 // restored at startup; v9.3 (#102): they are a standing per-column setting
-// — no reset on date change (design §17.3).
+// — no reset on date change (design §17.3); v9.4 (#103): headings show the
+// bare column label — the mode prefix is the toggle pill's job, and
+// histogram cards explain "Max average of …" via a title tooltip.
 // ------------------------------------------------------------------
 
 /** Per-column card mode (design §17.3) — standing setting, restored from
@@ -116,11 +118,15 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
     }
 
     const mode: SummaryCardMode = isHistogramView || !toggleEnabled ? "max" : summaryCardModeByColumn.get(col) ?? "max";
-    const prefix = isHistogramView ? "Max Average" : mode === "latest" ? "Latest" : "Max";
+    const label = meta ? meta.label : col;
     const unit = extractUnit(meta, col);
     const valueStr = unit ? `${fmtNum(value)} ${unit}` : fmtNum(value);
     const card = document.createElement("div");
     card.className = "summary-card";
+    // v9.4 (#103): the heading is the bare column label — the raw-data mode
+    // is carried by the toggle pill and the histogram "Max Average" wording
+    // moved into a native tooltip, so headings always fit the card width
+    if (isHistogramView) card.title = `Max average of ${label}`;
 
     if (!isHistogramView) {
       // Per-card Max/Latest toggle (design §17) — click switches this
@@ -151,7 +157,7 @@ export function updateSummaryCards(binnedMaxValues?: Map<string, { value: number
 
     card.insertAdjacentHTML(
       "beforeend",
-      `<div class="label">${prefix} ${meta ? meta.label : col}</div>
+      `<div class="label">${label}</div>
       <div class="value" style="color:${color}">${valueStr}</div>
       <div style="font-size:10px;color:#a0aec0;margin-top:2px">${ts}</div>`,
     );
