@@ -9,8 +9,10 @@ Covers:
   - Click switches only that card to the latest reading ("Latest")
   - Shift+click switches ALL cards to the same mode
   - Previous days: toggle disabled, cards show "Max"
-  - Histogram view: no toggle rendered
-  - Version badge shows FE 9.3.0
+  - Histogram view: no toggle rendered; card title tooltip says
+    "Max average of {label}" (v9.4 — #103)
+  - v9.4 (#103): headings are bare column labels — no Max/Latest prefix
+  - Version badge shows FE 9.4.0
 
 Fixture: three rows for TODAY are inserted into test_solar_data.db
 (identified by fetch_timestamp='test-toggle-fixture' and removed in a
@@ -142,7 +144,8 @@ def main():
                     t.check(c["toggle"] and c["mode"] == "max", f"{name}: toggle in Max mode (got {c['mode']})")
                     t.check(c["toggle"] and c["disabled"] is False, f"{name}: toggle enabled for today")
                     t.check(c["value"] == val, f"{name}: Max value '{val}' (got '{c['value']}')")
-                    t.check(c["label"].startswith("Max"), f"{name}: label starts with 'Max' (got '{c['label']}')")
+                    t.check(not c["label"].startswith(("Max", "Latest")),
+                            f"{name}: label is bare column name, no mode prefix (got '{c['label']}')")
                     t.check("09:00:00" in c["ts"], f"{name}: Max timestamp at 09:00 (got '{c['ts']}')")
 
             # ── Test 2: click switches only that card to Latest ──────
@@ -157,7 +160,8 @@ def main():
             soc = cards_by_label(state, "SOC")
             if inv:
                 t.check(inv["mode"] == "latest", f"inverter switched to Latest (got {inv['mode']})")
-                t.check(inv["label"].startswith("Latest"), f"inverter label 'Latest …' (got '{inv['label']}')")
+                t.check(not inv["label"].startswith("Latest"),
+                        f"inverter label stays bare after switch (got '{inv['label']}')")
                 t.check(inv["value"] == "42 W", f"inverter Latest value '42 W' (got '{inv['value']}')")
                 t.check("10:00:00" in inv["ts"], f"inverter Latest timestamp at 10:00 (got '{inv['ts']}')")
             if soc:
@@ -202,7 +206,8 @@ def main():
                 t.check(all(c["toggle"] for c in state), "toggles rendered on past-day cards")
                 t.check(all(c["disabled"] is True for c in state), "all toggles disabled on past day")
                 t.check(all(c["mode"] == "max" for c in state), "all cards in Max mode on past day")
-                t.check(all(c["label"].startswith("Max") for c in state), "labels show 'Max' on past day")
+                t.check(all(not c["label"].startswith(("Max", "Latest")) for c in state),
+                        "labels are bare column names (no mode prefix) on past day")
             tester.screenshot(os.path.join(SCREENSHOT_DIR, "cards-toggle-past-disabled.png"))
 
             # ── Test 5: histogram view, today — no toggle ─────────────
@@ -217,6 +222,16 @@ def main():
             except Exception:
                 toggles = []
             t.check(len(toggles) == 0, f"no card-toggle in histogram view (got {len(toggles)})")
+
+            # v9.4 (#103): histogram headings are bare; the "Max Average"
+            # wording lives in the native title tooltip
+            hist_titles = tester.execute_script(
+                "return Array.from(document.querySelectorAll('#summary-cards .summary-card'))"
+                ".map(c => c.title || '');")
+            non_empty = [s for s in (hist_titles or []) if s]
+            t.check(len(non_empty) > 0, f"histogram cards carry title tooltips (got {hist_titles})")
+            t.check(all(s.startswith("Max average of ") for s in non_empty),
+                    f"histogram tooltips say 'Max average of …' (got {non_empty})")
 
             # ── Test 6: grid view, today — toggle works ───────────────
             print(f"\n[Test 6] Grid view, today ({TODAY}): click switches to Latest")
@@ -239,9 +254,9 @@ def main():
                     t.check(first["value"] == "42 W", f"grid inverter Latest '42 W' (got '{first['value']}')")
 
             # ── Test 7: version badge ─────────────────────────────────
-            print("\n[Test 7] Version badge shows FE 9.3.0")
+            print("\n[Test 7] Version badge shows FE 9.4.0")
             badge = tester.find_element(By.ID, "version-badge").text
-            t.check("FE 9.3.0" in badge, f"version badge shows 'FE 9.3.0' (got '{badge}')")
+            t.check("FE 9.4.0" in badge, f"version badge shows 'FE 9.4.0' (got '{badge}')")
 
     finally:
         remove_fixture_rows()
